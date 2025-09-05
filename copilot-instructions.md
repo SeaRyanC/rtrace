@@ -7,8 +7,7 @@ This document provides development guidance for the rtrace project, helping deve
 rtrace is a minimal Rust library that demonstrates modern Rust development practices with multiple binding targets:
 - Core Rust library
 - Command-line interface
-- Node.js native bindings (via napi-rs)  
-- WebAssembly bindings (via wasm-bindgen)
+- Node.js native bindings (via napi-rs)
 
 ## Architecture Principles
 
@@ -24,7 +23,6 @@ rtrace/
 ├── src/lib.rs                 # Core library - keep minimal and pure
 ├── cli/src/main.rs            # CLI binary - uses clap for args
 ├── bindings/node/src/lib.rs   # Node.js - uses napi macros
-├── bindings/wasm/src/lib.rs   # WASM - uses wasm-bindgen macros
 ```
 
 ### 3. Dependency Strategy
@@ -71,7 +69,6 @@ cargo build --workspace
 cargo build -p rtrace
 cargo build -p rtrace-cli  
 cargo build -p rtrace-node
-cargo build -p rtrace-wasm
 
 # Tests
 cargo test --workspace
@@ -86,12 +83,6 @@ cargo clippy --workspace -- -D warnings
 - Export functions with `#[napi]` macro
 - Consider async functions for I/O operations
 - Test with various Node.js versions
-
-### WASM Bindings  
-- Use wasm-bindgen for web compatibility
-- Export functions with `#[wasm_bindgen]`
-- Consider bundle size impact
-- Test in multiple browsers
 
 ## Adding New Features
 
@@ -153,17 +144,6 @@ pub fn node_function(input: String) -> String {
 }
 ```
 
-### WASM Binding Template
-```rust
-use wasm_bindgen::prelude::*;
-
-/// Description for web users
-#[wasm_bindgen]
-pub fn wasm_function(input: &str) -> String {
-    rtrace::core_function(input)
-}
-```
-
 ## Release Process
 
 ### Version Management
@@ -197,7 +177,6 @@ pub fn wasm_function(input: &str) -> String {
 ### Performance Considerations
 - Profile with `cargo bench` for performance-critical code
 - Consider memory allocation patterns
-- Test WASM bundle size impact
 
 ## Contributing Guidelines
 
@@ -225,6 +204,5 @@ When helping with rtrace development:
 
 - [Rust Book](https://doc.rust-lang.org/book/)
 - [napi-rs Documentation](https://napi.rs/)
-- [wasm-bindgen Guide](https://rustwasm.github.io/wasm-bindgen/)
 - [Clap Documentation](https://docs.rs/clap/)
 - [Cargo Workspace Guide](https://doc.rust-lang.org/book/ch14-03-cargo-workspaces.html)

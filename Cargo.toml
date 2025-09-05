@@ -2,8 +2,7 @@
 members = [
     ".",
     "cli",
-    "bindings/node",
-    "bindings/wasm"
+    "bindings/node"
 ]
 
 [package]

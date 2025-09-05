@@ -1,18 +1,16 @@
 {
   "name": "rtrace",
   "version": "0.1.0",
-  "description": "A minimal Rust library with Node.js and WASM bindings",
+  "description": "A minimal Rust library with Node.js bindings",
   "main": "bindings/node/index.node",
   "types": "bindings/node/index.d.ts",
   "files": [
     "bindings/node/index.node",
-    "bindings/node/index.d.ts",
-    "bindings/wasm/pkg"
+    "bindings/node/index.d.ts"
   ],
   "scripts": {
-    "build": "npm run build:node && npm run build:wasm",
+    "build": "npm run build:node",
     "build:node": "cargo build --release --manifest-path bindings/node/Cargo.toml",
-    "build:wasm": "wasm-pack build bindings/wasm --target web --out-dir pkg",
     "test": "cargo test"
   },
   "repository": {
@@ -21,7 +19,6 @@
   },
   "keywords": [
     "rust",
-    "wasm",
     "nodejs",
     "bindings"
   ],
