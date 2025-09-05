@@ -2,16 +2,17 @@
   "name": "rtrace",
   "version": "0.1.0",
   "description": "A minimal Rust library with Node.js bindings",
-  "main": "bindings/node/index.node",
-  "types": "bindings/node/index.d.ts",
+  "main": "rtrace.node",
+  "types": "index.d.ts",
   "files": [
-    "bindings/node/index.node",
-    "bindings/node/index.d.ts"
+    "rtrace.node",
+    "index.d.ts"
   ],
   "scripts": {
     "build": "npm run build:node",
-    "build:node": "cargo build --release --manifest-path bindings/node/Cargo.toml",
-    "test": "cargo test"
+    "build:node": "napi build --release --cargo-cwd bindings/node",
+    "test": "npm run build && node test.js",
+    "example": "npm run build && node example.js"
   },
   "repository": {
     "type": "git",

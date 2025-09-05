@@ -62,25 +62,35 @@ Prerequisites:
 ```bash
 # Install Node.js dependencies
 npm install
-
-# Install napi-rs CLI
-npm install -g @napi-rs/cli
 ```
 
 Build and use:
 ```bash
 # Build Node.js bindings
-napi build --platform --release
+npm run build
 
-# Or use npm script
-npm run build:node
+# Test the bindings
+npm test
+
+# Run example
+npm run example
 ```
 
+**JavaScript Usage:**
 ```javascript
-const { helloWorld, greetWithName } = require('./bindings/node');
+const { helloWorld, greetWithName } = require('./rtrace.node');
 
 console.log(helloWorld()); // "hello world"
 console.log(greetWithName("Alice")); // "hello world, Alice"
+```
+
+**TypeScript Support:**
+TypeScript definitions are automatically generated:
+```typescript
+import { helloWorld, greetWithName } from './rtrace.node';
+
+const message: string = helloWorld();
+const greeting: string = greetWithName("Bob");
 ```
 
 ## Development
