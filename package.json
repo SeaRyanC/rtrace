@@ -1,0 +1,43 @@
+{
+  "name": "rtrace",
+  "version": "0.1.0",
+  "description": "A minimal Rust library with Node.js and WASM bindings",
+  "main": "bindings/node/index.node",
+  "types": "bindings/node/index.d.ts",
+  "files": [
+    "bindings/node/index.node",
+    "bindings/node/index.d.ts",
+    "bindings/wasm/pkg"
+  ],
+  "scripts": {
+    "build": "npm run build:node && npm run build:wasm",
+    "build:node": "cargo build --release --manifest-path bindings/node/Cargo.toml",
+    "build:wasm": "wasm-pack build bindings/wasm --target web --out-dir pkg",
+    "test": "cargo test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeaRyanC/rtrace.git"
+  },
+  "keywords": [
+    "rust",
+    "wasm",
+    "nodejs",
+    "bindings"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/SeaRyanC/rtrace/issues"
+  },
+  "homepage": "https://github.com/SeaRyanC/rtrace#readme",
+  "napi": {
+    "name": "rtrace",
+    "triples": {
+      "defaults": true
+    }
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.0.0"
+  }
+}

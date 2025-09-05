@@ -1,0 +1,16 @@
+[package]
+name = "rtrace-node"
+version = "0.1.0"
+edition = "2021"
+description = "Node.js bindings for rtrace"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rtrace = { path = "../.." }
+napi = { version = "2.0", default-features = false, features = ["napi4"] }
+napi-derive = "2.0"
+
+[build-dependencies]
+napi-build = "2.0"
