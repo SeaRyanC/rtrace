@@ -55,6 +55,14 @@ enum KdNode {
 }
 
 /// K-d tree for accelerating ray-triangle intersections
+/// 
+/// A k-dimensional tree that recursively subdivides 3D space to enable
+/// fast ray-triangle intersection queries. Instead of testing every triangle
+/// in a mesh (O(n) complexity), the k-d tree allows logarithmic search time
+/// O(log n) by only testing triangles in leaf nodes that the ray intersects.
+/// 
+/// For the 35,628 triangle Espresso Tray STL file, this provides significant
+/// performance improvement over brute force intersection testing.
 #[derive(Debug, Clone)]
 pub struct KdTree {
     root: Option<KdNode>,
