@@ -40,6 +40,12 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Validate samples parameter
+    if args.samples == 0 {
+        eprintln!("Error: Samples must be greater than 0");
+        std::process::exit(1);
+    }
+
     // Load scene from JSON
     let scene = match Scene::from_json_file(&args.input) {
         Ok(scene) => scene,

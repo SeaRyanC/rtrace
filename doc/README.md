@@ -21,7 +21,8 @@ This comprehensive guide covers all features and options available in the rtrace
    - [Ambient Illumination](#ambient-illumination)
    - [Background Color](#background-color)
    - [Fog Effects](#fog-effects)
-8. [Examples](#examples)
+8. [Stochastic Subsampling](#stochastic-subsampling)
+9. [Examples](#examples)
 
 ---
 
@@ -44,6 +45,7 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 | `--width <WIDTH>` | `-w` | Image width in pixels | 800 |
 | `--height <HEIGHT>` | `-H` | Image height in pixels | 600 |
 | `--max-depth <MAX_DEPTH>` | - | Maximum ray bounces for reflections | 10 |
+| `--samples <SAMPLES>` | - | Number of samples per pixel for anti-aliasing | 1 |
 | `--help` | `-h` | Print help information | - |
 | `--version` | `-V` | Print version information | - |
 
@@ -58,6 +60,9 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 
 # High reflection depth for mirror effects
 ./target/release/rtrace -i mirror_scene.json -o mirrors.png --max-depth 20
+
+# Anti-aliasing with stochastic subsampling  
+./target/release/rtrace -i scene.json -o smooth.png --samples 4
 ```
 
 ---
@@ -426,6 +431,48 @@ Atmospheric fog with linear falloff.
 | Light Fog | Heavy Fog |
 |:---------:|:---------:|
 | ![Light Fog](images/scene-fog-light.png) | ![Heavy Fog](images/scene-fog-heavy.png) |
+
+---
+
+## Stochastic Subsampling
+
+Stochastic subsampling (anti-aliasing) reduces visual artifacts like jagged edges by casting multiple rays per pixel with random jittering. This technique significantly improves image quality, especially for scenes with fine details, thin objects, or high-contrast edges.
+
+### How It Works
+
+- **Single Sample (--samples 1)**: Casts one ray per pixel with random jitter within the pixel bounds
+- **Multiple Samples (--samples N)**: Casts N rays per pixel in a radially symmetric pattern with random phase
+- **Color Averaging**: All samples for each pixel are averaged to produce the final color
+
+### Usage
+
+```bash
+# Default: single sample with jittering  
+./target/release/rtrace -i scene.json -o output.png --samples 1
+
+# Anti-aliasing with 4 samples per pixel
+./target/release/rtrace -i scene.json -o smooth.png --samples 4
+
+# High quality rendering with 16 samples
+./target/release/rtrace -i scene.json -o ultra_smooth.png --samples 16
+```
+
+### Performance Impact
+
+Higher sample counts improve quality but increase render time linearly:
+- `--samples 1`: Fastest, good for previews
+- `--samples 4`: Good balance of quality and speed
+- `--samples 16`: High quality, 16x slower render time
+
+### Example Comparison
+
+The difference is most noticeable on edges and fine details:
+
+| Without Anti-aliasing (1 sample) | With Anti-aliasing (4 samples) |
+|:--------------------------------:|:------------------------------:|
+| ![No Anti-aliasing](images/sampling-antialiasing-nosamples.png) | ![Anti-aliasing](images/sampling-antialiasing.png) |
+
+**Scene:** Complex geometry with grid textures and perspective camera demonstrates the smoothing effect of stochastic subsampling on object edges and texture boundaries.
 
 ---
 
