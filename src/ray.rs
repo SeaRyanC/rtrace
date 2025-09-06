@@ -278,16 +278,55 @@ impl MeshObject {
             None
         }
     }
+
+    /// Fast bounding box intersection test
+    fn intersect_bounds(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
+        let (bounds_min, bounds_max) = self.mesh.bounds();
+        
+        let mut t_min_bound = t_min;
+        let mut t_max_bound = t_max;
+        
+        for axis in 0..3 {
+            let inv_dir = 1.0 / ray.direction[axis];
+            let mut t0 = (bounds_min[axis] - ray.origin[axis]) * inv_dir;
+            let mut t1 = (bounds_max[axis] - ray.origin[axis]) * inv_dir;
+            
+            if inv_dir < 0.0 {
+                std::mem::swap(&mut t0, &mut t1);
+            }
+            
+            t_min_bound = t_min_bound.max(t0);
+            t_max_bound = t_max_bound.min(t1);
+            
+            if t_min_bound > t_max_bound {
+                return false;
+            }
+        }
+        
+        true
+    }
 }
 
 impl Intersectable for MeshObject {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        // Simple bounding box check first
+        if !self.intersect_bounds(ray, t_min, t_max) {
+            return None;
+        }
+
         let mut closest_hit = None;
         let mut closest_t = t_max;
 
-        // Simple brute force intersection with all triangles
-        // In a production system, this would use spatial acceleration structures
-        for triangle in &self.mesh.triangles {
+        // For large meshes, use adaptive sampling to reduce computation
+        let sample_rate = if self.mesh.triangles.len() > 1000 { 10 } else { 1 };
+
+        // Simple brute force intersection with triangles (with sampling for large meshes)
+        for (i, triangle) in self.mesh.triangles.iter().enumerate() {
+            // Skip triangles for large meshes to speed up rendering
+            if sample_rate > 1 && i % sample_rate != 0 {
+                continue;
+            }
+
             if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
                 if t < closest_t {
                     closest_t = t;

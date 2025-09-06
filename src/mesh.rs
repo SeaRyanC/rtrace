@@ -2,7 +2,6 @@ use nalgebra::{Vector3, Point3};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 
 /// 3D point type alias
 pub type Point = Point3<f64>;
@@ -336,5 +335,74 @@ endfacet
 endsolid test";
         
         assert!(Mesh::is_ascii_stl_bytes(ascii_content).unwrap());
+    }
+
+    #[test]
+    fn test_ascii_stl_parsing() {
+        let ascii_content = b"solid test
+facet normal 0 0 1
+  outer loop
+    vertex -1 -1 0
+    vertex 1 -1 0
+    vertex 0 1 0
+  endloop
+endfacet
+facet normal 0 0 -1
+  outer loop
+    vertex 0 1 0
+    vertex 1 -1 0
+    vertex -1 -1 0
+  endloop
+endfacet
+endsolid test";
+        
+        let mesh = Mesh::from_stl_bytes(ascii_content).unwrap();
+        assert_eq!(mesh.triangle_count(), 2);
+        
+        // Check first triangle
+        assert_eq!(mesh.triangles[0].vertices[0], Point::new(-1.0, -1.0, 0.0));
+        assert_eq!(mesh.triangles[0].vertices[1], Point::new(1.0, -1.0, 0.0));
+        assert_eq!(mesh.triangles[0].vertices[2], Point::new(0.0, 1.0, 0.0));
+        assert_eq!(mesh.triangles[0].normal, Vec3::new(0.0, 0.0, 1.0));
+    }
+
+    #[test]
+    fn test_binary_stl_parsing() {
+        // Create a simple binary STL with one triangle
+        let mut binary_data = vec![0u8; 80]; // header
+        binary_data.extend_from_slice(&1u32.to_le_bytes()); // triangle count
+        
+        // Triangle data: normal + 3 vertices + attribute
+        let normal = [0.0f32, 0.0f32, 1.0f32];
+        let vertex1 = [-1.0f32, -1.0f32, 0.0f32];
+        let vertex2 = [1.0f32, -1.0f32, 0.0f32];
+        let vertex3 = [0.0f32, 1.0f32, 0.0f32];
+        let attribute = 0u16;
+        
+        // Add normal
+        for &f in &normal {
+            binary_data.extend_from_slice(&f.to_le_bytes());
+        }
+        // Add vertices
+        for &f in &vertex1 {
+            binary_data.extend_from_slice(&f.to_le_bytes());
+        }
+        for &f in &vertex2 {
+            binary_data.extend_from_slice(&f.to_le_bytes());
+        }
+        for &f in &vertex3 {
+            binary_data.extend_from_slice(&f.to_le_bytes());
+        }
+        // Add attribute
+        binary_data.extend_from_slice(&attribute.to_le_bytes());
+        
+        let mesh = Mesh::from_stl_bytes(&binary_data).unwrap();
+        assert_eq!(mesh.triangle_count(), 1);
+        
+        // Check triangle data
+        assert_eq!(mesh.triangles[0].vertices[0], Point::new(-1.0, -1.0, 0.0));
+        assert_eq!(mesh.triangles[0].vertices[1], Point::new(1.0, -1.0, 0.0));
+        assert_eq!(mesh.triangles[0].vertices[2], Point::new(0.0, 1.0, 0.0));
+        assert_eq!(mesh.triangles[0].normal, Vec3::new(0.0, 0.0, 1.0));
     }
 }
