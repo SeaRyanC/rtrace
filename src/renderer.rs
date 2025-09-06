@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use image::{ImageBuffer, Rgb, RgbImage};
+use rayon::prelude::*;
 
 use crate::scene::{Scene, Object, hex_to_color, Color, Point, Vec3};
 use crate::camera::Camera;
@@ -11,6 +12,7 @@ pub struct Renderer {
     pub height: u32,
     pub max_depth: i32,
     pub use_kdtree: bool, // New field to control k-d tree usage for meshes
+    pub thread_count: Option<usize>, // Number of threads to use (None = use all available cores)
 }
 
 impl Renderer {
@@ -20,6 +22,7 @@ impl Renderer {
             height,
             max_depth: 10,
             use_kdtree: true, // Default to using k-d tree
+            thread_count: None, // Use all available cores by default
         }
     }
 
@@ -30,6 +33,29 @@ impl Renderer {
             height,
             max_depth: 10,
             use_kdtree: false, // Disable k-d tree
+            thread_count: None, // Use all available cores by default
+        }
+    }
+
+    /// Create a renderer with a specific thread count
+    pub fn new_with_threads(width: u32, height: u32, thread_count: usize) -> Self {
+        Self {
+            width,
+            height,
+            max_depth: 10,
+            use_kdtree: true,
+            thread_count: Some(thread_count),
+        }
+    }
+
+    /// Create a renderer with specific thread count and k-d tree settings
+    pub fn new_with_options(width: u32, height: u32, use_kdtree: bool, thread_count: Option<usize>) -> Self {
+        Self {
+            width,
+            height,
+            max_depth: 10,
+            use_kdtree,
+            thread_count,
         }
     }
     
@@ -104,44 +130,92 @@ impl Renderer {
             Color::new(0.0, 0.0, 0.0)
         };
         
-        // Create image buffer
-        let mut image = ImageBuffer::new(self.width, self.height);
+        // Set up thread pool if specific thread count is requested
+        if let Some(thread_count) = self.thread_count {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(thread_count)
+                .build()
+                .map_err(|e| format!("Failed to create thread pool: {}", e))?;
+            
+            // Use the thread pool for rendering
+            let image_data = pool.install(|| {
+                self.render_parallel(&world, &camera, &scene.lights, 
+                                   &scene.scene_settings.ambient_illumination,
+                                   &scene.scene_settings.fog, &camera_pos, 
+                                   background_color, &materials)
+            });
+            
+            Ok(self.create_image_from_data(image_data))
+        } else {
+            // Use default parallel rendering with all available cores
+            let image_data = self.render_parallel(&world, &camera, &scene.lights, 
+                                                &scene.scene_settings.ambient_illumination,
+                                                &scene.scene_settings.fog, &camera_pos, 
+                                                background_color, &materials);
+            
+            Ok(self.create_image_from_data(image_data))
+        }
+    }
+
+    fn render_parallel(&self, world: &World, camera: &Camera, lights: &[crate::scene::Light],
+                      ambient: &crate::scene::AmbientIllumination, fog: &Option<crate::scene::Fog>,
+                      camera_pos: &Point, background_color: Color, 
+                      materials: &HashMap<usize, crate::scene::Material>) -> Vec<(u32, u32, Color)> {
         
-        // Render each pixel
-        for y in 0..self.height {
-            for x in 0..self.width {
+        // Create a vector of all pixel coordinates
+        let pixels: Vec<(u32, u32)> = (0..self.height)
+            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+            .collect();
+        
+        // Progress tracking setup
+        let total_pixels = self.width * self.height;
+        let progress_step = (total_pixels / 10).max(1);
+        
+        // Render pixels in parallel
+        pixels.par_iter()
+            .enumerate()
+            .map(|(pixel_index, &(x, y))| {
                 let u = x as f64 / (self.width - 1) as f64;
                 let v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
                 
                 let ray = camera.get_ray(u, v);
                 let color = ray_color(
                     &ray,
-                    &world,
-                    &scene.lights,
-                    &scene.scene_settings.ambient_illumination,
-                    &scene.scene_settings.fog,
-                    &camera_pos,
+                    world,
+                    lights,
+                    ambient,
+                    fog,
+                    camera_pos,
                     background_color,
-                    &materials,
+                    materials,
                     self.max_depth,
                 );
                 
-                // Convert to RGB values (0-255)
-                let r = (color.x.clamp(0.0, 1.0) * 255.0) as u8;
-                let g = (color.y.clamp(0.0, 1.0) * 255.0) as u8;
-                let b = (color.z.clamp(0.0, 1.0) * 255.0) as u8;
+                // Print progress periodically (note: this might be out of order due to parallelism)
+                if pixel_index % progress_step as usize == 0 {
+                    let progress = (pixel_index as f64 / total_pixels as f64) * 100.0;
+                    println!("Rendering: {:.1}%", progress);
+                }
                 
-                image.put_pixel(x, y, Rgb([r, g, b]));
-            }
+                (x, y, color)
+            })
+            .collect()
+    }
+
+    fn create_image_from_data(&self, image_data: Vec<(u32, u32, Color)>) -> RgbImage {
+        let mut image = ImageBuffer::new(self.width, self.height);
+        
+        for (x, y, color) in image_data {
+            // Convert to RGB values (0-255)
+            let r = (color.x.clamp(0.0, 1.0) * 255.0) as u8;
+            let g = (color.y.clamp(0.0, 1.0) * 255.0) as u8;
+            let b = (color.z.clamp(0.0, 1.0) * 255.0) as u8;
             
-            // Print progress
-            if y % (self.height / 10).max(1) == 0 {
-                println!("Rendering: {:.1}%", (y as f64 / self.height as f64) * 100.0);
-            }
+            image.put_pixel(x, y, Rgb([r, g, b]));
         }
         
         println!("Rendering: 100.0%");
-        Ok(image)
+        image
     }
     
     pub fn render_to_file(&self, scene: &Scene, output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -162,6 +236,11 @@ mod tests {
         let renderer = Renderer::new(800, 600);
         assert_eq!(renderer.width, 800);
         assert_eq!(renderer.height, 600);
+        assert_eq!(renderer.thread_count, None);
+        
+        // Test with specific thread count
+        let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
+        assert_eq!(renderer_threaded.thread_count, Some(4));
     }
     
     #[test]
