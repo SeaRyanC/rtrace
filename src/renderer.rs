@@ -20,7 +20,7 @@ impl Renderer {
         Self {
             width,
             height,
-            max_depth: 10,
+            max_depth: 2,
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
         }
@@ -31,7 +31,7 @@ impl Renderer {
         Self {
             width,
             height,
-            max_depth: 10,
+            max_depth: 2,
             use_kdtree: false,  // Disable k-d tree
             thread_count: None, // Use all available cores by default
         }
@@ -42,7 +42,7 @@ impl Renderer {
         Self {
             width,
             height,
-            max_depth: 10,
+            max_depth: 2,
             use_kdtree: true,
             thread_count: Some(thread_count),
         }
@@ -58,7 +58,7 @@ impl Renderer {
         Self {
             width,
             height,
-            max_depth: 10,
+            max_depth: 2,
             use_kdtree,
             thread_count,
         }
@@ -282,10 +282,27 @@ mod tests {
         assert_eq!(renderer.width, 800);
         assert_eq!(renderer.height, 600);
         assert_eq!(renderer.thread_count, None);
+        assert_eq!(renderer.max_depth, 2); // Verify new default bounce limit
 
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
         assert_eq!(renderer_threaded.thread_count, Some(4));
+        assert_eq!(renderer_threaded.max_depth, 2); // Verify new default bounce limit
+    }
+
+    #[test]
+    fn test_default_max_depth_is_two() {
+        let renderer = Renderer::new(800, 600);
+        assert_eq!(renderer.max_depth, 2);
+        
+        let renderer_brute = Renderer::new_brute_force(800, 600);
+        assert_eq!(renderer_brute.max_depth, 2);
+        
+        let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
+        assert_eq!(renderer_threaded.max_depth, 2);
+        
+        let renderer_options = Renderer::new_with_options(800, 600, true, None);
+        assert_eq!(renderer_options.max_depth, 2);
     }
 
     #[test]

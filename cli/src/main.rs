@@ -23,7 +23,7 @@ struct Args {
     height: u32,
 
     /// Maximum ray bounces for reflections
-    #[arg(long, default_value_t = 10)]
+    #[arg(long, default_value_t = 2)]
     max_depth: i32,
 }
 

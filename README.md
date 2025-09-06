@@ -63,7 +63,7 @@ cargo build --release -p rtrace-cli
 - `-o, --output <FILE>`: Output PNG image file (required)
 - `-w, --width <WIDTH>`: Image width in pixels (default: 800)
 - `-H, --height <HEIGHT>`: Image height in pixels (default: 600)
-- `--max-depth <DEPTH>`: Maximum ray bounces for reflections (default: 10)
+- `--max-depth <DEPTH>`: Maximum ray bounces for reflections (default: 2)
 
 ### Auto Camera Bounds CLI
 
