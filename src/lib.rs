@@ -1,7 +1,7 @@
 /// Ray tracing library for rtrace
 ///
 /// This library provides a complete ray tracer with support for:
-/// - Orthographic camera projection
+/// - Orthographic and perspective camera projection
 /// - Basic geometric primitives (sphere, plane, cube)
 /// - Phong lighting model with ambient lighting
 /// - Atmospheric fog

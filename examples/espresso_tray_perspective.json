@@ -1,11 +1,12 @@
 {
   "camera": {
-    "kind": "ortho",
+    "kind": "perspective",
     "position": [60, 60, 40],
     "target": [0, 0, 0],
     "up": [0, 0, 1],
     "width": 80,
-    "height": 80
+    "height": 80,
+    "fov": 50
   },
   "objects": [
     {
