@@ -216,8 +216,17 @@ const docSceneFiles = [
     "material-reflectivity.json",
     "texture-grid-variations.json",
     "lighting-multiple.json",
+    "sampling-antialiasing.json",
     "example-complete.json"
 ];
+
+// Metadata for scenes that need special command line parameters
+const docSceneMetadata = {
+    "sampling-antialiasing.json": {
+        "samples": 4,
+        "description": "Demonstrates stochastic subsampling for anti-aliasing"
+    }
+};
 
 // Multi-file scenes that need special handling
 const docMultiFileScenes = [
@@ -241,11 +250,22 @@ for (const file of docSceneFiles) {
         word.charAt(0).toUpperCase() + word.slice(1)
     ).join('')}`;
     
+    // Build command with base parameters
+    let command = `./target/release/rtrace -i doc/scenes/${file} -o doc/images/${baseName}.png -w 400 -H 300`;
+    
+    // Add metadata-based parameters if available
+    const metadata = docSceneMetadata[file];
+    if (metadata) {
+        if (metadata.samples) {
+            command += ` --samples ${metadata.samples}`;
+        }
+    }
+    
     docRenderTasks[taskName] = task({
         name: `render:doc:${baseName}`,
         description: `Render ${baseName} example for documentation`,
         dependencies: [buildCli],
-        run: exec(`./target/release/rtrace -i doc/scenes/${file} -o doc/images/${baseName}.png -w 400 -H 300`)
+        run: exec(command)
     });
     docDependencies.push(docRenderTasks[taskName]);
 }
@@ -281,6 +301,7 @@ export const renderDocMaterialProperties = docRenderTasks.renderDocMaterialPrope
 export const renderDocMaterialReflectivity = docRenderTasks.renderDocMaterialReflectivity;
 export const renderDocTextureGridVariations = docRenderTasks.renderDocTextureGridVariations;
 export const renderDocLightingMultiple = docRenderTasks.renderDocLightingMultiple;
+export const renderDocSamplingAntialiasing = docRenderTasks.renderDocSamplingAntialiasing;
 export const renderDocExampleComplete = docRenderTasks.renderDocExampleComplete;
 export const renderDocSceneBackgrounds = docRenderTasks.renderDocSceneBackgrounds;
 export const renderDocSceneFog = docRenderTasks.renderDocSceneFog;
