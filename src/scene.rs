@@ -189,6 +189,12 @@ impl Scene {
         Ok(scene)
     }
     
+    /// Load scene from JSON string
+    pub fn from_json_str(json: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let scene: Scene = serde_json::from_str(json)?;
+        Ok(scene)
+    }
+    
     /// Save scene to JSON file
     pub fn to_json_file(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
         let json = serde_json::to_string_pretty(self)?;

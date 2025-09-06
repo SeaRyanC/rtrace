@@ -1,0 +1,221 @@
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [
+      0,
+      2,
+      12
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "up": [
+      0,
+      1,
+      0
+    ],
+    "width": 12,
+    "height": 12
+  },
+  "objects": [
+    {
+      "kind": "sphere",
+      "center": [
+        4,
+        0,
+        0
+      ],
+      "radius": 0.9,
+      "material": {
+        "color": "#e62e2e",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        2.8284271247461903,
+        1.5,
+        2.82842712474619
+      ],
+      "radius": 1.0414213562373096,
+      "material": {
+        "color": "#e6ac00",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        2.4492935982947064e-16,
+        1.8369701987210297e-16,
+        4
+      ],
+      "radius": 0.7,
+      "material": {
+        "color": "#8ae62e",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        -2.82842712474619,
+        -1.5,
+        2.8284271247461903
+      ],
+      "radius": 1.0414213562373096,
+      "material": {
+        "color": "#00e639",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        -4,
+        -3.6739403974420594e-16,
+        4.898587196589413e-16
+      ],
+      "radius": 0.9000000000000001,
+      "material": {
+        "color": "#2ee6e6",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        -2.8284271247461907,
+        1.5,
+        -2.82842712474619
+      ],
+      "radius": 0.7585786437626904,
+      "material": {
+        "color": "#0039e6",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        -7.347880794884119e-16,
+        5.51091059616309e-16,
+        -4
+      ],
+      "radius": 1.1,
+      "material": {
+        "color": "#8a2ee6",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        2.8284271247461894,
+        -1.5,
+        -2.8284271247461907
+      ],
+      "radius": 0.7585786437626905,
+      "material": {
+        "color": "#e600ac",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [
+        0,
+        0,
+        0
+      ],
+      "radius": 1.2,
+      "material": {
+        "color": "#FFFFFF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "plane",
+      "point": [
+        0,
+        -3,
+        0
+      ],
+      "normal": [
+        0,
+        1,
+        0
+      ],
+      "material": {
+        "color": "#334455",
+        "ambient": 0.2,
+        "diffuse": 0.6,
+        "specular": 0.1,
+        "shininess": 8,
+        "texture": {
+          "type": "grid",
+          "line_color": "#666666",
+          "line_width": 0.1,
+          "cell_size": 1.5
+        }
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [
+        5,
+        8,
+        10
+      ],
+      "color": "#FFFFFF",
+      "intensity": 1.2
+    },
+    {
+      "position": [
+        -5,
+        8,
+        10
+      ],
+      "color": "#FFCCAA",
+      "intensity": 0.8
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.2
+    },
+    "background_color": "#001133"
+  }
+}

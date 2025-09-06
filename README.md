@@ -151,19 +151,68 @@ npm run example
 
 **JavaScript Usage:**
 ```javascript
-const { helloWorld, greetWithName } = require('./rtrace.node');
+const { helloWorld, greetWithName, renderScene } = require('./rtrace.node');
 
+// Basic functions
 console.log(helloWorld()); // "hello world"
 console.log(greetWithName("Alice")); // "hello world, Alice"
+
+// Ray tracer API - render scenes programmatically
+const scene = {
+    camera: {
+        kind: "ortho",
+        position: [0, 0, 5],
+        target: [0, 0, 0],
+        up: [0, 1, 0],
+        width: 6,
+        height: 6
+    },
+    objects: [
+        {
+            kind: "sphere",
+            center: [0, 0, 0],
+            radius: 1.0,
+            material: {
+                color: "#FF4444",
+                ambient: 0.1,
+                diffuse: 0.8,
+                specular: 0.4,
+                shininess: 32
+            }
+        }
+    ],
+    lights: [
+        {
+            position: [2, 2, 5],
+            color: "#FFFFFF",
+            intensity: 1.0
+        }
+    ],
+    scene_settings: {
+        ambient_illumination: {
+            color: "#FFFFFF",
+            intensity: 0.1
+        },
+        background_color: "#001122"
+    }
+};
+
+// Render to PNG file
+const result = renderScene(JSON.stringify(scene), 'output.png', 800, 600);
+console.log(result); // "Successfully rendered 800x600 image to 'output.png'"
 ```
 
 **TypeScript Support:**
 TypeScript definitions are automatically generated:
 ```typescript
-import { helloWorld, greetWithName } from './rtrace.node';
+import { helloWorld, greetWithName, renderScene } from './rtrace.node';
 
 const message: string = helloWorld();
 const greeting: string = greetWithName("Bob");
+
+// Render a scene programmatically
+const scene = { /* scene object */ };
+const result: string = renderScene(JSON.stringify(scene), 'output.png', 800, 600);
 ```
 
 ## Examples
