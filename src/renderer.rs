@@ -1,6 +1,7 @@
 use image::{ImageBuffer, Rgb, RgbImage};
 use rayon::prelude::*;
 use std::collections::HashMap;
+use rand::Rng;
 
 use crate::camera::Camera;
 use crate::lighting::ray_color;
@@ -13,6 +14,7 @@ pub struct Renderer {
     pub max_depth: i32,
     pub use_kdtree: bool, // New field to control k-d tree usage for meshes
     pub thread_count: Option<usize>, // Number of threads to use (None = use all available cores)
+    pub samples: u32, // Number of samples per pixel for stochastic subsampling
 }
 
 impl Renderer {
@@ -23,6 +25,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
+            samples: 1,         // Default to single sample per pixel
         }
     }
 
@@ -34,6 +37,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: false,  // Disable k-d tree
             thread_count: None, // Use all available cores by default
+            samples: 1,         // Default to single sample per pixel
         }
     }
 
@@ -45,6 +49,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,
             thread_count: Some(thread_count),
+            samples: 1,         // Default to single sample per pixel
         }
     }
 
@@ -61,10 +66,16 @@ impl Renderer {
             max_depth: 10,
             use_kdtree,
             thread_count,
+            samples: 1,         // Default to single sample per pixel
         }
     }
 
     pub fn render(&self, scene: &Scene) -> Result<RgbImage, Box<dyn std::error::Error>> {
+        // Validate samples parameter
+        if self.samples == 0 {
+            return Err("Samples must be greater than 0".into());
+        }
+        
         // Create camera
         let aspect_ratio = self.width as f64 / self.height as f64;
         let camera = Camera::from_config(&scene.camera, aspect_ratio)?;
@@ -216,21 +227,62 @@ impl Renderer {
             .par_iter()
             .enumerate()
             .map(|(pixel_index, &(x, y))| {
-                let u = x as f64 / (self.width - 1) as f64;
-                let v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
+                // Calculate base pixel coordinates
+                let pixel_u = x as f64 / (self.width - 1) as f64;
+                let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
+                
+                // Calculate pixel size in UV coordinates
+                let pixel_width = 1.0 / (self.width - 1) as f64;
+                let pixel_height = 1.0 / (self.height - 1) as f64;
 
-                let ray = camera.get_ray(u, v);
-                let color = ray_color(
-                    &ray,
-                    world,
-                    lights,
-                    ambient,
-                    fog,
-                    camera_pos,
-                    background_color,
-                    materials,
-                    self.max_depth,
-                );
+                // Collect samples for this pixel
+                let mut total_color = Color::new(0.0, 0.0, 0.0);
+                let mut rng = rand::thread_rng();
+
+                for sample in 0..self.samples {
+                    let (sample_u, sample_v) = if self.samples == 1 {
+                        // Single sample with random jitter within pixel bounds
+                        let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                        let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                        (
+                            pixel_u + jitter_u * pixel_width,
+                            pixel_v + jitter_v * pixel_height,
+                        )
+                    } else {
+                        // Multiple samples: radially symmetric pattern with random phase
+                        let angle = 2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
+                        let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
+                        let rotated_angle = angle + random_phase;
+                        
+                        // Use a smaller radius to keep samples within pixel bounds
+                        let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
+                        let jitter_u = radius * rotated_angle.cos();
+                        let jitter_v = radius * rotated_angle.sin();
+                        
+                        (
+                            pixel_u + jitter_u * pixel_width,
+                            pixel_v + jitter_v * pixel_height,
+                        )
+                    };
+
+                    let ray = camera.get_ray(sample_u, sample_v);
+                    let sample_color = ray_color(
+                        &ray,
+                        world,
+                        lights,
+                        ambient,
+                        fog,
+                        camera_pos,
+                        background_color,
+                        materials,
+                        self.max_depth,
+                    );
+                    
+                    total_color += sample_color;
+                }
+
+                // Average the samples
+                let color = total_color / self.samples as f64;
 
                 // Print progress periodically (note: this might be out of order due to parallelism)
                 if pixel_index % progress_step as usize == 0 {
@@ -309,5 +361,53 @@ mod tests {
         let renderer = Renderer::new(100, 100);
         let result = renderer.render(&scene);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_stochastic_sampling() {
+        let mut scene = Scene::default();
+
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a light
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+        });
+
+        // Test with multiple samples
+        let mut renderer = Renderer::new(50, 50);
+        renderer.samples = 4;
+        let result = renderer.render(&scene);
+        assert!(result.is_ok());
+
+        // Test with single sample 
+        renderer.samples = 1;
+        let result = renderer.render(&scene);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_zero_samples_error() {
+        let mut scene = Scene::default();
+
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        let mut renderer = Renderer::new(10, 10);
+        renderer.samples = 0;
+        let result = renderer.render(&scene);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Samples must be greater than 0"));
     }
 }

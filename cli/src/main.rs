@@ -25,6 +25,10 @@ struct Args {
     /// Maximum ray bounces for reflections
     #[arg(long, default_value_t = 10)]
     max_depth: i32,
+
+    /// Number of samples per pixel for stochastic subsampling
+    #[arg(long, default_value_t = 1)]
+    samples: u32,
 }
 
 fn main() {
@@ -54,6 +58,7 @@ fn main() {
     // Create renderer
     let mut renderer = Renderer::new(args.width, args.height);
     renderer.max_depth = args.max_depth;
+    renderer.samples = args.samples;
 
     println!("Rendering {}x{} image...", args.width, args.height);
 
