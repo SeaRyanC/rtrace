@@ -88,9 +88,33 @@ impl KdTree {
             
             // Build the tree recursively
             tree.root = Some(tree.build_recursive(triangles, triangle_indices, bounds, 0));
+            
+            // Debug: count leaf nodes
+            let (leaf_count, max_leaf_triangles) = tree.count_leaf_nodes();
+            println!("K-d tree built: {} leaf nodes, max triangles per leaf: {}", leaf_count, max_leaf_triangles);
         }
 
         tree
+    }
+
+    /// Count leaf nodes and maximum triangles per leaf (for debugging)
+    fn count_leaf_nodes(&self) -> (usize, usize) {
+        if let Some(ref root) = self.root {
+            self.count_leaf_nodes_recursive(root)
+        } else {
+            (0, 0)
+        }
+    }
+
+    fn count_leaf_nodes_recursive(&self, node: &KdNode) -> (usize, usize) {
+        match node {
+            KdNode::Leaf { triangles, .. } => (1, triangles.len()),
+            KdNode::Internal { left, right, .. } => {
+                let (left_count, left_max) = self.count_leaf_nodes_recursive(left.as_ref());
+                let (right_count, right_max) = self.count_leaf_nodes_recursive(right.as_ref());
+                (left_count + right_count, left_max.max(right_max))
+            }
+        }
     }
 
     /// Recursively build the k-d tree
@@ -219,7 +243,83 @@ impl KdTree {
         F: FnMut(&[usize]),
     {
         if let Some(ref root) = self.root {
-            self.traverse_recursive(root, ray_origin, ray_direction, &mut callback);
+            let mut node_count = 0;
+            let mut leaf_count = 0;
+            self.traverse_recursive_with_count(root, ray_origin, ray_direction, &mut callback, &mut node_count, &mut leaf_count);
+            println!("Traversal visited {} nodes ({} leaves)", node_count, leaf_count);
+        }
+    }
+
+    fn traverse_recursive_with_count<F>(
+        &self,
+        node: &KdNode,
+        ray_origin: &Point,
+        ray_direction: &Vec3,
+        callback: &mut F,
+        node_count: &mut usize,
+        leaf_count: &mut usize,
+    ) where
+        F: FnMut(&[usize]),
+    {
+        *node_count += 1;
+        
+        match node {
+            KdNode::Leaf { triangles, bounds } => {
+                *leaf_count += 1;
+                // Check if ray intersects this leaf's bounds
+                if Self::ray_intersects_bounds(ray_origin, ray_direction, bounds) {
+                    callback(triangles);
+                } else {
+                    println!("Leaf bounds check failed for leaf with {} triangles, bounds=({:.2},{:.2},{:.2}) to ({:.2},{:.2},{:.2})", 
+                        triangles.len(), 
+                        bounds.0.x, bounds.0.y, bounds.0.z, 
+                        bounds.1.x, bounds.1.y, bounds.1.z);
+                }
+            }
+            KdNode::Internal { axis, split_pos, left, right, bounds: _ } => {
+                let origin_pos = ray_origin[*axis];
+                let dir = ray_direction[*axis];
+
+                // If ray is parallel to the splitting plane, only traverse the side it's on
+                if dir.abs() < 1e-9 {
+                    if origin_pos <= *split_pos {
+                        self.traverse_recursive_with_count(left.as_ref(), ray_origin, ray_direction, callback, node_count, leaf_count);
+                    } else {
+                        self.traverse_recursive_with_count(right.as_ref(), ray_origin, ray_direction, callback, node_count, leaf_count);
+                    }
+                    return;
+                }
+
+                // Calculate where ray intersects the splitting plane
+                let t_split = (*split_pos - origin_pos) / dir;
+
+                // Traverse children in order based on ray direction
+                // Always traverse the near child first, then the far child if the ray crosses the plane
+                if origin_pos <= *split_pos {
+                    // Ray starts in left child region
+                    self.traverse_recursive_with_count(left.as_ref(), ray_origin, ray_direction, callback, node_count, leaf_count);
+                    if t_split >= 0.0 {
+                        self.traverse_recursive_with_count(right.as_ref(), ray_origin, ray_direction, callback, node_count, leaf_count);
+                    }
+                } else {
+                    // Ray starts in right child region
+                    self.traverse_recursive_with_count(right.as_ref(), ray_origin, ray_direction, callback, node_count, leaf_count);
+                    if t_split >= 0.0 {
+                        self.traverse_recursive_with_count(left.as_ref(), ray_origin, ray_direction, callback, node_count, leaf_count);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Traverse the k-d tree with debug output
+    pub fn traverse_debug<F>(&self, ray_origin: &Point, ray_direction: &Vec3, mut callback: F)
+    where
+        F: FnMut(&[usize]),
+    {
+        if let Some(ref root) = self.root {
+            println!("Starting k-d tree traversal...");
+            self.traverse_recursive_debug(root, ray_origin, ray_direction, &mut callback, 0);
         }
     }
 
@@ -240,12 +340,7 @@ impl KdTree {
                     callback(triangles);
                 }
             }
-            KdNode::Internal { axis, split_pos, left, right, bounds } => {
-                // Check if ray intersects this node's bounds
-                if !Self::ray_intersects_bounds(ray_origin, ray_direction, bounds) {
-                    return;
-                }
-
+            KdNode::Internal { axis, split_pos, left, right, bounds: _ } => {
                 let origin_pos = ray_origin[*axis];
                 let dir = ray_direction[*axis];
 
@@ -262,20 +357,165 @@ impl KdTree {
                 // Calculate where ray intersects the splitting plane
                 let t_split = (*split_pos - origin_pos) / dir;
 
-                // Determine which side of the split plane the ray starts on
-                let (near_child, far_child) = if origin_pos <= *split_pos {
-                    (left.as_ref(), right.as_ref())
+                // Traverse children in order based on ray direction
+                // Always traverse the near child first, then the far child if the ray crosses the plane
+                if origin_pos <= *split_pos {
+                    // Ray starts in left child region
+                    self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, callback);
+                    if t_split >= 0.0 {
+                        self.traverse_recursive(right.as_ref(), ray_origin, ray_direction, callback);
+                    }
                 } else {
-                    (right.as_ref(), left.as_ref())
+                    // Ray starts in right child region
+                    self.traverse_recursive(right.as_ref(), ray_origin, ray_direction, callback);
+                    if t_split >= 0.0 {
+                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, callback);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Calculate ray-box intersection and return (t_near, t_far) if intersection exists
+    fn ray_bounds_intersection(ray_origin: &Point, ray_direction: &Vec3, bounds: &(Point, Point)) -> Option<(f64, f64)> {
+        let (min, max) = bounds;
+        
+        let mut t_min = f64::NEG_INFINITY;
+        let mut t_max = f64::INFINITY;
+        
+        for axis in 0..3 {
+            if ray_direction[axis].abs() < 1e-9 {
+                // Ray is parallel to the slab
+                if ray_origin[axis] < min[axis] || ray_origin[axis] > max[axis] {
+                    return None;
+                }
+            } else {
+                let inv_dir = 1.0 / ray_direction[axis];
+                let mut t0 = (min[axis] - ray_origin[axis]) * inv_dir;
+                let mut t1 = (max[axis] - ray_origin[axis]) * inv_dir;
+                
+                if t0 > t1 {
+                    std::mem::swap(&mut t0, &mut t1);
+                }
+                
+                t_min = t_min.max(t0);
+                t_max = t_max.min(t1);
+                
+                // Only check for invalid intersection after processing this axis
+                if t_min > t_max {
+                    return None;
+                }
+            }
+        }
+        
+        // Check if the intersection is in front of the ray (t_max >= 0)
+        if t_max >= 0.0 {
+            Some((t_min.max(0.0), t_max))
+        } else {
+            None
+        }
+    }
+
+    /// Recursive traversal of the k-d tree with debug output
+    fn traverse_recursive_debug<F>(
+        &self,
+        node: &KdNode,
+        ray_origin: &Point,
+        ray_direction: &Vec3,
+        callback: &mut F,
+        depth: usize,
+    ) where
+        F: FnMut(&[usize]),
+    {
+        let indent = "  ".repeat(depth);
+        
+        match node {
+            KdNode::Leaf { triangles, bounds } => {
+                println!("{}Leaf: {} triangles, bounds=({:.2},{:.2},{:.2}) to ({:.2},{:.2},{:.2})", 
+                    indent, triangles.len(), 
+                    bounds.0.x, bounds.0.y, bounds.0.z, 
+                    bounds.1.x, bounds.1.y, bounds.1.z);
+                    
+                // Check if ray intersects this leaf's bounds
+                let intersects = Self::ray_intersects_bounds(ray_origin, ray_direction, bounds);
+                println!("{}  Ray intersects leaf bounds: {}", indent, intersects);
+                
+                if intersects {
+                    println!("{}  Calling callback with {} triangles", indent, triangles.len());
+                    callback(triangles);
+                }
+            }
+            KdNode::Internal { axis, split_pos, left, right, bounds } => {
+                let axis_name = match axis {
+                    0 => "X",
+                    1 => "Y", 
+                    2 => "Z",
+                    _ => "?",
+                };
+                println!("{}Internal: split on {} axis at {:.2}, bounds=({:.2},{:.2},{:.2}) to ({:.2},{:.2},{:.2})", 
+                    indent, axis_name, split_pos,
+                    bounds.0.x, bounds.0.y, bounds.0.z, 
+                    bounds.1.x, bounds.1.y, bounds.1.z);
+                    
+                // First, calculate the ray's intersection with this node's bounding box
+                let (t_near, t_far) = match Self::ray_bounds_intersection(ray_origin, ray_direction, bounds) {
+                    Some(intersection) => {
+                        println!("{}  Ray intersects node bounds: t_near={:.6}, t_far={:.6}", indent, intersection.0, intersection.1);
+                        intersection
+                    },
+                    None => {
+                        println!("{}  Ray doesn't intersect node bounds", indent);
+                        return;
+                    }
                 };
 
-                // Always traverse the near side (containing ray origin)
-                self.traverse_recursive(near_child, ray_origin, ray_direction, callback);
+                let origin_pos = ray_origin[*axis];
+                let dir = ray_direction[*axis];
+                
+                println!("{}  Ray origin on {} axis: {:.2}, direction: {:.6}", indent, axis_name, origin_pos, dir);
 
-                // Only traverse the far side if ray actually crosses the splitting plane
-                // AND the crossing happens at a non-negative t value (forward along ray)
-                if t_split > 0.0 {
-                    self.traverse_recursive(far_child, ray_origin, ray_direction, callback);
+                // If ray is parallel to the splitting plane, only traverse the side it's on
+                if dir.abs() < 1e-9 {
+                    println!("{}  Ray is parallel to splitting plane", indent);
+                    if origin_pos <= *split_pos {
+                        println!("{}  Traversing LEFT child only", indent);
+                        self.traverse_recursive_debug(left.as_ref(), ray_origin, ray_direction, callback, depth + 1);
+                    } else {
+                        println!("{}  Traversing RIGHT child only", indent);
+                        self.traverse_recursive_debug(right.as_ref(), ray_origin, ray_direction, callback, depth + 1);
+                    }
+                    return;
+                }
+
+                // Calculate where ray intersects the splitting plane
+                let t_split = (*split_pos - origin_pos) / dir;
+                println!("{}  t_split = ({:.2} - {:.2}) / {:.6} = {:.6}", indent, split_pos, origin_pos, dir, t_split);
+
+                // Determine which child corresponds to which side
+                let (left_child, right_child) = (left.as_ref(), right.as_ref());
+
+                // Check if the ray segment [t_near, t_far] intersects the left child (values <= split_pos)
+                let left_t_max = if dir > 0.0 { t_split } else { t_far };
+                let left_t_min = if dir < 0.0 { t_split } else { t_near };
+                
+                println!("{}  Left child range: t_min={:.6}, t_max={:.6}", indent, left_t_min, left_t_max);
+                if left_t_min <= left_t_max && left_t_max >= 0.0 {
+                    println!("{}  Traversing LEFT child", indent);
+                    self.traverse_recursive_debug(left_child, ray_origin, ray_direction, callback, depth + 1);
+                } else {
+                    println!("{}  NOT traversing LEFT child", indent);
+                }
+
+                // Check if the ray segment [t_near, t_far] intersects the right child (values > split_pos)
+                let right_t_min = if dir > 0.0 { t_split } else { t_near };
+                let right_t_max = if dir < 0.0 { t_split } else { t_far };
+                
+                println!("{}  Right child range: t_min={:.6}, t_max={:.6}", indent, right_t_min, right_t_max);
+                if right_t_min <= right_t_max && right_t_max >= 0.0 {
+                    println!("{}  Traversing RIGHT child", indent);
+                    self.traverse_recursive_debug(right_child, ray_origin, ray_direction, callback, depth + 1);
+                } else {
+                    println!("{}  NOT traversing RIGHT child", indent);
                 }
             }
         }
