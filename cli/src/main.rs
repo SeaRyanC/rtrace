@@ -29,6 +29,10 @@ struct Args {
     /// Number of samples per pixel for stochastic subsampling
     #[arg(long, default_value_t = 1)]
     samples: u32,
+
+    /// Disable stochastic jittering (use center-pixel sampling)
+    #[arg(long)]
+    no_jitter: bool,
 }
 
 fn main() {
@@ -65,6 +69,7 @@ fn main() {
     let mut renderer = Renderer::new(args.width, args.height);
     renderer.max_depth = args.max_depth;
     renderer.samples = args.samples;
+    renderer.no_jitter = args.no_jitter;
 
     println!("Rendering {}x{} image...", args.width, args.height);
 

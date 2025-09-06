@@ -15,6 +15,7 @@ pub struct Renderer {
     pub use_kdtree: bool, // New field to control k-d tree usage for meshes
     pub thread_count: Option<usize>, // Number of threads to use (None = use all available cores)
     pub samples: u32, // Number of samples per pixel for stochastic subsampling
+    pub no_jitter: bool, // Disable stochastic jittering (use center-pixel sampling)
 }
 
 impl Renderer {
@@ -26,6 +27,7 @@ impl Renderer {
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
             samples: 1,         // Default to single sample per pixel
+            no_jitter: false,   // Default to using stochastic jittering
         }
     }
 
@@ -38,6 +40,7 @@ impl Renderer {
             use_kdtree: false,  // Disable k-d tree
             thread_count: None, // Use all available cores by default
             samples: 1,         // Default to single sample per pixel
+            no_jitter: false,   // Default to using stochastic jittering
         }
     }
 
@@ -50,6 +53,7 @@ impl Renderer {
             use_kdtree: true,
             thread_count: Some(thread_count),
             samples: 1,         // Default to single sample per pixel
+            no_jitter: false,   // Default to using stochastic jittering
         }
     }
 
@@ -67,6 +71,7 @@ impl Renderer {
             use_kdtree,
             thread_count,
             samples: 1,         // Default to single sample per pixel
+            no_jitter: false,   // Default to using stochastic jittering
         }
     }
 
@@ -240,7 +245,10 @@ impl Renderer {
                 let mut rng = rand::thread_rng();
 
                 for sample in 0..self.samples {
-                    let (sample_u, sample_v) = if self.samples == 1 {
+                    let (sample_u, sample_v) = if self.no_jitter {
+                        // No jittering: sample at exact pixel center
+                        (pixel_u, pixel_v)
+                    } else if self.samples == 1 {
                         // Single sample with random jitter within pixel bounds
                         let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
                         let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
@@ -389,6 +397,38 @@ mod tests {
 
         // Test with single sample 
         renderer.samples = 1;
+        let result = renderer.render(&scene);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_no_jitter_sampling() {
+        let mut scene = Scene::default();
+
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a light
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+        });
+
+        // Test no-jitter mode with single sample
+        let mut renderer = Renderer::new(50, 50);
+        renderer.samples = 1;
+        renderer.no_jitter = true;
+        let result = renderer.render(&scene);
+        assert!(result.is_ok());
+
+        // Test no-jitter mode with multiple samples (should still work but be redundant)
+        renderer.samples = 4;
+        renderer.no_jitter = true;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
     }
