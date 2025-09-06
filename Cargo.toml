@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    ".",
+    "cli",
+    "bindings/node"
+]
+
+[package]
+name = "rtrace"
+version = "0.1.0"
+edition = "2021"
+description = "A minimal Rust library with Node.js and WASM bindings"
+license = "MIT"
+repository = "https://github.com/SeaRyanC/rtrace"
+
+[lib]
+name = "rtrace"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]

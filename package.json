@@ -1,0 +1,41 @@
+{
+  "name": "rtrace",
+  "version": "0.1.0",
+  "description": "A minimal Rust library with Node.js bindings",
+  "main": "rtrace.node",
+  "types": "index.d.ts",
+  "files": [
+    "rtrace.node",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "build": "npm run build:node",
+    "build:node": "napi build --release --cargo-cwd bindings/node",
+    "test": "npm run build && node test.js",
+    "example": "npm run build && node example.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeaRyanC/rtrace.git"
+  },
+  "keywords": [
+    "rust",
+    "nodejs",
+    "bindings"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/SeaRyanC/rtrace/issues"
+  },
+  "homepage": "https://github.com/SeaRyanC/rtrace#readme",
+  "napi": {
+    "name": "rtrace",
+    "triples": {
+      "defaults": true
+    }
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.0.0"
+  }
+}
