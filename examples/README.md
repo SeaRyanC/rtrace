@@ -107,6 +107,22 @@ node radial_spheres_example.js
 
 This will create both `examples/radial_spheres.json` and `examples/radial_spheres_800x600.png`.
 
+### Mesh Examples
+
+#### 7. Icosahedron (`icosahedron_perspective.json`, `icosahedron_front.json`)
+- Regular icosahedron (20-sided Platonic solid)
+- Demonstrates:
+  - Complex mesh rendering with multiple faces
+  - Good middle ground between simple and complex geometry
+  - Perspective and orthographic camera views
+- **Files**: 
+  - `icosahedron.stl` - Generated icosahedron mesh
+  - `icosahedron_perspective.json` - 3D perspective view
+  - `icosahedron_front.json` - Front orthographic view
+- **Outputs**: 
+  - `icosahedron_perspective_800x600.png`
+  - `icosahedron_front_800x600.png`
+
 ```bash
 # From the root directory
 ./target/release/rtrace --input examples/SCENE_FILE.json --output OUTPUT.png --width 800 --height 600
