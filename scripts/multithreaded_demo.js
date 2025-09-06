@@ -1,18 +1,18 @@
 // Multi-threaded Rendering Demo for rtrace
-const rtrace = require('./rtrace.node');
+const rtrace = require('../rtrace.node');
 const fs = require('fs');
 
 console.log('🚀 rtrace Multi-threaded Rendering Demo');
 console.log('========================================\n');
 
 // Test with an existing scene
-const sceneFile = './examples/simple_cube.json';
+const sceneFile = '../examples/simple_cube.json';
 
 if (!fs.existsSync(sceneFile)) {
     console.error(`❌ Scene file ${sceneFile} not found`);
     console.log('Available scenes:');
-    const examples = fs.readdirSync('./examples').filter(f => f.endsWith('.json'));
-    examples.forEach(f => console.log(`   ./examples/${f}`));
+    const examples = fs.readdirSync('../examples').filter(f => f.endsWith('.json'));
+    examples.forEach(f => console.log(`   ../examples/${f}`));
     process.exit(1);
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Test script to verify NAPI bindings work correctly
-const { helloWorld, greetWithName } = require('./rtrace.node');
+const { helloWorld, greetWithName } = require('../rtrace.node');
 
 console.log('Testing NAPI bindings...');
 

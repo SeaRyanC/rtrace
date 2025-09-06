@@ -1,4 +1,4 @@
-const rtrace = require('./rtrace.node');
+const rtrace = require('../rtrace.node');
 const fs = require('fs');
 
 // We can't directly get triangle count from the current API, 
@@ -18,7 +18,7 @@ function getTriangleCountFromBinarySTL(filePath) {
 
 try {
   console.log("📊 Plus.stl Analysis");
-  const info = getTriangleCountFromBinarySTL('./examples/plus.stl');
+  const info = getTriangleCountFromBinarySTL('../examples/plus.stl');
   console.log(`Triangle count: ${info.triangleCount}`);
   console.log(`File size: ${info.fileSize} bytes`);
   console.log(`Expected size: ${info.expectedSize} bytes`);

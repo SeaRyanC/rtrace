@@ -1,5 +1,5 @@
 // Example: Radial Array of Colored Spheres using rtrace Node.js bindings
-const rtrace = require('./rtrace.node');
+const rtrace = require('../rtrace.node');
 const path = require('path');
 
 console.log('=== Radial Spheres Scene Demo ===\n');

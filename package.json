@@ -11,8 +11,8 @@
   "scripts": {
     "build": "npm run build:node",
     "build:node": "napi build --release --cargo-cwd bindings/node",
-    "test": "npm run build && node test.js",
-    "example": "npm run build && node example.js"
+    "test": "npm run build && node scripts/test.js",
+    "example": "npm run build && node scripts/example.js"
   },
   "repository": {
     "type": "git",
