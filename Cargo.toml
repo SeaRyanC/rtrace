@@ -18,3 +18,5 @@ name = "rtrace"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+byteorder = "1.5"
+thiserror = "1.0"
