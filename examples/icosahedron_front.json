@@ -1,0 +1,42 @@
+{
+  "camera": {
+    "kind": "ortho", 
+    "position": [0, 0, 5],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 3,
+    "height": 3
+  },
+  "objects": [
+    {
+      "kind": "mesh",
+      "filename": "icosahedron.stl",
+      "material": {
+        "color": "#FF6B35",
+        "ambient": 0.2,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [3, 3, 6],
+      "color": "#FFFFFF",
+      "intensity": 1.0
+    },
+    {
+      "position": [-2, -2, 4],
+      "color": "#FFFFFF",
+      "intensity": 0.4
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF", 
+      "intensity": 0.25
+    },
+    "background_color": "#1E1E2E"
+  }
+}
