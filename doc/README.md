@@ -492,6 +492,18 @@ The difference is most noticeable on edges and fine details. Here's the same sce
 - **1-sample jittering** reduces aliasing while maintaining fast render times
 - **4-sample jittering** provides smooth edges with minimal visual artifacts
 
+### Anti-Aliasing Comparison
+
+Here's a simpler comparison showing the fundamental difference between deterministic and stochastic sampling:
+
+| No Sampling & No Jitter | Stochastic Anti-Aliasing |
+|:------------------------:|:------------------------:|
+| ![No Sampling](images/sampling-antialiasing-nosamples.png) | ![Anti-Aliasing](images/sampling-antialiasing.png) |
+
+This comparison clearly shows:
+- **Left (--samples 1 --no-jitter)**: Completely deterministic rendering with visible aliasing on object edges
+- **Right (--samples 4)**: Stochastic anti-aliasing produces smooth, high-quality edges
+
 ---
 
 ## Examples

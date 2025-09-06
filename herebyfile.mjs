@@ -228,6 +228,16 @@ const docSceneMetadata = {
     }
 };
 
+// Special scenes that need multiple variants
+const docSpecialScenes = [
+    {
+        name: "sampling-antialiasing-nosamples",
+        scene: "sampling-antialiasing.json",
+        params: "--samples 1 --no-jitter",
+        description: "Demonstrates no sampling and no jitter (deterministic)"
+    }
+];
+
 // Multi-file scenes that need special handling
 const docMultiFileScenes = [
     {
@@ -270,6 +280,23 @@ for (const file of docSceneFiles) {
     docDependencies.push(docRenderTasks[taskName]);
 }
 
+// Create tasks for special scene variants
+for (const special of docSpecialScenes) {
+    const taskName = `renderDoc${special.name.split('-').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join('')}`;
+    
+    const command = `./target/release/rtrace -i doc/scenes/${special.scene} -o doc/images/${special.name}.png -w 400 -H 300 ${special.params}`;
+    
+    docRenderTasks[taskName] = task({
+        name: `render:doc:${special.name}`,
+        description: special.description,
+        dependencies: [buildCli],
+        run: exec(command)
+    });
+    docDependencies.push(docRenderTasks[taskName]);
+}
+
 // Create tasks for multi-file scenes
 for (const scene of docMultiFileScenes) {
     const taskName = `renderDoc${scene.name.split('-').map(word => 
@@ -302,6 +329,7 @@ export const renderDocMaterialReflectivity = docRenderTasks.renderDocMaterialRef
 export const renderDocTextureGridVariations = docRenderTasks.renderDocTextureGridVariations;
 export const renderDocLightingMultiple = docRenderTasks.renderDocLightingMultiple;
 export const renderDocSamplingAntialiasing = docRenderTasks.renderDocSamplingAntialiasing;
+export const renderDocSamplingAntialiasingNosamples = docRenderTasks.renderDocSamplingAntialiasingNosamples;
 export const renderDocExampleComplete = docRenderTasks.renderDocExampleComplete;
 export const renderDocSceneBackgrounds = docRenderTasks.renderDocSceneBackgrounds;
 export const renderDocSceneFog = docRenderTasks.renderDocSceneFog;
