@@ -27,12 +27,13 @@ pub fn hex_to_color(hex: &str) -> Result<Color, String> {
 /// Camera configuration
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Camera {
-    pub kind: String, // "ortho" for now
+    pub kind: String, // "ortho" or "perspective"
     pub position: [f64; 3],
     pub target: [f64; 3],
     pub up: [f64; 3],
     pub width: f64,
     pub height: f64,
+    pub fov: Option<f64>, // field of view in degrees for perspective cameras
 }
 
 impl Default for Camera {
@@ -44,6 +45,7 @@ impl Default for Camera {
             up: [0.0, 1.0, 0.0],
             width: 10.0,
             height: 10.0,
+            fov: None,
         }
     }
 }
