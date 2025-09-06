@@ -14,9 +14,10 @@ yarn-error.log*
 # WASM
 bindings/wasm/pkg/
 
-# Generated images (except examples)
+# Generated images (except examples and documentation)
 *.png
 !examples/*.png
+!doc/images/*.png
 
 # OS
 .DS_Store

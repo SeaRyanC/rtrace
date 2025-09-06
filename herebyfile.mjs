@@ -1,6 +1,8 @@
 import { task } from "hereby";
 import { spawn } from "child_process";
 import { promisify } from "util";
+import { readdir } from "fs/promises";
+import { extname, basename } from "path";
 
 // Helper function to execute shell commands
 function exec(command, options = {}) {
@@ -200,6 +202,99 @@ export const renderDebug = task({
     description: "Render debug images",
     dependencies: [buildNode],
     run: exec("node scripts/render_plus_debug.js")
+});
+
+// Documentation rendering tasks - dynamically generated
+const docSceneFiles = [
+    "camera-basic.json",
+    "camera-perspective.json", 
+    "object-sphere.json",
+    "object-plane-grid.json",
+    "object-cube.json",
+    "object-mesh.json",
+    "material-properties.json",
+    "material-reflectivity.json",
+    "texture-grid-variations.json",
+    "lighting-multiple.json",
+    "example-complete.json"
+];
+
+// Multi-file scenes that need special handling
+const docMultiFileScenes = [
+    {
+        name: "scene-backgrounds",
+        files: ["scene-backgrounds-1.json", "scene-backgrounds-2.json"]
+    },
+    {
+        name: "scene-fog", 
+        files: ["scene-fog-light.json", "scene-fog-heavy.json"]
+    }
+];
+
+// Create tasks for single-file scenes
+const docRenderTasks = {};
+const docDependencies = [];
+
+for (const file of docSceneFiles) {
+    const baseName = basename(file, '.json');
+    const taskName = `renderDoc${baseName.split('-').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join('')}`;
+    
+    docRenderTasks[taskName] = task({
+        name: `render:doc:${baseName}`,
+        description: `Render ${baseName} example for documentation`,
+        dependencies: [buildCli],
+        run: exec(`./target/release/rtrace -i doc/scenes/${file} -o doc/images/${baseName}.png -w 400 -H 300`)
+    });
+    docDependencies.push(docRenderTasks[taskName]);
+}
+
+// Create tasks for multi-file scenes
+for (const scene of docMultiFileScenes) {
+    const taskName = `renderDoc${scene.name.split('-').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join('')}`;
+    
+    const commands = scene.files.map(file => {
+        const outputName = basename(file, '.json');
+        return `./target/release/rtrace -i doc/scenes/${file} -o doc/images/${outputName}.png -w 400 -H 300`;
+    }).join(' && ');
+
+    docRenderTasks[taskName] = task({
+        name: `render:doc:${scene.name}`,
+        description: `Render ${scene.name} examples for documentation`,
+        dependencies: [buildCli],
+        run: exec(commands)
+    });
+    docDependencies.push(docRenderTasks[taskName]);
+}
+
+// Export individual render tasks
+export const renderDocCameraBasic = docRenderTasks.renderDocCameraBasic;
+export const renderDocCameraPerspective = docRenderTasks.renderDocCameraPerspective;
+export const renderDocObjectSphere = docRenderTasks.renderDocObjectSphere;
+export const renderDocObjectPlaneGrid = docRenderTasks.renderDocObjectPlaneGrid;
+export const renderDocObjectCube = docRenderTasks.renderDocObjectCube;
+export const renderDocObjectMesh = docRenderTasks.renderDocObjectMesh;
+export const renderDocMaterialProperties = docRenderTasks.renderDocMaterialProperties;
+export const renderDocMaterialReflectivity = docRenderTasks.renderDocMaterialReflectivity;
+export const renderDocTextureGridVariations = docRenderTasks.renderDocTextureGridVariations;
+export const renderDocLightingMultiple = docRenderTasks.renderDocLightingMultiple;
+export const renderDocExampleComplete = docRenderTasks.renderDocExampleComplete;
+export const renderDocSceneBackgrounds = docRenderTasks.renderDocSceneBackgrounds;
+export const renderDocSceneFog = docRenderTasks.renderDocSceneFog;
+
+export const renderDocAll = task({
+    name: "render:doc:all", 
+    description: "Render all documentation images",
+    dependencies: docDependencies
+});
+
+export const docRender = task({
+    name: "doc:render",
+    description: "Generate all documentation images", 
+    dependencies: [renderDocAll]
 });
 
 // Debug and development tasks
