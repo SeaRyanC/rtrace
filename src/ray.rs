@@ -317,26 +317,21 @@ impl Intersectable for MeshObject {
         let mut closest_hit = None;
         let mut closest_t = t_max;
 
-        // For large meshes, use adaptive sampling to reduce computation
-        let sample_rate = if self.mesh.triangles.len() > 1000 { 10 } else { 1 };
-
-        // Simple brute force intersection with triangles (with sampling for large meshes)
-        for (i, triangle) in self.mesh.triangles.iter().enumerate() {
-            // Skip triangles for large meshes to speed up rendering
-            if sample_rate > 1 && i % sample_rate != 0 {
-                continue;
-            }
-
-            if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
-                if t < closest_t {
-                    closest_t = t;
-                    let point = ray.at(t);
-                    let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
-                    hit_record.texture_coords = Some((u, v));
-                    closest_hit = Some(hit_record);
+        // Use k-d tree to find triangle candidates
+        self.mesh.kdtree.traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+            for &triangle_idx in triangle_indices {
+                let triangle = &self.mesh.triangles[triangle_idx];
+                if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
+                    if t < closest_t {
+                        closest_t = t;
+                        let point = ray.at(t);
+                        let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
+                        hit_record.texture_coords = Some((u, v));
+                        closest_hit = Some(hit_record);
+                    }
                 }
             }
-        }
+        });
 
         closest_hit
     }

@@ -16,12 +16,266 @@ pub struct Triangle {
     pub normal: Vec3,
 }
 
+impl Triangle {
+    /// Get the center point of the triangle
+    pub fn center(&self) -> Point {
+        (self.vertices[0] + self.vertices[1].coords + self.vertices[2].coords) / 3.0
+    }
+
+    /// Get the bounding box of the triangle
+    pub fn bounds(&self) -> (Point, Point) {
+        let mut min = self.vertices[0];
+        let mut max = self.vertices[0];
+        
+        for vertex in &self.vertices[1..] {
+            min.coords = min.coords.inf(&vertex.coords);
+            max.coords = max.coords.sup(&vertex.coords);
+        }
+        
+        (min, max)
+    }
+}
+
+/// K-d tree node for accelerating ray-triangle intersections
+#[derive(Debug, Clone)]
+enum KdNode {
+    /// Internal node with splitting plane
+    Internal {
+        axis: usize,          // 0=x, 1=y, 2=z
+        split_pos: f64,       // position along axis
+        left: Box<KdNode>,    // left child (values <= split_pos)
+        right: Box<KdNode>,   // right child (values > split_pos)
+        bounds: (Point, Point), // bounding box of this node
+    },
+    /// Leaf node containing triangles
+    Leaf {
+        triangles: Vec<usize>, // indices into mesh triangle array
+        bounds: (Point, Point), // bounding box of this node
+    },
+}
+
+/// K-d tree for accelerating ray-triangle intersections
+#[derive(Debug, Clone)]
+pub struct KdTree {
+    root: Option<KdNode>,
+    max_depth: usize,
+    max_triangles_per_leaf: usize,
+}
+
+impl KdTree {
+    /// Create a new k-d tree for the given triangles
+    pub fn new(triangles: &[Triangle], max_depth: usize, max_triangles_per_leaf: usize) -> Self {
+        let mut tree = Self {
+            root: None,
+            max_depth,
+            max_triangles_per_leaf,
+        };
+
+        if !triangles.is_empty() {
+            // Create list of all triangle indices
+            let triangle_indices: Vec<usize> = (0..triangles.len()).collect();
+            
+            // Compute overall bounds
+            let bounds = Self::compute_bounds(triangles, &triangle_indices);
+            
+            // Build the tree recursively
+            tree.root = Some(tree.build_recursive(triangles, triangle_indices, bounds, 0));
+        }
+
+        tree
+    }
+
+    /// Recursively build the k-d tree
+    fn build_recursive(
+        &self,
+        triangles: &[Triangle],
+        triangle_indices: Vec<usize>,
+        bounds: (Point, Point),
+        depth: usize,
+    ) -> KdNode {
+        // Create leaf if we've reached maximum depth or have few enough triangles
+        if depth >= self.max_depth || triangle_indices.len() <= self.max_triangles_per_leaf {
+            return KdNode::Leaf {
+                triangles: triangle_indices,
+                bounds,
+            };
+        }
+
+        // Choose splitting axis (cycle through x, y, z)
+        let axis = depth % 3;
+        
+        // Find median position along the axis
+        let mut positions: Vec<(f64, usize)> = triangle_indices
+            .iter()
+            .map(|&idx| (triangles[idx].center()[axis], idx))
+            .collect();
+        
+        positions.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        
+        let median_idx = positions.len() / 2;
+        let split_pos = positions[median_idx].0;
+
+        // Split triangles into left and right
+        let mut left_triangles = Vec::new();
+        let mut right_triangles = Vec::new();
+        
+        for (pos, triangle_idx) in positions {
+            if pos <= split_pos {
+                left_triangles.push(triangle_idx);
+            } else {
+                right_triangles.push(triangle_idx);
+            }
+        }
+
+        // Ensure we don't create empty splits
+        if left_triangles.is_empty() {
+            left_triangles.push(right_triangles.pop().unwrap());
+        } else if right_triangles.is_empty() {
+            right_triangles.push(left_triangles.pop().unwrap());
+        }
+
+        // Compute bounds for left and right children
+        let left_bounds = Self::compute_bounds(triangles, &left_triangles);
+        let right_bounds = Self::compute_bounds(triangles, &right_triangles);
+
+        // Recursively build left and right subtrees
+        let left = Box::new(self.build_recursive(triangles, left_triangles, left_bounds, depth + 1));
+        let right = Box::new(self.build_recursive(triangles, right_triangles, right_bounds, depth + 1));
+
+        KdNode::Internal {
+            axis,
+            split_pos,
+            left,
+            right,
+            bounds,
+        }
+    }
+
+    /// Compute bounding box for a set of triangles
+    fn compute_bounds(triangles: &[Triangle], triangle_indices: &[usize]) -> (Point, Point) {
+        if triangle_indices.is_empty() {
+            return (Point::origin(), Point::origin());
+        }
+
+        let mut min = Point::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+        let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+
+        for &idx in triangle_indices {
+            let (tri_min, tri_max) = triangles[idx].bounds();
+            min.coords = min.coords.inf(&tri_min.coords);
+            max.coords = max.coords.sup(&tri_max.coords);
+        }
+
+        (min, max)
+    }
+
+    /// Check if a ray intersects a bounding box
+    fn ray_intersects_bounds(ray_origin: &Point, ray_direction: &Vec3, bounds: &(Point, Point)) -> bool {
+        let (min, max) = bounds;
+        
+        let mut t_min = f64::NEG_INFINITY;
+        let mut t_max = f64::INFINITY;
+        
+        for axis in 0..3 {
+            if ray_direction[axis].abs() < 1e-9 {
+                // Ray is parallel to the slab
+                if ray_origin[axis] < min[axis] || ray_origin[axis] > max[axis] {
+                    return false;
+                }
+            } else {
+                let inv_dir = 1.0 / ray_direction[axis];
+                let mut t0 = (min[axis] - ray_origin[axis]) * inv_dir;
+                let mut t1 = (max[axis] - ray_origin[axis]) * inv_dir;
+                
+                if t0 > t1 {
+                    std::mem::swap(&mut t0, &mut t1);
+                }
+                
+                t_min = t_min.max(t0);
+                t_max = t_max.min(t1);
+                
+                if t_min > t_max || t_max < 0.0 {
+                    return false;
+                }
+            }
+        }
+        
+        true
+    }
+
+    /// Traverse the k-d tree to find triangle candidates for ray intersection
+    pub fn traverse<F>(&self, ray_origin: &Point, ray_direction: &Vec3, mut callback: F)
+    where
+        F: FnMut(&[usize]),
+    {
+        if let Some(ref root) = self.root {
+            self.traverse_recursive(root, ray_origin, ray_direction, &mut callback);
+        }
+    }
+
+    /// Recursive traversal of the k-d tree
+    fn traverse_recursive<F>(
+        &self,
+        node: &KdNode,
+        ray_origin: &Point,
+        ray_direction: &Vec3,
+        callback: &mut F,
+    ) where
+        F: FnMut(&[usize]),
+    {
+        match node {
+            KdNode::Leaf { triangles, bounds } => {
+                // Check if ray intersects this leaf's bounds
+                if Self::ray_intersects_bounds(ray_origin, ray_direction, bounds) {
+                    callback(triangles);
+                }
+            }
+            KdNode::Internal { axis, split_pos, left, right, bounds } => {
+                // Check if ray intersects this node's bounds
+                if !Self::ray_intersects_bounds(ray_origin, ray_direction, bounds) {
+                    return;
+                }
+
+                let origin_pos = ray_origin[*axis];
+                let dir = ray_direction[*axis];
+
+                // Determine traversal order based on ray direction
+                let (first, second) = if dir >= 0.0 {
+                    (left.as_ref(), right.as_ref())
+                } else {
+                    (right.as_ref(), left.as_ref())
+                };
+
+                // Check if ray starts on the left or right of split plane
+                if origin_pos <= *split_pos {
+                    // Ray starts on left side
+                    self.traverse_recursive(first, ray_origin, ray_direction, callback);
+                    
+                    // Check if ray crosses the split plane
+                    if dir > 0.0 {
+                        self.traverse_recursive(second, ray_origin, ray_direction, callback);
+                    }
+                } else {
+                    // Ray starts on right side
+                    self.traverse_recursive(second, ray_origin, ray_direction, callback);
+                    
+                    // Check if ray crosses the split plane
+                    if dir < 0.0 {
+                        self.traverse_recursive(first, ray_origin, ray_direction, callback);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Immutable mesh object containing triangles
 #[derive(Debug, Clone)]
 pub struct Mesh {
     pub triangles: Vec<Triangle>,
     pub bounds_min: Point,
     pub bounds_max: Point,
+    pub kdtree: KdTree,
 }
 
 impl Mesh {
@@ -31,6 +285,7 @@ impl Mesh {
             triangles: Vec::new(),
             bounds_min: Point::new(f64::INFINITY, f64::INFINITY, f64::INFINITY),
             bounds_max: Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY),
+            kdtree: KdTree::new(&[], 16, 10), // Empty k-d tree
         }
     }
 
@@ -184,6 +439,7 @@ impl Mesh {
         }
         
         mesh.compute_bounds();
+        mesh.build_kdtree();
         Ok(mesh)
     }
 
@@ -242,6 +498,7 @@ impl Mesh {
         }
 
         mesh.compute_bounds();
+        mesh.build_kdtree();
         Ok(mesh)
     }
 
@@ -273,6 +530,12 @@ impl Mesh {
                 self.bounds_max.coords = self.bounds_max.coords.sup(&vertex.coords);
             }
         }
+    }
+
+    /// Build k-d tree for accelerating ray intersections
+    fn build_kdtree(&mut self) {
+        // Use reasonable defaults: max depth 16, max 10 triangles per leaf
+        self.kdtree = KdTree::new(&self.triangles, 16, 10);
     }
 
     /// Get the number of triangles in the mesh
