@@ -3,7 +3,7 @@ use image::{ImageBuffer, Rgb, RgbImage};
 
 use crate::scene::{Scene, Object, hex_to_color, Color, Point, Vec3};
 use crate::camera::Camera;
-use crate::ray::{World, Sphere, Plane, Cube};
+use crate::ray::{World, Sphere, Plane, Cube, Mesh};
 use crate::lighting::ray_color;
 
 pub struct Renderer {
@@ -71,10 +71,22 @@ impl Renderer {
                     materials.insert(index, material.clone());
                 }
                 Object::Mesh { path, center, scale, material } => {
-                    // TODO: Implement mesh loading and rendering
-                    // For now, skip mesh objects to avoid compilation errors
-                    println!("Warning: Mesh object with path '{}' is not yet supported", path);
-                    materials.insert(index, material.clone());
+                    let color = hex_to_color(&material.color)?;
+                    
+                    // Resolve the STL file path relative to the JSON file
+                    let stl_path = scene.resolve_path(path);
+                    
+                    match Mesh::from_stl_file(&stl_path, color, index, *center, *scale) {
+                        Ok(mesh) => {
+                            println!("Loaded mesh from '{}' with {} triangles", stl_path.display(), mesh.triangles.len());
+                            world.add(Box::new(mesh));
+                            materials.insert(index, material.clone());
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to load mesh from '{}': {}", stl_path.display(), e);
+                            materials.insert(index, material.clone());
+                        }
+                    }
                 }
             }
         }

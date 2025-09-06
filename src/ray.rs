@@ -250,3 +250,142 @@ impl World {
         closest_hit
     }
 }
+
+/// Triangle primitive for mesh rendering
+pub struct Triangle {
+    pub v0: Point,
+    pub v1: Point, 
+    pub v2: Point,
+    pub normal: Unit<Vec3>,
+    pub material_color: Color,
+    pub material_index: usize,
+}
+
+impl Triangle {
+    pub fn new(v0: Point, v1: Point, v2: Point, material_color: Color, material_index: usize) -> Self {
+        let edge1 = v1 - v0;
+        let edge2 = v2 - v0;
+        let normal = Unit::new_normalize(edge1.cross(&edge2));
+        
+        Self {
+            v0,
+            v1,
+            v2,
+            normal,
+            material_color,
+            material_index,
+        }
+    }
+}
+
+impl Intersectable for Triangle {
+    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        // Möller-Trumbore ray-triangle intersection algorithm
+        let edge1 = self.v1 - self.v0;
+        let edge2 = self.v2 - self.v0;
+        let h = ray.direction.cross(&edge2);
+        let a = edge1.dot(&h);
+        
+        if a > -1e-8 && a < 1e-8 {
+            return None; // Ray is parallel to triangle
+        }
+        
+        let f = 1.0 / a;
+        let s = ray.origin - self.v0;
+        let u = f * s.dot(&h);
+        
+        if u < 0.0 || u > 1.0 {
+            return None;
+        }
+        
+        let q = s.cross(&edge1);
+        let v = f * ray.direction.dot(&q);
+        
+        if v < 0.0 || u + v > 1.0 {
+            return None;
+        }
+        
+        let t = f * edge2.dot(&q);
+        
+        if t < t_min || t > t_max {
+            return None;
+        }
+        
+        let point = ray.at(t);
+        Some(HitRecord::new(point, self.normal.as_ref().clone(), t, ray, self.material_color, self.material_index))
+    }
+    
+    fn material_index(&self) -> usize {
+        self.material_index
+    }
+}
+
+/// Mesh primitive for STL file rendering
+pub struct Mesh {
+    pub triangles: Vec<Triangle>,
+    pub material_index: usize,
+}
+
+impl Mesh {
+    pub fn from_stl_file(path: &std::path::Path, material_color: Color, material_index: usize, center: Option<[f64; 3]>, scale: Option<[f64; 3]>) -> Result<Self, Box<dyn std::error::Error>> {
+        let file = std::fs::File::open(path)?;
+        let mesh = stl_io::read_stl(&mut std::io::BufReader::new(file))?;
+        
+        // Apply transformations
+        let center = center.unwrap_or([0.0, 0.0, 0.0]);
+        let scale = scale.unwrap_or([1.0, 1.0, 1.0]);
+        
+        let mut triangles = Vec::new();
+        
+        for face in &mesh.faces {
+            // Get the three vertices using indices
+            let v0_idx = face.vertices[0];
+            let v1_idx = face.vertices[1];
+            let v2_idx = face.vertices[2];
+            
+            // Apply scaling and translation to each vertex
+            let v0 = Point::new(
+                mesh.vertices[v0_idx].0[0] as f64 * scale[0] + center[0],
+                mesh.vertices[v0_idx].0[1] as f64 * scale[1] + center[1], 
+                mesh.vertices[v0_idx].0[2] as f64 * scale[2] + center[2]
+            );
+            let v1 = Point::new(
+                mesh.vertices[v1_idx].0[0] as f64 * scale[0] + center[0],
+                mesh.vertices[v1_idx].0[1] as f64 * scale[1] + center[1],
+                mesh.vertices[v1_idx].0[2] as f64 * scale[2] + center[2]
+            );
+            let v2 = Point::new(
+                mesh.vertices[v2_idx].0[0] as f64 * scale[0] + center[0],
+                mesh.vertices[v2_idx].0[1] as f64 * scale[1] + center[1],
+                mesh.vertices[v2_idx].0[2] as f64 * scale[2] + center[2]
+            );
+            
+            triangles.push(Triangle::new(v0, v1, v2, material_color, material_index));
+        }
+        
+        Ok(Self {
+            triangles,
+            material_index,
+        })
+    }
+}
+
+impl Intersectable for Mesh {
+    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        let mut closest_hit = None;
+        let mut closest_so_far = t_max;
+        
+        for triangle in &self.triangles {
+            if let Some(hit) = triangle.hit(ray, t_min, closest_so_far) {
+                closest_so_far = hit.t;
+                closest_hit = Some(hit);
+            }
+        }
+        
+        closest_hit
+    }
+    
+    fn material_index(&self) -> usize {
+        self.material_index
+    }
+}
