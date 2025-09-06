@@ -1,0 +1,269 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ray Tracer Scene",
+  "description": "JSON schema for ray tracer scene definition files",
+  "type": "object",
+  "required": ["camera", "objects", "lights", "scene_settings"],
+  "properties": {
+    "camera": {
+      "type": "object",
+      "required": ["kind", "position", "target", "up", "width", "height"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["ortho"],
+          "description": "Camera type - only orthographic projection is currently supported"
+        },
+        "position": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Camera position as [x, y, z]"
+        },
+        "target": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Camera target point as [x, y, z]"
+        },
+        "up": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Camera up vector as [x, y, z]"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Viewport width in world units"
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Viewport height in world units"
+        }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "center", "radius", "material"],
+            "properties": {
+              "kind": { "const": "sphere" },
+              "center": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Sphere center as [x, y, z]"
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Sphere radius"
+              },
+              "material": { "$ref": "#/definitions/material" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "point", "normal", "material"],
+            "properties": {
+              "kind": { "const": "plane" },
+              "point": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Point on the plane as [x, y, z]"
+              },
+              "normal": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Plane normal vector as [x, y, z]"
+              },
+              "material": { "$ref": "#/definitions/material" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "center", "size", "material"],
+            "properties": {
+              "kind": { "const": "cube" },
+              "center": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Cube center as [x, y, z]"
+              },
+              "size": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Cube dimensions as [width, height, depth]"
+              },
+              "material": { "$ref": "#/definitions/material" }
+            }
+          }
+        ]
+      },
+      "description": "Array of objects in the scene"
+    },
+    "lights": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["position", "color", "intensity"],
+        "properties": {
+          "position": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Light position as [x, y, z]"
+          },
+          "color": {
+            "type": "string",
+            "pattern": "^#[0-9A-Fa-f]{6}$",
+            "description": "Light color as hex string (e.g., #FFFFFF)"
+          },
+          "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Light intensity multiplier"
+          }
+        }
+      },
+      "description": "Array of point light sources"
+    },
+    "scene_settings": {
+      "type": "object",
+      "required": ["ambient_illumination"],
+      "properties": {
+        "ambient_illumination": {
+          "type": "object",
+          "required": ["color", "intensity"],
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "description": "Ambient light color as hex string"
+            },
+            "intensity": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Ambient light intensity"
+            }
+          }
+        },
+        "fog": {
+          "type": "object",
+          "required": ["color", "density", "start", "end"],
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "description": "Fog color as hex string"
+            },
+            "density": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Fog density factor"
+            },
+            "start": {
+              "type": "number",
+              "description": "Distance where fog begins"
+            },
+            "end": {
+              "type": "number",
+              "description": "Distance where fog reaches maximum density"
+            }
+          }
+        },
+        "background_color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Background color as hex string"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "material": {
+      "type": "object",
+      "required": ["color", "ambient", "diffuse", "specular", "shininess"],
+      "properties": {
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Material base color as hex string"
+        },
+        "ambient": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Ambient reflection coefficient"
+        },
+        "diffuse": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Diffuse reflection coefficient"
+        },
+        "specular": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Specular reflection coefficient"
+        },
+        "shininess": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Phong exponent for specular highlights"
+        },
+        "reflectivity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Optional reflectivity coefficient for mirror-like surfaces"
+        },
+        "texture": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["type", "line_color", "line_width", "cell_size"],
+              "properties": {
+                "type": { "const": "grid" },
+                "line_color": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$",
+                  "description": "Grid line color as hex string"
+                },
+                "line_width": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Grid line width in world units"
+                },
+                "cell_size": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Grid cell size in world units"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

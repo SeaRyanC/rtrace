@@ -1,45 +1,63 @@
 use clap::Parser;
-use rtrace::hello_world;
+use rtrace::{Scene, Renderer};
+use std::path::Path;
 
-/// A simple CLI that demonstrates the rtrace library
+/// Ray tracer CLI - renders 3D scenes from JSON descriptions
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Name to greet (dummy argument)
-    #[arg(short, long, default_value = "world")]
-    name: String,
-
-    /// Number of times to repeat (dummy argument)
-    #[arg(short, long, default_value_t = 1)]
-    count: u8,
-
-    /// Whether to use uppercase (dummy argument)
+    /// Input JSON scene file
     #[arg(short, long)]
-    uppercase: bool,
+    input: String,
+
+    /// Output PNG image file
+    #[arg(short, long)]
+    output: String,
+
+    /// Image width in pixels
+    #[arg(short, long, default_value_t = 800)]
+    width: u32,
+
+    /// Image height in pixels  
+    #[arg(short = 'H', long, default_value_t = 600)]
+    height: u32,
+
+    /// Maximum ray bounces for reflections
+    #[arg(long, default_value_t = 10)]
+    max_depth: i32,
 }
 
 fn main() {
     let args = Args::parse();
 
-    // Get the hello world message from the library
-    let mut message = hello_world();
-
-    // Apply dummy transformations based on CLI args
-    if args.uppercase {
-        message = message.to_uppercase();
+    // Validate input file exists
+    if !Path::new(&args.input).exists() {
+        eprintln!("Error: Input file '{}' does not exist", args.input);
+        std::process::exit(1);
     }
 
-    // Print the message the specified number of times
-    for i in 0..args.count {
-        if args.count > 1 {
-            println!("{}: {}", i + 1, message);
-        } else {
-            println!("{}", message);
+    // Load scene from JSON
+    let scene = match Scene::from_json_file(&args.input) {
+        Ok(scene) => scene,
+        Err(e) => {
+            eprintln!("Error loading scene from '{}': {}", args.input, e);
+            std::process::exit(1);
         }
+    };
+
+    println!("Loaded scene with {} objects and {} lights", scene.objects.len(), scene.lights.len());
+
+    // Create renderer
+    let mut renderer = Renderer::new(args.width, args.height);
+    renderer.max_depth = args.max_depth;
+
+    println!("Rendering {}x{} image...", args.width, args.height);
+
+    // Render and save
+    if let Err(e) = renderer.render_to_file(&scene, &args.output) {
+        eprintln!("Error rendering image: {}", e);
+        std::process::exit(1);
     }
 
-    // Show that we processed the name argument (even though we don't use it)
-    if args.name != "world" {
-        println!("(Note: Hello to {} as well!)", args.name);
-    }
+    println!("Successfully rendered to '{}'", args.output);
 }

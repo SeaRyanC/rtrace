@@ -7,3 +7,5 @@
 export declare function helloWorld(): string
 /** Advanced function that takes parameters (demonstration) */
 export declare function greetWithName(name: string): string
+/** Render a scene from JSON string directly */
+export declare function renderScene(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
