@@ -9,3 +9,5 @@ export declare function helloWorld(): string
 export declare function greetWithName(name: string): string
 /** Render a scene from JSON string directly */
 export declare function renderScene(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
+/** Render a scene from JSON string with brute force (no k-d tree) */
+export declare function renderSceneBruteForce(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string

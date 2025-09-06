@@ -1,0 +1,42 @@
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [20, 0, 0],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 20,
+    "height": 20
+  },
+  "objects": [
+    {
+      "kind": "mesh",
+      "filename": "examples/plus.stl",
+      "material": {
+        "color": "#8080FF",
+        "ambient": 0.2,
+        "diffuse": 0.7,
+        "specular": 0.2,
+        "shininess": 16
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [20, 10, 10],
+      "color": "#FFFFFF",
+      "intensity": 1.0
+    },
+    {
+      "position": [20, -10, 10],
+      "color": "#FFFFFF",
+      "intensity": 0.6
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.2
+    },
+    "background_color": "#F0F0F0"
+  }
+}

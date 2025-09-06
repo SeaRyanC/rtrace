@@ -226,6 +226,7 @@ pub struct MeshObject {
     pub mesh: Mesh,
     pub material_color: Color,
     pub material_index: usize,
+    pub use_kdtree: bool, // New field to control k-d tree usage
 }
 
 impl MeshObject {
@@ -234,6 +235,17 @@ impl MeshObject {
             mesh,
             material_color,
             material_index,
+            use_kdtree: true, // Default to using k-d tree
+        }
+    }
+
+    /// Create a new MeshObject with k-d tree disabled (brute force intersection)
+    pub fn new_brute_force(mesh: Mesh, material_color: Color, material_index: usize) -> Self {
+        Self {
+            mesh,
+            material_color,
+            material_index,
+            use_kdtree: false, // Disable k-d tree
         }
     }
 
@@ -328,10 +340,25 @@ impl Intersectable for MeshObject {
         let mut closest_hit = None;
         let mut closest_t = t_max;
 
-        // Use k-d tree to find triangle candidates
-        self.mesh.kdtree.traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
-            for &triangle_idx in triangle_indices {
-                let triangle = &self.mesh.triangles[triangle_idx];
+        if self.use_kdtree {
+            // Use k-d tree to find triangle candidates
+            self.mesh.kdtree.traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+                for &triangle_idx in triangle_indices {
+                    let triangle = &self.mesh.triangles[triangle_idx];
+                    if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
+                        if t < closest_t {
+                            closest_t = t;
+                            let point = ray.at(t);
+                            let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
+                            hit_record.texture_coords = Some((u, v));
+                            closest_hit = Some(hit_record);
+                        }
+                    }
+                }
+            });
+        } else {
+            // Brute force: test all triangles
+            for (triangle_idx, triangle) in self.mesh.triangles.iter().enumerate() {
                 if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
                     if t < closest_t {
                         closest_t = t;
@@ -342,7 +369,7 @@ impl Intersectable for MeshObject {
                     }
                 }
             }
-        });
+        }
 
         closest_hit
     }
