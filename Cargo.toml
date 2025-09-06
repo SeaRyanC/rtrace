@@ -22,3 +22,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 image = "0.24"
 nalgebra = "0.33"
+
+[[bin]]
+name = "test_kdtree_consistency"
+path = "test_kdtree_consistency.rs"
+
+[[bin]]
+name = "debug_kdtree"
+path = "debug_kdtree.rs"

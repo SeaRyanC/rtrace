@@ -202,13 +202,15 @@ impl KdTree {
                 t_min = t_min.max(t0);
                 t_max = t_max.min(t1);
                 
-                if t_min > t_max || t_max < 0.0 {
+                // Only check for invalid intersection after processing this axis
+                if t_min > t_max {
                     return false;
                 }
             }
         }
         
-        true
+        // Check if the intersection is in front of the ray (t_max >= 0)
+        t_max >= 0.0
     }
 
     /// Traverse the k-d tree to find triangle candidates for ray intersection
@@ -260,20 +262,20 @@ impl KdTree {
                 // Calculate where ray intersects the splitting plane
                 let t_split = (*split_pos - origin_pos) / dir;
 
-                // Determine which child to traverse first based on ray direction
-                let (first, second) = if origin_pos <= *split_pos {
+                // Determine which side of the split plane the ray starts on
+                let (near_child, far_child) = if origin_pos <= *split_pos {
                     (left.as_ref(), right.as_ref())
                 } else {
                     (right.as_ref(), left.as_ref())
                 };
 
-                // Always traverse the first child (the one containing the ray origin)
-                self.traverse_recursive(first, ray_origin, ray_direction, callback);
+                // Always traverse the near side (containing ray origin)
+                self.traverse_recursive(near_child, ray_origin, ray_direction, callback);
 
-                // Only traverse the second child if the ray crosses the splitting plane
-                // at a positive t value (i.e., it actually reaches the other side)
-                if t_split >= 0.0 {
-                    self.traverse_recursive(second, ray_origin, ray_direction, callback);
+                // Only traverse the far side if ray actually crosses the splitting plane
+                // AND the crossing happens at a non-negative t value (forward along ray)
+                if t_split > 0.0 {
+                    self.traverse_recursive(far_child, ray_origin, ray_direction, callback);
                 }
             }
         }
