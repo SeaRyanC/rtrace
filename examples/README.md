@@ -4,22 +4,36 @@ This directory contains example scene files demonstrating the ray tracer capabil
 
 ## Example Scenes
 
-### 1. Simple Sphere (`simple_sphere.json`)
+### Individual Primitive Examples
+
+#### 1. Simple Sphere (`simple_sphere.json`)
 - Single red sphere with Phong lighting
 - Demonstrates basic sphere rendering and lighting
 - **Output**: `simple_sphere_800x600.png`
 
-### 2. Multiple Objects (`multiple_objects.json`)
+#### 2. Simple Plane (`simple_plane.json`)
+- Single green plane with Phong lighting
+- Demonstrates plane rendering and basic lighting
+- **Output**: `simple_plane_800x600.png`
+
+#### 3. Simple Cube (`simple_cube.json`)
+- Single blue cube with Phong lighting
+- Demonstrates cube rendering and lighting
+- **Output**: `simple_cube_800x600.png`
+
+### Complex Scene Examples
+
+#### 4. Multiple Objects (`multiple_objects.json`)
 - Sphere, cube, and plane with checkered texture
 - Multiple light sources with different colors
 - Demonstrates:
-  - All three primitive types (sphere, cube, plane)
+  - All three primitive types combined
   - Grid texture on the plane
   - Multiple light sources
   - Different material properties
 - **Output**: `multiple_objects_800x600.png`
 
-### 3. Fog Scene (`fog_scene.json`)
+#### 5. Fog Scene (`fog_scene.json`)
 - Atmospheric fog demonstration
 - Reflective sphere
 - Demonstrates:
