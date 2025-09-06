@@ -266,12 +266,23 @@ impl MeshObject {
         let t = f * edge2.dot(&q);
 
         if t > t_min && t < t_max {
-            // Calculate normal (use triangle normal or compute from edges)
-            let normal = if triangle.normal.magnitude() > 1e-8 {
-                triangle.normal
-            } else {
-                edge1.cross(&edge2).normalize()
-            };
+            // Compute normal from vertex geometry, considering vertex winding order
+            let mut normal = edge1.cross(&edge2);
+            
+            // Ensure normal is not zero (degenerate triangle)
+            if normal.magnitude() < 1e-8 {
+                return None;
+            }
+            
+            // The sign of 'a' tells us about vertex winding:
+            // - If a > 0: vertices are counter-clockwise, normal points toward ray
+            // - If a < 0: vertices are clockwise, normal points away from ray
+            // We want the normal to point toward the "outside" of the mesh
+            if a < 0.0 {
+                normal = -normal;
+            }
+            
+            normal = normal.normalize();
             
             Some((t, normal, (u, v)))
         } else {
