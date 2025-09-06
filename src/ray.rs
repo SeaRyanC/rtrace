@@ -70,6 +70,14 @@ pub struct Sphere {
     pub material_index: usize,
 }
 
+impl Sphere {
+    /// Get the bounding box of the sphere
+    pub fn bounds(&self) -> (Point, Point) {
+        let r = Vec3::new(self.radius, self.radius, self.radius);
+        (self.center - r, self.center + r)
+    }
+}
+
 impl Intersectable for Sphere {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let oc = ray.origin - self.center;
@@ -168,6 +176,45 @@ impl Cube {
             material_color,
             material_index,
         }
+    }
+
+    /// Get the bounding box of the cube (which is simply its min/max points)
+    pub fn bounds(&self) -> (Point, Point) {
+        (self.min, self.max)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scene::{Point, Vec3, Color};
+
+    #[test]
+    fn test_sphere_bounds() {
+        let sphere = Sphere {
+            center: Point::new(1.0, 2.0, 3.0),
+            radius: 1.5,
+            material_color: Color::new(1.0, 0.0, 0.0),
+            material_index: 0,
+        };
+        
+        let (min, max) = sphere.bounds();
+        assert_eq!(min, Point::new(-0.5, 0.5, 1.5));
+        assert_eq!(max, Point::new(2.5, 3.5, 4.5));
+    }
+
+    #[test]
+    fn test_cube_bounds() {
+        let cube = Cube::new(
+            Point::new(1.0, 2.0, 3.0),
+            Vec3::new(2.0, 4.0, 6.0),
+            Color::new(0.0, 1.0, 0.0),
+            0,
+        );
+        
+        let (min, max) = cube.bounds();
+        assert_eq!(min, Point::new(0.0, 0.0, 0.0));
+        assert_eq!(max, Point::new(2.0, 4.0, 6.0));
     }
 }
 

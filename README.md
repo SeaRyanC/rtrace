@@ -65,6 +65,38 @@ cargo build --release -p rtrace-cli
 - `-H, --height <HEIGHT>`: Image height in pixels (default: 600)
 - `--max-depth <DEPTH>`: Maximum ray bounces for reflections (default: 10)
 
+### Auto Camera Bounds CLI
+
+Generate optimal camera views for any scene automatically:
+
+```bash
+# Build the auto camera CLI
+cargo build --release -p rtrace-cli
+
+# Generate 4 camera views for a scene
+./target/release/rtrace-auto-camera --input examples/plus_perspective.json --output cameras.json
+
+# View auto camera help  
+./target/release/rtrace-auto-camera --help
+```
+
+The auto camera tool generates 4 optimized camera configurations:
+
+1. **Left View**: Orthographic camera viewing from positive Y direction
+2. **Front View**: Orthographic camera viewing from positive X direction  
+3. **Top View**: Orthographic camera viewing from positive Z direction
+4. **Perspective View**: 50° FOV perspective camera at 35° down angle from positive X/Y/Z octant
+
+All cameras automatically:
+- Target the scene center
+- Frame the entire scene with 15% aesthetic margin
+- Exclude infinite objects (planes) from bounds calculation
+- Follow JSON schema for seamless integration
+
+**Auto Camera CLI Options:**
+- `-i, --input <FILE>`: Input JSON scene file (required)
+- `-o, --output <FILE>`: Output JSON file with camera configurations (required)
+
 ### Scene Format
 
 Create JSON files following the schema in `schema.json`. Example:
@@ -113,7 +145,7 @@ Create JSON files following the schema in `schema.json`. Example:
 ### Core Library
 
 ```rust
-use rtrace::{Scene, Renderer};
+use rtrace::{Scene, Renderer, AutoCamera};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load scene from JSON
@@ -127,6 +159,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+```
+
+**Auto Camera Bounds API:**
+
+```rust  
+use rtrace::{Scene, AutoCamera};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Load scene (camera settings will be ignored)
+    let scene = Scene::from_json_file("input_scene.json")?;
+    
+    // Generate optimized camera views
+    let cameras = AutoCamera::generate_cameras(&scene)?;
+    
+    // Access individual cameras
+    println!("Left camera: {:?}", cameras.left);
+    println!("Front camera: {:?}", cameras.front); 
+    println!("Top camera: {:?}", cameras.top);
+    println!("Perspective camera: {:?}", cameras.perspective);
+    
+    // Convert to JSON
+    let cameras_json = cameras.to_cameras_json();
+    
+    Ok(())
+}
+```
 ```
 
 ### Node.js Bindings

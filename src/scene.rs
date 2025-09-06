@@ -235,4 +235,65 @@ impl Scene {
         std::fs::write(path, json)?;
         Ok(())
     }
+
+    /// Compute the bounding box of all finite objects in the scene
+    /// Only includes objects with finite bounds (spheres, cubes, meshes) - excludes planes
+    pub fn compute_finite_bounds(&self) -> Option<(Point, Point)> {
+        let mut min_bound: Option<Point> = None;
+        let mut max_bound: Option<Point> = None;
+
+        for object in &self.objects {
+            let bounds = match object {
+                Object::Sphere { center, radius, .. } => {
+                    let r = Vec3::new(*radius, *radius, *radius);
+                    let center_point = Point::new(center[0], center[1], center[2]);
+                    Some((center_point - r, center_point + r))
+                },
+                Object::Cube { center, size, .. } => {
+                    let center_point = Point::new(center[0], center[1], center[2]);
+                    let half_size = Vec3::new(size[0], size[1], size[2]) / 2.0;
+                    Some((center_point - half_size, center_point + half_size))
+                },
+                Object::Mesh { mesh_data, .. } => {
+                    if let Some(mesh) = mesh_data {
+                        Some(mesh.bounds())
+                    } else {
+                        None
+                    }
+                },
+                Object::Plane { .. } => {
+                    // Planes have infinite bounds, so we exclude them
+                    None
+                },
+            };
+
+            if let Some((obj_min, obj_max)) = bounds {
+                match (&min_bound, &max_bound) {
+                    (None, None) => {
+                        min_bound = Some(obj_min);
+                        max_bound = Some(obj_max);
+                    },
+                    (Some(current_min), Some(current_max)) => {
+                        min_bound = Some(Point::new(
+                            current_min.x.min(obj_min.x),
+                            current_min.y.min(obj_min.y),
+                            current_min.z.min(obj_min.z),
+                        ));
+                        max_bound = Some(Point::new(
+                            current_max.x.max(obj_max.x),
+                            current_max.y.max(obj_max.y),
+                            current_max.z.max(obj_max.z),
+                        ));
+                    },
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        if let (Some(min), Some(max)) = (min_bound, max_bound) {
+            Some((min, max))
+        } else {
+            None
+        }
+    }
 }
