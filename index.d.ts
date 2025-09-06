@@ -11,3 +11,7 @@ export declare function greetWithName(name: string): string
 export declare function renderScene(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
 /** Render a scene from JSON string with brute force (no k-d tree) */
 export declare function renderSceneBruteForce(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
+/** Render a scene from JSON file directly (handles relative paths correctly) */
+export declare function renderSceneFromFile(sceneFilePath: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
+/** Render a scene from JSON file with brute force (no k-d tree) */
+export declare function renderSceneFromFileBruteForce(sceneFilePath: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string

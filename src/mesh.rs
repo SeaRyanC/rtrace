@@ -247,30 +247,33 @@ impl KdTree {
                 let origin_pos = ray_origin[*axis];
                 let dir = ray_direction[*axis];
 
-                // Determine traversal order based on ray direction
-                let (first, second) = if dir >= 0.0 {
+                // If ray is parallel to the splitting plane, only traverse the side it's on
+                if dir.abs() < 1e-9 {
+                    if origin_pos <= *split_pos {
+                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, callback);
+                    } else {
+                        self.traverse_recursive(right.as_ref(), ray_origin, ray_direction, callback);
+                    }
+                    return;
+                }
+
+                // Calculate where ray intersects the splitting plane
+                let t_split = (*split_pos - origin_pos) / dir;
+
+                // Determine which child to traverse first based on ray direction
+                let (first, second) = if origin_pos <= *split_pos {
                     (left.as_ref(), right.as_ref())
                 } else {
                     (right.as_ref(), left.as_ref())
                 };
 
-                // Check if ray starts on the left or right of split plane
-                if origin_pos <= *split_pos {
-                    // Ray starts on left side
-                    self.traverse_recursive(first, ray_origin, ray_direction, callback);
-                    
-                    // Check if ray crosses the split plane
-                    if dir > 0.0 {
-                        self.traverse_recursive(second, ray_origin, ray_direction, callback);
-                    }
-                } else {
-                    // Ray starts on right side
+                // Always traverse the first child (the one containing the ray origin)
+                self.traverse_recursive(first, ray_origin, ray_direction, callback);
+
+                // Only traverse the second child if the ray crosses the splitting plane
+                // at a positive t value (i.e., it actually reaches the other side)
+                if t_split >= 0.0 {
                     self.traverse_recursive(second, ray_origin, ray_direction, callback);
-                    
-                    // Check if ray crosses the split plane
-                    if dir < 0.0 {
-                        self.traverse_recursive(first, ray_origin, ray_direction, callback);
-                    }
                 }
             }
         }
