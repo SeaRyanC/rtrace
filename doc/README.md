@@ -46,6 +46,7 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 | `--height <HEIGHT>` | `-H` | Image height in pixels | 600 |
 | `--max-depth <MAX_DEPTH>` | - | Maximum ray bounces for reflections | 10 |
 | `--samples <SAMPLES>` | - | Number of samples per pixel for anti-aliasing | 1 |
+| `--no-jitter` | - | Disable stochastic jittering (use center-pixel sampling) | false |
 | `--help` | `-h` | Print help information | - |
 | `--version` | `-V` | Print version information | - |
 
@@ -60,6 +61,9 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 
 # High reflection depth for mirror effects
 ./target/release/rtrace -i mirror_scene.json -o mirrors.png --max-depth 20
+
+# Deterministic rendering (no stochastic sampling)
+./target/release/rtrace -i scene.json -o deterministic.png --samples 1 --no-jitter
 
 # Anti-aliasing with stochastic subsampling  
 ./target/release/rtrace -i scene.json -o smooth.png --samples 4
@@ -436,18 +440,28 @@ Atmospheric fog with linear falloff.
 
 ## Stochastic Subsampling
 
-Stochastic subsampling (anti-aliasing) reduces visual artifacts like jagged edges by casting multiple rays per pixel with random jittering. This technique significantly improves image quality, especially for scenes with fine details, thin objects, or high-contrast edges.
+rtrace supports three different sampling approaches for controlling image quality and anti-aliasing:
 
-### How It Works
+### Sampling Methods
 
-- **Single Sample (--samples 1)**: Casts one ray per pixel with random jitter within the pixel bounds
-- **Multiple Samples (--samples N)**: Casts N rays per pixel in a radially symmetric pattern with random phase
-- **Color Averaging**: All samples for each pixel are averaged to produce the final color
+1. **No Jittering (--no-jitter)**: Deterministic center-pixel sampling with no randomization
+2. **Stochastic Sampling (--samples 1)**: Single sample per pixel with random jittering for basic anti-aliasing  
+3. **Multi-Sample Stochastic (--samples N)**: Multiple samples per pixel with stochastic patterns for high-quality anti-aliasing
 
-### Usage
+### How Each Method Works
+
+- **No Jittering**: Casts one ray per pixel at the exact center of each pixel - completely deterministic
+- **Single Sample Stochastic**: Casts one ray per pixel with random jitter within pixel bounds
+- **Multi-Sample Stochastic**: Casts N rays per pixel in a radially symmetric pattern with random phase
+- **Color Averaging**: When using multiple samples, all samples for each pixel are averaged to produce the final color
+
+### Usage Examples
 
 ```bash
-# Default: single sample with jittering  
+# No jittering: deterministic center-pixel sampling
+./target/release/rtrace -i scene.json -o output.png --samples 1 --no-jitter
+
+# Single sample with stochastic jittering (default)
 ./target/release/rtrace -i scene.json -o output.png --samples 1
 
 # Anti-aliasing with 4 samples per pixel
@@ -460,19 +474,23 @@ Stochastic subsampling (anti-aliasing) reduces visual artifacts like jagged edge
 ### Performance Impact
 
 Higher sample counts improve quality but increase render time linearly:
-- `--samples 1`: Fastest, good for previews
+- `--no-jitter --samples 1`: Fastest, completely deterministic, may show aliasing
+- `--samples 1`: Fast, good for previews with basic anti-aliasing
 - `--samples 4`: Good balance of quality and speed
 - `--samples 16`: High quality, 16x slower render time
 
-### Example Comparison
+### Visual Comparison
 
-The difference is most noticeable on edges and fine details:
+The difference is most noticeable on edges and fine details. Here's the same scene rendered with three different approaches:
 
-| Without Anti-aliasing (1 sample) | With Anti-aliasing (4 samples) |
-|:--------------------------------:|:------------------------------:|
-| ![No Anti-aliasing](images/sampling-antialiasing-nosamples.png) | ![Anti-aliasing](images/sampling-antialiasing.png) |
+| No Jittering (deterministic) | Stochastic (1 sample) | Stochastic (4 samples) |
+|:----------------------------:|:---------------------:|:----------------------:|
+| ![No Jittering](images/sampling-comparison-no-jitter.png) | ![1 Sample](images/sampling-comparison-1sample.png) | ![4 Samples](images/sampling-comparison-4samples.png) |
 
-**Scene:** Complex geometry with grid textures and perspective camera demonstrates the smoothing effect of stochastic subsampling on object edges and texture boundaries.
+**Scene:** Complex geometry with grid textures and perspective camera demonstrates the effect of different sampling approaches on object edges and texture boundaries. Notice how:
+- **No jittering** produces sharp, aliased edges but is completely reproducible
+- **1-sample jittering** reduces aliasing while maintaining fast render times
+- **4-sample jittering** provides smooth edges with minimal visual artifacts
 
 ---
 
