@@ -13,8 +13,10 @@ pub mod ray;
 pub mod camera;
 pub mod lighting;
 pub mod renderer;
+pub mod mesh;
 
 pub use scene::{Scene, Camera, Object, Light, Material, Texture, SceneSettings, AmbientIllumination, Fog};
+pub use mesh::{Mesh, Triangle};
 pub use renderer::Renderer;
 
 /// Returns a greeting message

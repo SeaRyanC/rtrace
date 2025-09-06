@@ -1,5 +1,6 @@
 use nalgebra::Unit;
 use crate::scene::{Vec3, Point, Color};
+use crate::mesh::{Mesh, Triangle};
 
 /// A ray in 3D space
 #[derive(Debug, Clone)]
@@ -215,6 +216,92 @@ impl Intersectable for Cube {
         Some(HitRecord::new(point, normal, t, ray, self.material_color, self.material_index))
     }
     
+    fn material_index(&self) -> usize {
+        self.material_index
+    }
+}
+
+/// Triangle mesh primitive
+pub struct MeshObject {
+    pub mesh: Mesh,
+    pub material_color: Color,
+    pub material_index: usize,
+}
+
+impl MeshObject {
+    pub fn new(mesh: Mesh, material_color: Color, material_index: usize) -> Self {
+        Self {
+            mesh,
+            material_color,
+            material_index,
+        }
+    }
+
+    /// Ray-triangle intersection using Möller-Trumbore algorithm
+    fn intersect_triangle(&self, ray: &Ray, triangle: &Triangle, t_min: f64, t_max: f64) -> Option<(f64, Vec3, (f64, f64))> {
+        let edge1 = triangle.vertices[1] - triangle.vertices[0];
+        let edge2 = triangle.vertices[2] - triangle.vertices[0];
+        let h = ray.direction.cross(&edge2);
+        let a = edge1.dot(&h);
+
+        if a > -1e-8 && a < 1e-8 {
+            return None; // Ray is parallel to triangle
+        }
+
+        let f = 1.0 / a;
+        let s = ray.origin - triangle.vertices[0];
+        let u = f * s.dot(&h);
+
+        if u < 0.0 || u > 1.0 {
+            return None;
+        }
+
+        let q = s.cross(&edge1);
+        let v = f * ray.direction.dot(&q);
+
+        if v < 0.0 || u + v > 1.0 {
+            return None;
+        }
+
+        let t = f * edge2.dot(&q);
+
+        if t > t_min && t < t_max {
+            // Calculate normal (use triangle normal or compute from edges)
+            let normal = if triangle.normal.magnitude() > 1e-8 {
+                triangle.normal
+            } else {
+                edge1.cross(&edge2).normalize()
+            };
+            
+            Some((t, normal, (u, v)))
+        } else {
+            None
+        }
+    }
+}
+
+impl Intersectable for MeshObject {
+    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        let mut closest_hit = None;
+        let mut closest_t = t_max;
+
+        // Simple brute force intersection with all triangles
+        // In a production system, this would use spatial acceleration structures
+        for triangle in &self.mesh.triangles {
+            if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
+                if t < closest_t {
+                    closest_t = t;
+                    let point = ray.at(t);
+                    let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
+                    hit_record.texture_coords = Some((u, v));
+                    closest_hit = Some(hit_record);
+                }
+            }
+        }
+
+        closest_hit
+    }
+
     fn material_index(&self) -> usize {
         self.material_index
     }

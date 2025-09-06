@@ -3,7 +3,7 @@ use image::{ImageBuffer, Rgb, RgbImage};
 
 use crate::scene::{Scene, Object, hex_to_color, Color, Point, Vec3};
 use crate::camera::Camera;
-use crate::ray::{World, Sphere, Plane, Cube};
+use crate::ray::{World, Sphere, Plane, Cube, MeshObject};
 use crate::lighting::ray_color;
 
 pub struct Renderer {
@@ -69,6 +69,14 @@ impl Renderer {
                     let cube = Box::new(Cube::new(center, size, color, index));
                     world.add(cube);
                     materials.insert(index, material.clone());
+                }
+                Object::Mesh { mesh_data, material, .. } => {
+                    if let Some(mesh) = mesh_data {
+                        let color = hex_to_color(&material.color)?;
+                        let mesh_object = Box::new(MeshObject::new(mesh.clone(), color, index));
+                        world.add(mesh_object);
+                        materials.insert(index, material.clone());
+                    }
                 }
             }
         }
