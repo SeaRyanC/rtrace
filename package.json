@@ -12,7 +12,10 @@
     "build": "npm run build:node",
     "build:node": "napi build --release --cargo-cwd bindings/node",
     "test": "npm run build && node scripts/test.js",
-    "example": "npm run build && node scripts/example.js"
+    "example": "npm run build && node scripts/example.js",
+    "hereby": "hereby",
+    "task": "hereby",
+    "tasks": "hereby --list"
   },
   "repository": {
     "type": "git",
@@ -36,6 +39,7 @@
     }
   },
   "devDependencies": {
-    "@napi-rs/cli": "^2.0.0"
+    "@napi-rs/cli": "^2.0.0",
+    "hereby": "^1.11.0"
   }
 }
