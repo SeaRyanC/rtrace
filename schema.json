@@ -114,6 +114,18 @@
               },
               "material": { "$ref": "#/definitions/material" }
             }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "filename", "material"],
+            "properties": {
+              "kind": { "const": "mesh" },
+              "filename": {
+                "type": "string",
+                "description": "Path to STL file (binary or ASCII format)"
+              },
+              "material": { "$ref": "#/definitions/material" }
+            }
           }
         ]
       },

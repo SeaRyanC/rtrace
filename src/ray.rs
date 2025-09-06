@@ -1,5 +1,6 @@
 use nalgebra::Unit;
 use crate::scene::{Vec3, Point, Color};
+use crate::mesh::{Mesh, Triangle};
 
 /// A ray in 3D space
 #[derive(Debug, Clone)]
@@ -215,6 +216,164 @@ impl Intersectable for Cube {
         Some(HitRecord::new(point, normal, t, ray, self.material_color, self.material_index))
     }
     
+    fn material_index(&self) -> usize {
+        self.material_index
+    }
+}
+
+/// Triangle mesh primitive
+pub struct MeshObject {
+    pub mesh: Mesh,
+    pub material_color: Color,
+    pub material_index: usize,
+    pub use_kdtree: bool, // New field to control k-d tree usage
+}
+
+impl MeshObject {
+    pub fn new(mesh: Mesh, material_color: Color, material_index: usize) -> Self {
+        Self {
+            mesh,
+            material_color,
+            material_index,
+            use_kdtree: true, // Default to using k-d tree
+        }
+    }
+
+    /// Create a new MeshObject with k-d tree disabled (brute force intersection)
+    pub fn new_brute_force(mesh: Mesh, material_color: Color, material_index: usize) -> Self {
+        Self {
+            mesh,
+            material_color,
+            material_index,
+            use_kdtree: false, // Disable k-d tree
+        }
+    }
+
+    /// Ray-triangle intersection using Möller-Trumbore algorithm
+    fn intersect_triangle(&self, ray: &Ray, triangle: &Triangle, t_min: f64, t_max: f64) -> Option<(f64, Vec3, (f64, f64))> {
+        let edge1 = triangle.vertices[1] - triangle.vertices[0];
+        let edge2 = triangle.vertices[2] - triangle.vertices[0];
+        let h = ray.direction.cross(&edge2);
+        let a = edge1.dot(&h);
+
+        if a > -1e-8 && a < 1e-8 {
+            return None; // Ray is parallel to triangle
+        }
+
+        let f = 1.0 / a;
+        let s = ray.origin - triangle.vertices[0];
+        let u = f * s.dot(&h);
+
+        if u < 0.0 || u > 1.0 {
+            return None;
+        }
+
+        let q = s.cross(&edge1);
+        let v = f * ray.direction.dot(&q);
+
+        if v < 0.0 || u + v > 1.0 {
+            return None;
+        }
+
+        let t = f * edge2.dot(&q);
+
+        if t > t_min && t < t_max {
+            // Compute normal from vertex geometry, considering vertex winding order
+            let mut normal = edge1.cross(&edge2);
+            
+            // Ensure normal is not zero (degenerate triangle)
+            if normal.magnitude() < 1e-8 {
+                return None;
+            }
+            
+            // The sign of 'a' tells us about vertex winding:
+            // - If a > 0: vertices are counter-clockwise, normal points toward ray
+            // - If a < 0: vertices are clockwise, normal points away from ray
+            // We want the normal to point toward the "outside" of the mesh
+            if a < 0.0 {
+                normal = -normal;
+            }
+            
+            normal = normal.normalize();
+            
+            Some((t, normal, (u, v)))
+        } else {
+            None
+        }
+    }
+
+    /// Fast bounding box intersection test
+    fn intersect_bounds(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
+        let (bounds_min, bounds_max) = self.mesh.bounds();
+        
+        let mut t_min_bound = t_min;
+        let mut t_max_bound = t_max;
+        
+        for axis in 0..3 {
+            let inv_dir = 1.0 / ray.direction[axis];
+            let mut t0 = (bounds_min[axis] - ray.origin[axis]) * inv_dir;
+            let mut t1 = (bounds_max[axis] - ray.origin[axis]) * inv_dir;
+            
+            if inv_dir < 0.0 {
+                std::mem::swap(&mut t0, &mut t1);
+            }
+            
+            t_min_bound = t_min_bound.max(t0);
+            t_max_bound = t_max_bound.min(t1);
+            
+            if t_min_bound > t_max_bound {
+                return false;
+            }
+        }
+        
+        true
+    }
+}
+
+impl Intersectable for MeshObject {
+    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+        // Simple bounding box check first
+        if !self.intersect_bounds(ray, t_min, t_max) {
+            return None;
+        }
+
+        let mut closest_hit = None;
+        let mut closest_t = t_max;
+
+        if self.use_kdtree {
+            // Use k-d tree to find triangle candidates
+            self.mesh.kdtree.traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+                for &triangle_idx in triangle_indices {
+                    let triangle = &self.mesh.triangles[triangle_idx];
+                    if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
+                        if t < closest_t {
+                            closest_t = t;
+                            let point = ray.at(t);
+                            let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
+                            hit_record.texture_coords = Some((u, v));
+                            closest_hit = Some(hit_record);
+                        }
+                    }
+                }
+            });
+        } else {
+            // Brute force: test all triangles
+            for (triangle_idx, triangle) in self.mesh.triangles.iter().enumerate() {
+                if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
+                    if t < closest_t {
+                        closest_t = t;
+                        let point = ray.at(t);
+                        let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
+                        hit_record.texture_coords = Some((u, v));
+                        closest_hit = Some(hit_record);
+                    }
+                }
+            }
+        }
+
+        closest_hit
+    }
+
     fn material_index(&self) -> usize {
         self.material_index
     }

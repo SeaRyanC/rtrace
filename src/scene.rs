@@ -108,6 +108,13 @@ pub enum Object {
         size: [f64; 3], // width, height, depth
         material: Material,
     },
+    #[serde(rename = "mesh")]
+    Mesh {
+        filename: String, // path to STL file
+        material: Material,
+        #[serde(skip)]
+        mesh_data: Option<crate::mesh::Mesh>, // loaded mesh data
+    },
 }
 
 /// Light source
@@ -185,14 +192,39 @@ impl Scene {
     /// Load scene from JSON file
     pub fn from_json_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
-        let scene: Scene = serde_json::from_str(&content)?;
+        let mut scene: Scene = serde_json::from_str(&content)?;
+        
+        // Load mesh data for any mesh objects
+        scene.load_mesh_data(Some(path))?;
+        
         Ok(scene)
     }
     
     /// Load scene from JSON string
     pub fn from_json_str(json: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let scene: Scene = serde_json::from_str(json)?;
+        let mut scene: Scene = serde_json::from_str(json)?;
+        
+        // Load mesh data for any mesh objects (relative to current directory)
+        scene.load_mesh_data(None)?;
+        
         Ok(scene)
+    }
+    
+    /// Load mesh data for all mesh objects in the scene
+    pub fn load_mesh_data(&mut self, scene_file_path: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+        let base_dir = scene_file_path
+            .and_then(|p| std::path::Path::new(p).parent())
+            .unwrap_or_else(|| std::path::Path::new("."));
+            
+        for object in &mut self.objects {
+            if let Object::Mesh { filename, mesh_data, .. } = object {
+                let mesh_path = base_dir.join(filename);
+                let mesh = crate::mesh::Mesh::from_stl_file(&mesh_path)?;
+                *mesh_data = Some(mesh);
+            }
+        }
+        
+        Ok(())
     }
     
     /// Save scene to JSON file

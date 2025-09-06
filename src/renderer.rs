@@ -3,13 +3,14 @@ use image::{ImageBuffer, Rgb, RgbImage};
 
 use crate::scene::{Scene, Object, hex_to_color, Color, Point, Vec3};
 use crate::camera::Camera;
-use crate::ray::{World, Sphere, Plane, Cube};
+use crate::ray::{World, Sphere, Plane, Cube, MeshObject};
 use crate::lighting::ray_color;
 
 pub struct Renderer {
     pub width: u32,
     pub height: u32,
     pub max_depth: i32,
+    pub use_kdtree: bool, // New field to control k-d tree usage for meshes
 }
 
 impl Renderer {
@@ -18,6 +19,17 @@ impl Renderer {
             width,
             height,
             max_depth: 10,
+            use_kdtree: true, // Default to using k-d tree
+        }
+    }
+
+    /// Create a renderer with k-d tree disabled (brute force mesh intersection)
+    pub fn new_brute_force(width: u32, height: u32) -> Self {
+        Self {
+            width,
+            height,
+            max_depth: 10,
+            use_kdtree: false, // Disable k-d tree
         }
     }
     
@@ -69,6 +81,18 @@ impl Renderer {
                     let cube = Box::new(Cube::new(center, size, color, index));
                     world.add(cube);
                     materials.insert(index, material.clone());
+                }
+                Object::Mesh { mesh_data, material, .. } => {
+                    if let Some(mesh) = mesh_data {
+                        let color = hex_to_color(&material.color)?;
+                        let mesh_object = if self.use_kdtree {
+                            Box::new(MeshObject::new(mesh.clone(), color, index))
+                        } else {
+                            Box::new(MeshObject::new_brute_force(mesh.clone(), color, index))
+                        };
+                        world.add(mesh_object);
+                        materials.insert(index, material.clone());
+                    }
                 }
             }
         }
