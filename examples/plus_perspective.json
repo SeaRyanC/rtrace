@@ -10,7 +10,7 @@
   "objects": [
     {
       "kind": "mesh",
-      "filename": "examples/plus.stl",
+      "filename": "plus.stl",
       "material": {
         "color": "#8080FF",
         "ambient": 0.2,
