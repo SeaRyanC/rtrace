@@ -1,6 +1,8 @@
 import { task } from "hereby";
 import { spawn } from "child_process";
 import { promisify } from "util";
+import { readdir } from "fs/promises";
+import { extname, basename } from "path";
 
 // Helper function to execute shell commands
 function exec(command, options = {}) {
@@ -202,113 +204,96 @@ export const renderDebug = task({
     run: exec("node scripts/render_plus_debug.js")
 });
 
-// Documentation rendering tasks
-export const renderDocCameraBasic = task({
-    name: "render:doc:camera-basic",
-    description: "Render camera basic example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/camera-basic.json -o doc/images/camera-basic.png -w 800 -H 600")
-});
+// Documentation rendering tasks - dynamically generated
+const docSceneFiles = [
+    "camera-basic.json",
+    "camera-perspective.json", 
+    "object-sphere.json",
+    "object-plane-grid.json",
+    "object-cube.json",
+    "object-mesh.json",
+    "material-properties.json",
+    "material-reflectivity.json",
+    "texture-grid-variations.json",
+    "lighting-multiple.json",
+    "example-complete.json"
+];
 
-export const renderDocObjectSphere = task({
-    name: "render:doc:object-sphere",
-    description: "Render object sphere example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/object-sphere.json -o doc/images/object-sphere.png -w 800 -H 600")
-});
+// Multi-file scenes that need special handling
+const docMultiFileScenes = [
+    {
+        name: "scene-backgrounds",
+        files: ["scene-backgrounds-1.json", "scene-backgrounds-2.json"]
+    },
+    {
+        name: "scene-fog", 
+        files: ["scene-fog-light.json", "scene-fog-heavy.json"]
+    }
+];
 
-export const renderDocObjectPlaneGrid = task({
-    name: "render:doc:object-plane-grid",
-    description: "Render object plane grid example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/object-plane-grid.json -o doc/images/object-plane-grid.png -w 800 -H 600")
-});
+// Create tasks for single-file scenes
+const docRenderTasks = {};
+const docDependencies = [];
 
-export const renderDocObjectCube = task({
-    name: "render:doc:object-cube",
-    description: "Render object cube example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/object-cube.json -o doc/images/object-cube.png -w 800 -H 600")
-});
+for (const file of docSceneFiles) {
+    const baseName = basename(file, '.json');
+    const taskName = `renderDoc${baseName.split('-').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join('')}`;
+    
+    docRenderTasks[taskName] = task({
+        name: `render:doc:${baseName}`,
+        description: `Render ${baseName} example for documentation`,
+        dependencies: [buildCli],
+        run: exec(`./target/release/rtrace -i doc/scenes/${file} -o doc/images/${baseName}.png -w 400 -H 300`)
+    });
+    docDependencies.push(docRenderTasks[taskName]);
+}
 
-export const renderDocObjectMesh = task({
-    name: "render:doc:object-mesh",
-    description: "Render object mesh example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/object-mesh.json -o doc/images/object-mesh.png -w 800 -H 600")
-});
+// Create tasks for multi-file scenes
+for (const scene of docMultiFileScenes) {
+    const taskName = `renderDoc${scene.name.split('-').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join('')}`;
+    
+    const commands = scene.files.map(file => {
+        const outputName = basename(file, '.json');
+        return `./target/release/rtrace -i doc/scenes/${file} -o doc/images/${outputName}.png -w 400 -H 300`;
+    }).join(' && ');
 
-export const renderDocMaterialProperties = task({
-    name: "render:doc:material-properties",
-    description: "Render material properties example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/material-properties.json -o doc/images/material-properties.png -w 800 -H 600")
-});
+    docRenderTasks[taskName] = task({
+        name: `render:doc:${scene.name}`,
+        description: `Render ${scene.name} examples for documentation`,
+        dependencies: [buildCli],
+        run: exec(commands)
+    });
+    docDependencies.push(docRenderTasks[taskName]);
+}
 
-export const renderDocMaterialReflectivity = task({
-    name: "render:doc:material-reflectivity",
-    description: "Render material reflectivity example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/material-reflectivity.json -o doc/images/material-reflectivity.png -w 800 -H 600")
-});
-
-export const renderDocTextureGridVariations = task({
-    name: "render:doc:texture-grid-variations",
-    description: "Render texture grid variations example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/texture-grid-variations.json -o doc/images/texture-grid-variations.png -w 800 -H 600")
-});
-
-export const renderDocLightingMultiple = task({
-    name: "render:doc:lighting-multiple",
-    description: "Render lighting multiple example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/lighting-multiple.json -o doc/images/lighting-multiple.png -w 800 -H 600")
-});
-
-export const renderDocSceneBackgrounds = task({
-    name: "render:doc:scene-backgrounds",
-    description: "Render scene backgrounds example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/scene-backgrounds-1.json -o doc/images/scene-backgrounds-1.png -w 400 -H 300 && ./target/release/rtrace -i doc/scenes/scene-backgrounds-2.json -o doc/images/scene-backgrounds-2.png -w 400 -H 300")
-});
-
-export const renderDocSceneFog = task({
-    name: "render:doc:scene-fog",
-    description: "Render scene fog comparison example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/scene-fog-light.json -o doc/images/scene-fog-light.png -w 400 -H 300 && ./target/release/rtrace -i doc/scenes/scene-fog-heavy.json -o doc/images/scene-fog-heavy.png -w 400 -H 300")
-});
-
-export const renderDocExampleComplete = task({
-    name: "render:doc:example-complete",
-    description: "Render complete example for documentation",
-    dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i doc/scenes/example-complete.json -o doc/images/example-complete.png -w 800 -H 600")
-});
+// Export individual render tasks
+export const renderDocCameraBasic = docRenderTasks.renderDocCameraBasic;
+export const renderDocCameraPerspective = docRenderTasks.renderDocCameraPerspective;
+export const renderDocObjectSphere = docRenderTasks.renderDocObjectSphere;
+export const renderDocObjectPlaneGrid = docRenderTasks.renderDocObjectPlaneGrid;
+export const renderDocObjectCube = docRenderTasks.renderDocObjectCube;
+export const renderDocObjectMesh = docRenderTasks.renderDocObjectMesh;
+export const renderDocMaterialProperties = docRenderTasks.renderDocMaterialProperties;
+export const renderDocMaterialReflectivity = docRenderTasks.renderDocMaterialReflectivity;
+export const renderDocTextureGridVariations = docRenderTasks.renderDocTextureGridVariations;
+export const renderDocLightingMultiple = docRenderTasks.renderDocLightingMultiple;
+export const renderDocExampleComplete = docRenderTasks.renderDocExampleComplete;
+export const renderDocSceneBackgrounds = docRenderTasks.renderDocSceneBackgrounds;
+export const renderDocSceneFog = docRenderTasks.renderDocSceneFog;
 
 export const renderDocAll = task({
-    name: "render:doc:all",
+    name: "render:doc:all", 
     description: "Render all documentation images",
-    dependencies: [
-        renderDocCameraBasic,
-        renderDocObjectSphere,
-        renderDocObjectPlaneGrid,
-        renderDocObjectCube,
-        renderDocObjectMesh,
-        renderDocMaterialProperties,
-        renderDocMaterialReflectivity,
-        renderDocTextureGridVariations,
-        renderDocLightingMultiple,
-        renderDocSceneBackgrounds,
-        renderDocSceneFog,
-        renderDocExampleComplete
-    ]
+    dependencies: docDependencies
 });
 
 export const docRender = task({
     name: "doc:render",
-    description: "Generate all documentation images",
+    description: "Generate all documentation images", 
     dependencies: [renderDocAll]
 });
 

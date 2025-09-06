@@ -22,7 +22,7 @@
           "type": "grid",
           "line_color": "#333333",
           "line_width": 0.05,
-          "cell_size": 1.0
+          "cell_size": 2.0
         }
       }
     }

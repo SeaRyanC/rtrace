@@ -22,7 +22,7 @@
           "type": "grid",
           "line_color": "#FF0000",
           "line_width": 0.02,
-          "cell_size": 0.3
+          "cell_size": 0.8
         }
       }
     },
@@ -40,7 +40,7 @@
           "type": "grid",
           "line_color": "#333333",
           "line_width": 0.05,
-          "cell_size": 0.8
+          "cell_size": 1.2
         }
       }
     },
@@ -58,7 +58,7 @@
           "type": "grid",
           "line_color": "#0066CC",
           "line_width": 0.1,
-          "cell_size": 1.2
+          "cell_size": 2.0
         }
       }
     }

@@ -10,7 +10,7 @@
   "objects": [
     {
       "kind": "mesh",
-      "filename": "simple_triangle.stl",
+      "filename": "sphere.stl",
       "material": {
         "color": "#44FF44",
         "ambient": 0.1,

@@ -79,7 +79,7 @@ Scenes are defined in JSON format following a specific schema. Every scene requi
 
 ## Camera Settings
 
-Currently, rtrace supports orthographic projection cameras.
+rtrace supports both orthographic and perspective projection cameras.
 
 ### Orthographic Camera
 
@@ -104,6 +104,32 @@ Currently, rtrace supports orthographic projection cameras.
 | `up` | [x, y, z] | Camera up vector (typically [0, 1, 0]) |
 | `width` | number | Viewport width in world units |
 | `height` | number | Viewport height in world units |
+
+### Perspective Camera
+
+```json
+{
+  "camera": {
+    "kind": "perspective",
+    "position": [0, 2, 5],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 8,
+    "height": 6,
+    "fov": 60
+  }
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `kind` | string | Camera type, must be `"perspective"` |
+| `position` | [x, y, z] | Camera position in 3D space |
+| `target` | [x, y, z] | Point the camera looks at |
+| `up` | [x, y, z] | Camera up vector (typically [0, 1, 0]) |
+| `width` | number | Viewport width in world units |
+| `height` | number | Viewport height in world units |
+| `fov` | number | Field of view angle in degrees |
 
 **Example:** Basic orthographic camera setup
 
