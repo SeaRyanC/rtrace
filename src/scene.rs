@@ -1,5 +1,5 @@
+use nalgebra::{Point3, Vector3};
 use serde::{Deserialize, Serialize};
-use nalgebra::{Vector3, Point3};
 
 /// Color representation as RGB values (0.0-1.0)
 pub type Color = Vector3<f64>;
@@ -16,12 +16,16 @@ pub fn hex_to_color(hex: &str) -> Result<Color, String> {
     if hex.len() != 6 {
         return Err("Invalid hex color format".to_string());
     }
-    
+
     let r = u8::from_str_radix(&hex[0..2], 16).map_err(|_| "Invalid hex color")?;
     let g = u8::from_str_radix(&hex[2..4], 16).map_err(|_| "Invalid hex color")?;
     let b = u8::from_str_radix(&hex[4..6], 16).map_err(|_| "Invalid hex color")?;
-    
-    Ok(Color::new(r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0))
+
+    Ok(Color::new(
+        r as f64 / 255.0,
+        g as f64 / 255.0,
+        b as f64 / 255.0,
+    ))
 }
 
 /// Camera configuration
@@ -195,40 +199,48 @@ impl Scene {
     pub fn from_json_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
         let mut scene: Scene = serde_json::from_str(&content)?;
-        
+
         // Load mesh data for any mesh objects
         scene.load_mesh_data(Some(path))?;
-        
+
         Ok(scene)
     }
-    
+
     /// Load scene from JSON string
     pub fn from_json_str(json: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut scene: Scene = serde_json::from_str(json)?;
-        
+
         // Load mesh data for any mesh objects (relative to current directory)
         scene.load_mesh_data(None)?;
-        
+
         Ok(scene)
     }
-    
+
     /// Load mesh data for all mesh objects in the scene
-    pub fn load_mesh_data(&mut self, scene_file_path: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn load_mesh_data(
+        &mut self,
+        scene_file_path: Option<&str>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let base_dir = scene_file_path
             .and_then(|p| std::path::Path::new(p).parent())
             .unwrap_or_else(|| std::path::Path::new("."));
-            
+
         for object in &mut self.objects {
-            if let Object::Mesh { filename, mesh_data, .. } = object {
+            if let Object::Mesh {
+                filename,
+                mesh_data,
+                ..
+            } = object
+            {
                 let mesh_path = base_dir.join(filename);
                 let mesh = crate::mesh::Mesh::from_stl_file(&mesh_path)?;
                 *mesh_data = Some(mesh);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Save scene to JSON file
     pub fn to_json_file(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
         let json = serde_json::to_string_pretty(self)?;
@@ -248,23 +260,23 @@ impl Scene {
                     let r = Vec3::new(*radius, *radius, *radius);
                     let center_point = Point::new(center[0], center[1], center[2]);
                     Some((center_point - r, center_point + r))
-                },
+                }
                 Object::Cube { center, size, .. } => {
                     let center_point = Point::new(center[0], center[1], center[2]);
                     let half_size = Vec3::new(size[0], size[1], size[2]) / 2.0;
                     Some((center_point - half_size, center_point + half_size))
-                },
+                }
                 Object::Mesh { mesh_data, .. } => {
                     if let Some(mesh) = mesh_data {
                         Some(mesh.bounds())
                     } else {
                         None
                     }
-                },
+                }
                 Object::Plane { .. } => {
                     // Planes have infinite bounds, so we exclude them
                     None
-                },
+                }
             };
 
             if let Some((obj_min, obj_max)) = bounds {
@@ -272,7 +284,7 @@ impl Scene {
                     (None, None) => {
                         min_bound = Some(obj_min);
                         max_bound = Some(obj_max);
-                    },
+                    }
                     (Some(current_min), Some(current_max)) => {
                         min_bound = Some(Point::new(
                             current_min.x.min(obj_min.x),
@@ -284,7 +296,7 @@ impl Scene {
                             current_max.y.max(obj_max.y),
                             current_max.z.max(obj_max.z),
                         ));
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }

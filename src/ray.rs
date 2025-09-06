@@ -1,6 +1,6 @@
-use nalgebra::Unit;
-use crate::scene::{Vec3, Point, Color};
 use crate::mesh::{Mesh, Triangle};
+use crate::scene::{Color, Point, Vec3};
+use nalgebra::Unit;
 
 /// A ray in 3D space
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ impl Ray {
             direction: Unit::new_normalize(direction),
         }
     }
-    
+
     /// Get a point along the ray at parameter t
     pub fn at(&self, t: f64) -> Point {
         self.origin + t * self.direction.as_ref()
@@ -36,14 +36,21 @@ pub struct HitRecord {
 }
 
 impl HitRecord {
-    pub fn new(point: Point, outward_normal: Vec3, t: f64, ray: &Ray, material_color: Color, material_index: usize) -> Self {
+    pub fn new(
+        point: Point,
+        outward_normal: Vec3,
+        t: f64,
+        ray: &Ray,
+        material_color: Color,
+        material_index: usize,
+    ) -> Self {
         let front_face = ray.direction.dot(&outward_normal) < 0.0;
         let normal = if front_face {
             Unit::new_normalize(outward_normal)
         } else {
             Unit::new_normalize(-outward_normal)
         };
-        
+
         Self {
             point,
             normal,
@@ -84,12 +91,12 @@ impl Intersectable for Sphere {
         let a = ray.direction.dot(&ray.direction);
         let half_b = oc.dot(&ray.direction);
         let c = oc.dot(&oc) - self.radius * self.radius;
-        
+
         let discriminant = half_b * half_b - a * c;
         if discriminant < 0.0 {
             return None;
         }
-        
+
         let sqrtd = discriminant.sqrt();
         let mut root = (-half_b - sqrtd) / a;
         if root < t_min || t_max < root {
@@ -98,13 +105,20 @@ impl Intersectable for Sphere {
                 return None;
             }
         }
-        
+
         let point = ray.at(root);
         let outward_normal = (point - self.center) / self.radius;
-        
-        Some(HitRecord::new(point, outward_normal, root, ray, self.material_color, self.material_index))
+
+        Some(HitRecord::new(
+            point,
+            outward_normal,
+            root,
+            ray,
+            self.material_color,
+            self.material_index,
+        ))
     }
-    
+
     fn material_index(&self) -> usize {
         self.material_index
     }
@@ -121,21 +135,28 @@ pub struct Plane {
 impl Intersectable for Plane {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let denom = self.normal.dot(&ray.direction);
-        
+
         // Ray is parallel to plane
         if denom.abs() < 1e-8 {
             return None;
         }
-        
+
         let t = (self.point - ray.origin).dot(&self.normal) / denom;
-        
+
         if t < t_min || t > t_max {
             return None;
         }
-        
+
         let point = ray.at(t);
-        let mut hit_record = HitRecord::new(point, self.normal.as_ref().clone(), t, ray, self.material_color, self.material_index);
-        
+        let mut hit_record = HitRecord::new(
+            point,
+            self.normal.as_ref().clone(),
+            t,
+            ray,
+            self.material_color,
+            self.material_index,
+        );
+
         // Calculate texture coordinates for the plane (simple projection)
         let u_axis = if self.normal.x.abs() > 0.9 {
             Vec3::new(0.0, 1.0, 0.0)
@@ -144,16 +165,16 @@ impl Intersectable for Plane {
         };
         let u_axis = Unit::new_normalize(u_axis.cross(&self.normal));
         let v_axis = Unit::new_normalize(self.normal.cross(&u_axis));
-        
+
         let relative_pos = point - self.point;
         let u = relative_pos.dot(&u_axis);
         let v = relative_pos.dot(&v_axis);
-        
+
         hit_record.texture_coords = Some((u, v));
-        
+
         Some(hit_record)
     }
-    
+
     fn material_index(&self) -> usize {
         self.material_index
     }
@@ -187,7 +208,7 @@ impl Cube {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scene::{Point, Vec3, Color};
+    use crate::scene::{Color, Point, Vec3};
 
     #[test]
     fn test_sphere_bounds() {
@@ -197,7 +218,7 @@ mod tests {
             material_color: Color::new(1.0, 0.0, 0.0),
             material_index: 0,
         };
-        
+
         let (min, max) = sphere.bounds();
         assert_eq!(min, Point::new(-0.5, 0.5, 1.5));
         assert_eq!(max, Point::new(2.5, 3.5, 4.5));
@@ -211,7 +232,7 @@ mod tests {
             Color::new(0.0, 1.0, 0.0),
             0,
         );
-        
+
         let (min, max) = cube.bounds();
         assert_eq!(min, Point::new(0.0, 0.0, 0.0));
         assert_eq!(max, Point::new(2.0, 4.0, 6.0));
@@ -224,45 +245,56 @@ impl Intersectable for Cube {
         let mut t_max_hit = t_max;
         let mut normal = Vec3::new(0.0, 0.0, 0.0);
         let mut _hit_front = true;
-        
+
         // Check intersection with each pair of parallel planes
         for axis in 0..3 {
             let inv_dir = 1.0 / ray.direction[axis];
             let mut t0 = (self.min[axis] - ray.origin[axis]) * inv_dir;
             let mut t1 = (self.max[axis] - ray.origin[axis]) * inv_dir;
-            
+
             let mut axis_normal = Vec3::new(0.0, 0.0, 0.0);
             axis_normal[axis] = if inv_dir < 0.0 { 1.0 } else { -1.0 };
-            
+
             if inv_dir < 0.0 {
                 std::mem::swap(&mut t0, &mut t1);
                 axis_normal[axis] = -axis_normal[axis];
             }
-            
+
             if t0 > t_min_hit {
                 t_min_hit = t0;
                 normal = axis_normal;
                 _hit_front = true;
             }
-            
+
             if t1 < t_max_hit {
                 t_max_hit = t1;
             }
-            
+
             if t_min_hit > t_max_hit {
                 return None;
             }
         }
-        
-        let t = if t_min_hit > t_min { t_min_hit } else { t_max_hit };
+
+        let t = if t_min_hit > t_min {
+            t_min_hit
+        } else {
+            t_max_hit
+        };
         if t < t_min || t > t_max {
             return None;
         }
-        
+
         let point = ray.at(t);
-        Some(HitRecord::new(point, normal, t, ray, self.material_color, self.material_index))
+        Some(HitRecord::new(
+            point,
+            normal,
+            t,
+            ray,
+            self.material_color,
+            self.material_index,
+        ))
     }
-    
+
     fn material_index(&self) -> usize {
         self.material_index
     }
@@ -297,7 +329,13 @@ impl MeshObject {
     }
 
     /// Ray-triangle intersection using Möller-Trumbore algorithm
-    fn intersect_triangle(&self, ray: &Ray, triangle: &Triangle, t_min: f64, t_max: f64) -> Option<(f64, Vec3, (f64, f64))> {
+    fn intersect_triangle(
+        &self,
+        ray: &Ray,
+        triangle: &Triangle,
+        t_min: f64,
+        t_max: f64,
+    ) -> Option<(f64, Vec3, (f64, f64))> {
         let edge1 = triangle.vertices[1] - triangle.vertices[0];
         let edge2 = triangle.vertices[2] - triangle.vertices[0];
         let h = ray.direction.cross(&edge2);
@@ -327,12 +365,12 @@ impl MeshObject {
         if t > t_min && t < t_max {
             // Compute normal from vertex geometry, considering vertex winding order
             let mut normal = edge1.cross(&edge2);
-            
+
             // Ensure normal is not zero (degenerate triangle)
             if normal.magnitude() < 1e-8 {
                 return None;
             }
-            
+
             // The sign of 'a' tells us about vertex winding:
             // - If a > 0: vertices are counter-clockwise, normal points toward ray
             // - If a < 0: vertices are clockwise, normal points away from ray
@@ -340,9 +378,9 @@ impl MeshObject {
             if a < 0.0 {
                 normal = -normal;
             }
-            
+
             normal = normal.normalize();
-            
+
             Some((t, normal, (u, v)))
         } else {
             None
@@ -352,27 +390,27 @@ impl MeshObject {
     /// Fast bounding box intersection test
     fn intersect_bounds(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
         let (bounds_min, bounds_max) = self.mesh.bounds();
-        
+
         let mut t_min_bound = t_min;
         let mut t_max_bound = t_max;
-        
+
         for axis in 0..3 {
             let inv_dir = 1.0 / ray.direction[axis];
             let mut t0 = (bounds_min[axis] - ray.origin[axis]) * inv_dir;
             let mut t1 = (bounds_max[axis] - ray.origin[axis]) * inv_dir;
-            
+
             if inv_dir < 0.0 {
                 std::mem::swap(&mut t0, &mut t1);
             }
-            
+
             t_min_bound = t_min_bound.max(t0);
             t_max_bound = t_max_bound.min(t1);
-            
+
             if t_min_bound > t_max_bound {
                 return false;
             }
         }
-        
+
         true
     }
 }
@@ -389,28 +427,48 @@ impl Intersectable for MeshObject {
 
         if self.use_kdtree {
             // Use k-d tree to find triangle candidates
-            self.mesh.kdtree.traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
-                for &triangle_idx in triangle_indices {
-                    let triangle = &self.mesh.triangles[triangle_idx];
-                    if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
-                        if t < closest_t {
-                            closest_t = t;
-                            let point = ray.at(t);
-                            let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
-                            hit_record.texture_coords = Some((u, v));
-                            closest_hit = Some(hit_record);
+            self.mesh
+                .kdtree
+                .traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+                    for &triangle_idx in triangle_indices {
+                        let triangle = &self.mesh.triangles[triangle_idx];
+                        if let Some((t, normal, (u, v))) =
+                            self.intersect_triangle(ray, triangle, t_min, closest_t)
+                        {
+                            if t < closest_t {
+                                closest_t = t;
+                                let point = ray.at(t);
+                                let mut hit_record = HitRecord::new(
+                                    point,
+                                    normal,
+                                    t,
+                                    ray,
+                                    self.material_color,
+                                    self.material_index,
+                                );
+                                hit_record.texture_coords = Some((u, v));
+                                closest_hit = Some(hit_record);
+                            }
                         }
                     }
-                }
-            });
+                });
         } else {
             // Brute force: test all triangles
             for (triangle_idx, triangle) in self.mesh.triangles.iter().enumerate() {
-                if let Some((t, normal, (u, v))) = self.intersect_triangle(ray, triangle, t_min, closest_t) {
+                if let Some((t, normal, (u, v))) =
+                    self.intersect_triangle(ray, triangle, t_min, closest_t)
+                {
                     if t < closest_t {
                         closest_t = t;
                         let point = ray.at(t);
-                        let mut hit_record = HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
+                        let mut hit_record = HitRecord::new(
+                            point,
+                            normal,
+                            t,
+                            ray,
+                            self.material_color,
+                            self.material_index,
+                        );
                         hit_record.texture_coords = Some((u, v));
                         closest_hit = Some(hit_record);
                     }
@@ -437,22 +495,22 @@ impl World {
             objects: Vec::new(),
         }
     }
-    
+
     pub fn add(&mut self, object: Box<dyn Intersectable + Send + Sync>) {
         self.objects.push(object);
     }
-    
+
     pub fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let mut closest_hit = None;
         let mut closest_so_far = t_max;
-        
+
         for object in &self.objects {
             if let Some(hit) = object.hit(ray, t_min, closest_so_far) {
                 closest_so_far = hit.t;
                 closest_hit = Some(hit);
             }
         }
-        
+
         closest_hit
     }
 }

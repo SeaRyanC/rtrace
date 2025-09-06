@@ -1,5 +1,5 @@
 use clap::Parser;
-use rtrace::{Scene, AutoCamera};
+use rtrace::{AutoCamera, Scene};
 use std::path::Path;
 
 /// Auto Camera Bounds CLI - generates 4 camera views for a scene
@@ -46,24 +46,38 @@ fn main() {
 
     // Convert to JSON
     let cameras_json = cameras.to_cameras_json();
-    
+
     // Write to output file
-    if let Err(e) = std::fs::write(&args.output, serde_json::to_string_pretty(&cameras_json).unwrap()) {
+    if let Err(e) = std::fs::write(
+        &args.output,
+        serde_json::to_string_pretty(&cameras_json).unwrap(),
+    ) {
         eprintln!("Error writing output file: {}", e);
         std::process::exit(1);
     }
 
-    println!("Successfully generated camera configurations to '{}'", args.output);
-    
+    println!(
+        "Successfully generated camera configurations to '{}'",
+        args.output
+    );
+
     // Print summary
     if let Some(bounds) = scene.compute_finite_bounds() {
         let (min, max) = bounds;
         let size = max - min;
-        println!("Scene bounds: ({:.2}, {:.2}, {:.2}) to ({:.2}, {:.2}, {:.2})", 
-                min.x, min.y, min.z, max.x, max.y, max.z);
-        println!("Scene dimensions: {:.2} x {:.2} x {:.2}", size.x, size.y, size.z);
-        
+        println!(
+            "Scene bounds: ({:.2}, {:.2}, {:.2}) to ({:.2}, {:.2}, {:.2})",
+            min.x, min.y, min.z, max.x, max.y, max.z
+        );
+        println!(
+            "Scene dimensions: {:.2} x {:.2} x {:.2}",
+            size.x, size.y, size.z
+        );
+
         let center = min + size / 2.0;
-        println!("Scene center: ({:.2}, {:.2}, {:.2})", center.x, center.y, center.z);
+        println!(
+            "Scene center: ({:.2}, {:.2}, {:.2})",
+            center.x, center.y, center.z
+        );
     }
 }

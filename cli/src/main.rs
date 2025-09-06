@@ -1,5 +1,5 @@
 use clap::Parser;
-use rtrace::{Scene, Renderer};
+use rtrace::{Renderer, Scene};
 use std::path::Path;
 
 /// Ray tracer CLI - renders 3D scenes from JSON descriptions
@@ -45,7 +45,11 @@ fn main() {
         }
     };
 
-    println!("Loaded scene with {} objects and {} lights", scene.objects.len(), scene.lights.len());
+    println!(
+        "Loaded scene with {} objects and {} lights",
+        scene.objects.len(),
+        scene.lights.len()
+    );
 
     // Create renderer
     let mut renderer = Renderer::new(args.width, args.height);
