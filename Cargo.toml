@@ -26,8 +26,8 @@ rayon = "1.8"
 
 [[bin]]
 name = "test_kdtree_consistency"
-path = "test_kdtree_consistency.rs"
+path = "tools/test_kdtree_consistency.rs"
 
 [[bin]]
 name = "debug_kdtree"
-path = "debug_kdtree.rs"
+path = "tools/debug_kdtree.rs"
