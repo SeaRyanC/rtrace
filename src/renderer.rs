@@ -70,6 +70,12 @@ impl Renderer {
                     world.add(cube);
                     materials.insert(index, material.clone());
                 }
+                Object::Mesh { path, center, scale, material } => {
+                    // TODO: Implement mesh loading and rendering
+                    // For now, skip mesh objects to avoid compilation errors
+                    println!("Warning: Mesh object with path '{}' is not yet supported", path);
+                    materials.insert(index, material.clone());
+                }
             }
         }
         

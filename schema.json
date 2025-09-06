@@ -114,6 +114,32 @@
               },
               "material": { "$ref": "#/definitions/material" }
             }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "path", "material"],
+            "properties": {
+              "kind": { "const": "mesh" },
+              "path": {
+                "type": "string",
+                "description": "Path to STL file, relative to JSON file"
+              },
+              "center": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Optional translation offset as [x, y, z]"
+              },
+              "scale": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3,
+                "description": "Optional scaling factors as [sx, sy, sz]"
+              },
+              "material": { "$ref": "#/definitions/material" }
+            }
           }
         ]
       },

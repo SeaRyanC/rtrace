@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use nalgebra::{Vector3, Point3};
+use std::path::{Path, PathBuf};
 
 /// Color representation as RGB values (0.0-1.0)
 pub type Color = Vector3<f64>;
@@ -108,6 +109,13 @@ pub enum Object {
         size: [f64; 3], // width, height, depth
         material: Material,
     },
+    #[serde(rename = "mesh")]
+    Mesh {
+        path: String, // path to STL file, relative to JSON file
+        center: Option<[f64; 3]>, // optional translation
+        scale: Option<[f64; 3]>,  // optional scaling
+        material: Material,
+    },
 }
 
 /// Light source
@@ -168,6 +176,8 @@ pub struct Scene {
     pub objects: Vec<Object>,
     pub lights: Vec<Light>,
     pub scene_settings: SceneSettings,
+    #[serde(skip)]
+    pub base_path: Option<PathBuf>, // Directory of the JSON file for resolving relative paths
 }
 
 impl Default for Scene {
@@ -177,6 +187,7 @@ impl Default for Scene {
             objects: Vec::new(),
             lights: Vec::new(),
             scene_settings: SceneSettings::default(),
+            base_path: None,
         }
     }
 }
@@ -185,7 +196,12 @@ impl Scene {
     /// Load scene from JSON file
     pub fn from_json_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(path)?;
-        let scene: Scene = serde_json::from_str(&content)?;
+        let mut scene: Scene = serde_json::from_str(&content)?;
+        
+        // Extract the directory path from the JSON file path for resolving relative paths
+        let json_path = Path::new(path);
+        scene.base_path = json_path.parent().map(|p| p.to_path_buf());
+        
         Ok(scene)
     }
     
@@ -200,5 +216,63 @@ impl Scene {
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
         Ok(())
+    }
+    
+    /// Resolve a relative path against the scene's base path
+    pub fn resolve_path(&self, relative_path: &str) -> PathBuf {
+        if let Some(base_path) = &self.base_path {
+            base_path.join(relative_path)
+        } else {
+            // Fallback to relative to current directory if no base path
+            PathBuf::from(relative_path)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_path_resolution() {
+        // Test loading a scene file with mesh that has relative path
+        let scene = Scene::from_json_file("examples/mesh_example.json").expect("Failed to load scene");
+        
+        // Verify that the base path is extracted correctly
+        assert!(scene.base_path.is_some());
+        let base_path = scene.base_path.as_ref().unwrap();
+        assert!(base_path.ends_with("examples"));
+        
+        // Test path resolution
+        let resolved_path = scene.resolve_path("Espresso Tray.stl");
+        assert!(resolved_path.ends_with("examples/Espresso Tray.stl"));
+        
+        // Test that the mesh object was parsed correctly
+        assert_eq!(scene.objects.len(), 1);
+        if let Object::Mesh { path, center, scale, material: _ } = &scene.objects[0] {
+            assert_eq!(path, "Espresso Tray.stl");
+            assert_eq!(center, &Some([0.0, 0.0, 0.0]));
+            assert_eq!(scale, &Some([0.1, 0.1, 0.1]));
+        } else {
+            panic!("Expected mesh object");
+        }
+    }
+    
+    #[test]
+    fn test_resolve_path_without_base() {
+        let mut scene = Scene::default();
+        scene.base_path = None;
+        
+        let resolved = scene.resolve_path("test.stl");
+        assert_eq!(resolved, PathBuf::from("test.stl"));
+    }
+    
+    #[test]
+    fn test_resolve_path_with_base() {
+        let mut scene = Scene::default();
+        scene.base_path = Some(PathBuf::from("/path/to/scenes"));
+        
+        let resolved = scene.resolve_path("models/test.stl");
+        assert_eq!(resolved, PathBuf::from("/path/to/scenes/models/test.stl"));
     }
 }
