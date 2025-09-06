@@ -4,6 +4,58 @@ use rtrace::{
     scene::{Point, Vec3, Color},
 };
 
+fn intersect_triangle_moller_trumbore(ray: &Ray, triangle: &rtrace::mesh::Triangle) -> Option<(f64, Vec3, (f64, f64))> {
+    let edge1 = triangle.vertices[1] - triangle.vertices[0];
+    let edge2 = triangle.vertices[2] - triangle.vertices[0];
+    let h = ray.direction.cross(&edge2);
+    let a = edge1.dot(&h);
+
+    if a > -1e-8 && a < 1e-8 {
+        return None; // Ray is parallel to triangle
+    }
+
+    let f = 1.0 / a;
+    let s = ray.origin - triangle.vertices[0];
+    let u = f * s.dot(&h);
+
+    if u < 0.0 || u > 1.0 {
+        return None;
+    }
+
+    let q = s.cross(&edge1);
+    let v = f * ray.direction.dot(&q);
+
+    if v < 0.0 || u + v > 1.0 {
+        return None;
+    }
+
+    let t = f * edge2.dot(&q);
+
+    if t > 0.001 {
+        // Compute normal from vertex geometry, considering vertex winding order
+        let mut normal = edge1.cross(&edge2);
+        
+        // Ensure normal is not zero (degenerate triangle)
+        if normal.magnitude() < 1e-8 {
+            return None;
+        }
+        
+        // The sign of 'a' tells us about vertex winding:
+        // - If a > 0: vertices are counter-clockwise, normal points toward ray
+        // - If a < 0: vertices are clockwise, normal points away from ray
+        // We want the normal to point toward the "outside" of the mesh
+        if a < 0.0 {
+            normal = -normal;
+        }
+        
+        normal = normal.normalize();
+        
+        Some((t, normal, (u, v)))
+    } else {
+        None
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Debugging a single problematic ray");
     
@@ -41,11 +93,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             h.t, h.point.x, h.point.y, h.point.z),
         None => println!("  Brute force: MISS"),
     }
+
+    // Let's find which triangle the brute force algorithm intersects
+    if let Some(hit) = hit_brute_force.as_ref() {
+        println!("\nFinding which triangle was hit...");
+        for (tri_idx, triangle) in mesh.triangles.iter().enumerate() {
+            // Use the same intersection method as MeshObject
+            if let Some((t, _, _)) = intersect_triangle_moller_trumbore(&ray, triangle) {
+                if (t - hit.t).abs() < 1e-6 {
+                    println!("Hit triangle {}: vertices = [{:.2}, {:.2}, {:.2}], [{:.2}, {:.2}, {:.2}], [{:.2}, {:.2}, {:.2}]",
+                        tri_idx,
+                        triangle.vertices[0].x, triangle.vertices[0].y, triangle.vertices[0].z,
+                        triangle.vertices[1].x, triangle.vertices[1].y, triangle.vertices[1].z,
+                        triangle.vertices[2].x, triangle.vertices[2].y, triangle.vertices[2].z);
+                    let (tri_min, tri_max) = triangle.bounds();
+                    println!("Triangle bounds: ({:.2}, {:.2}, {:.2}) to ({:.2}, {:.2}, {:.2})",
+                        tri_min.x, tri_min.y, tri_min.z, tri_max.x, tri_max.y, tri_max.z);
+                    break;
+                }
+            }
+        }
+    }
     
     // Let's manually check what triangles the k-d tree visits
-    println!("\nTriangles visited by k-d tree:");
+    println!("\nTriangles visited by k-d tree (brief debug):");
     let mut triangle_count = 0;
-    mesh.kdtree.traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+    mesh.kdtree.traverse_debug(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
         triangle_count += triangle_indices.len();
         println!("  Leaf with {} triangles: {:?}", triangle_indices.len(), &triangle_indices[..triangle_indices.len().min(10)]);
     });
