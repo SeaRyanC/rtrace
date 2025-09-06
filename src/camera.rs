@@ -9,6 +9,7 @@ pub struct Camera {
     pub horizontal: Vec3,
     pub vertical: Vec3,
     pub lower_left_corner: Point,
+    pub view_direction: Unit<Vec3>,
 }
 
 impl Camera {
@@ -43,13 +44,17 @@ impl Camera {
             horizontal,
             vertical,
             lower_left_corner,
+            view_direction: Unit::new_normalize(-w.as_ref().clone()),
         })
     }
     
     /// Generate a ray for the given screen coordinates (u, v are in [0, 1])
     pub fn get_ray(&self, u: f64, v: f64) -> Ray {
-        let direction = (self.lower_left_corner + u * self.horizontal + v * self.vertical) - self.origin;
-        Ray::new(self.origin, direction)
+        // For orthographic projection, all rays are parallel to the view direction
+        // The ray origin should be on the viewport plane, not at the camera position
+        let viewport_point = self.lower_left_corner + u * self.horizontal + v * self.vertical;
+        
+        Ray::new(viewport_point, self.view_direction.as_ref().clone())
     }
 }
 
