@@ -1,7 +1,22 @@
-/// Core library for rtrace
+/// Ray tracing library for rtrace
 ///
-/// This library provides a simple hello world function that can be used
-/// from Rust code, CLI applications, Node.js, and WebAssembly.
+/// This library provides a complete ray tracer with support for:
+/// - Orthographic camera projection
+/// - Basic geometric primitives (sphere, plane, cube)
+/// - Phong lighting model with ambient lighting
+/// - Atmospheric fog
+/// - Texture support (grid patterns)
+/// - JSON scene description format
+
+pub mod scene;
+pub mod ray;
+pub mod camera;
+pub mod lighting;
+pub mod renderer;
+
+pub use scene::{Scene, Camera, Object, Light, Material, Texture, SceneSettings, AmbientIllumination, Fog};
+pub use renderer::Renderer;
+
 /// Returns a greeting message
 ///
 /// # Examples
