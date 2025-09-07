@@ -37,7 +37,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
-            samples: 5,         // Default to 5 samples for quincunx
+            samples: 1,         // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
@@ -50,7 +50,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: false,                              // Disable k-d tree
             thread_count: None,                             // Use all available cores by default
-            samples: 5,                                     // Default to 5 samples for quincunx
+            samples: 1,                                     // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
@@ -63,7 +63,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,
             thread_count: Some(thread_count),
-            samples: 5, // Default to 5 samples for quincunx
+            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
@@ -81,7 +81,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree,
             thread_count,
-            samples: 5, // Default to 5 samples for quincunx
+            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
@@ -90,11 +90,6 @@ impl Renderer {
         // Validate samples parameter
         if self.samples == 0 {
             return Err("Samples must be greater than 0".into());
-        }
-
-        // Validate samples for quincunx mode
-        if self.anti_aliasing_mode == AntiAliasingMode::Quincunx && self.samples != 5 {
-            return Err("Quincunx anti-aliasing requires exactly 5 samples".into());
         }
 
         // Create camera
@@ -235,6 +230,28 @@ impl Renderer {
         background_color: Color,
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> Vec<(u32, u32, Color)> {
+        match self.anti_aliasing_mode {
+            AntiAliasingMode::Quincunx => {
+                self.render_quincunx(world, camera, lights, ambient, fog, camera_pos, background_color, materials)
+            }
+            _ => {
+                self.render_standard(world, camera, lights, ambient, fog, camera_pos, background_color, materials)
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_standard(
+        &self,
+        world: &World,
+        camera: &Camera,
+        lights: &[crate::scene::Light],
+        ambient: &crate::scene::AmbientIllumination,
+        fog: &Option<crate::scene::Fog>,
+        camera_pos: &Point,
+        background_color: Color,
+        materials: &HashMap<usize, crate::scene::Material>,
+    ) -> Vec<(u32, u32, Color)> {
         // Create a vector of all pixel coordinates
         let pixels: Vec<(u32, u32)> = (0..self.height)
             .flat_map(|y| (0..self.width).map(move |x| (x, y)))
@@ -267,17 +284,6 @@ impl Renderer {
                             // No jittering: sample at exact pixel center
                             (pixel_u, pixel_v)
                         }
-                        AntiAliasingMode::Quincunx => {
-                            // Quincunx pattern: center + 4 corners/edges
-                            match sample {
-                                0 => (pixel_u, pixel_v),                                            // Center
-                                1 => (pixel_u - 0.25 * pixel_width, pixel_v - 0.25 * pixel_height), // Top-left
-                                2 => (pixel_u + 0.25 * pixel_width, pixel_v - 0.25 * pixel_height), // Top-right
-                                3 => (pixel_u - 0.25 * pixel_width, pixel_v + 0.25 * pixel_height), // Bottom-left
-                                4 => (pixel_u + 0.25 * pixel_width, pixel_v + 0.25 * pixel_height), // Bottom-right
-                                _ => unreachable!(), // Should never happen with samples=5
-                            }
-                        }
                         AntiAliasingMode::Stochastic => {
                             if self.samples == 1 {
                                 // Single sample with random jitter within pixel bounds
@@ -305,6 +311,7 @@ impl Renderer {
                                 )
                             }
                         }
+                        AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
@@ -325,6 +332,125 @@ impl Renderer {
 
                 // Average the samples
                 let color = total_color / self.samples as f64;
+
+                // Print progress periodically (note: this might be out of order due to parallelism)
+                if pixel_index % progress_step as usize == 0 {
+                    let progress = (pixel_index as f64 / total_pixels as f64) * 100.0;
+                    println!("Rendering: {:.1}%", progress);
+                }
+
+                (x, y, color)
+            })
+            .collect()
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_quincunx(
+        &self,
+        world: &World,
+        camera: &Camera,
+        lights: &[crate::scene::Light],
+        ambient: &crate::scene::AmbientIllumination,
+        fog: &Option<crate::scene::Fog>,
+        camera_pos: &Point,
+        background_color: Color,
+        materials: &HashMap<usize, crate::scene::Material>,
+    ) -> Vec<(u32, u32, Color)> {
+        use std::sync::{Arc, Mutex};
+        use std::collections::HashMap as StdHashMap;
+
+        // Pre-compute corner samples that will be shared between pixels
+        // Each corner is identified by its grid position
+        let corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>> = Arc::new(Mutex::new(StdHashMap::new()));
+
+        // Calculate pixel size in UV coordinates
+        let pixel_width = 1.0 / self.width as f64;
+        let pixel_height = 1.0 / self.height as f64;
+
+        // Helper function to get corner sample color (with caching)
+        let get_corner_sample = |corner_x: u32, corner_y: u32, 
+                               corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>>,
+                               world: &World, camera: &Camera| -> Color {
+            let key = (corner_x, corner_y);
+            
+            // Check cache first
+            {
+                let cache = corner_cache.lock().unwrap();
+                if let Some(&color) = cache.get(&key) {
+                    return color;
+                }
+            }
+            
+            // Calculate corner UV coordinates (corners are at pixel boundaries)
+            let corner_u = (corner_x as f64 * pixel_width).clamp(0.0, 1.0);
+            let corner_v = (1.0 - corner_y as f64 * pixel_height).clamp(0.0, 1.0); // Flip Y coordinate
+            
+            let ray = camera.get_ray(corner_u, corner_v);
+            let color = ray_color(
+                &ray,
+                world,
+                lights,
+                ambient,
+                fog,
+                camera_pos,
+                background_color,
+                materials,
+                self.max_depth,
+            );
+            
+            // Cache the result
+            {
+                let mut cache = corner_cache.lock().unwrap();
+                cache.insert(key, color);
+            }
+            
+            color
+        };
+
+        // Create a vector of all pixel coordinates
+        let pixels: Vec<(u32, u32)> = (0..self.height)
+            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+            .collect();
+
+        // Progress tracking setup
+        let total_pixels = self.width * self.height;
+        let progress_step = (total_pixels / 10).max(1);
+
+        // Render pixels in parallel
+        pixels
+            .par_iter()
+            .enumerate()
+            .map(|(pixel_index, &(x, y))| {
+                // Calculate center sample coordinates
+                let pixel_center_u = (x as f64 + 0.5) * pixel_width;
+                let pixel_center_v = 1.0 - (y as f64 + 0.5) * pixel_height; // Flip Y coordinate
+
+                // Center sample
+                let center_ray = camera.get_ray(pixel_center_u, pixel_center_v);
+                let center_color = ray_color(
+                    &center_ray,
+                    world,
+                    lights,
+                    ambient,
+                    fog,
+                    camera_pos,
+                    background_color,
+                    materials,
+                    self.max_depth,
+                );
+
+                // Get corner samples (these are shared between neighboring pixels)
+                // Corner positions are at pixel grid intersections
+                let corner_colors = [
+                    get_corner_sample(x, y, corner_cache.clone(), world, camera),               // Top-left corner
+                    get_corner_sample(x + 1, y, corner_cache.clone(), world, camera),         // Top-right corner
+                    get_corner_sample(x, y + 1, corner_cache.clone(), world, camera),         // Bottom-left corner
+                    get_corner_sample(x + 1, y + 1, corner_cache.clone(), world, camera),     // Bottom-right corner
+                ];
+
+                // Average center + 4 corner samples (true quincunx pattern)
+                let total_color = center_color + corner_colors[0] + corner_colors[1] + corner_colors[2] + corner_colors[3];
+                let color = total_color / 5.0;
 
                 // Print progress periodically (note: this might be out of order due to parallelism)
                 if pixel_index % progress_step as usize == 0 {
@@ -377,7 +503,7 @@ mod tests {
         assert_eq!(renderer.height, 600);
         assert_eq!(renderer.thread_count, None);
         assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
-        assert_eq!(renderer.samples, 5); // Default for quincunx
+        assert_eq!(renderer.samples, 1); // Default for quincunx with shared samples
 
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
@@ -491,34 +617,18 @@ mod tests {
             intensity: 1.0,
         });
 
-        // Test quincunx mode with 5 samples (default)
+        // Test quincunx mode with default samples
         let renderer = Renderer::new(50, 50);
         assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
-        assert_eq!(renderer.samples, 5);
+        assert_eq!(renderer.samples, 1);
         let result = renderer.render(&scene);
         assert!(result.is_ok());
-    }
 
-    #[test]
-    fn test_quincunx_wrong_samples_error() {
-        let mut scene = Scene::default();
-
-        // Add a simple sphere
-        scene.objects.push(Object::Sphere {
-            center: [0.0, 0.0, 0.0],
-            radius: 1.0,
-            material: Material::default(),
-        });
-
-        let mut renderer = Renderer::new(10, 10);
-        renderer.anti_aliasing_mode = AntiAliasingMode::Quincunx;
-        renderer.samples = 4; // Wrong number for quincunx
-        let result = renderer.render(&scene);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Quincunx anti-aliasing requires exactly 5 samples"));
+        // Test quincunx mode with custom samples  
+        let mut renderer2 = Renderer::new(50, 50);
+        renderer2.samples = 4;
+        let result = renderer2.render(&scene);
+        assert!(result.is_ok());
     }
 
     #[test]

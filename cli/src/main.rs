@@ -56,17 +56,7 @@ fn main() {
     };
 
     // Determine sample count based on mode and user input
-    let samples = match anti_aliasing_mode {
-        AntiAliasingMode::Quincunx => {
-            if let Some(samples) = args.samples {
-                if samples != 5 {
-                    eprintln!("Warning: Quincunx anti-aliasing requires exactly 5 samples, overriding --samples {} with 5", samples);
-                }
-            }
-            5
-        }
-        _ => args.samples.unwrap_or(1), // Default to 1 sample for other modes
-    };
+    let samples = args.samples.unwrap_or(1); // Default to 1 sample for all modes
 
     // Validate samples parameter
     if samples == 0 {
