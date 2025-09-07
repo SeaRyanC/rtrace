@@ -6,22 +6,36 @@ This comprehensive guide covers all features and options available in the rtrace
 
 1. [Command Line Interface](#command-line-interface)
 2. [Scene Format Overview](#scene-format-overview)
-3. [Camera Settings](#camera-settings)
+
+### Scene Configuration
+3. [Camera](#camera)
+   - [Orthographic Camera](#orthographic-camera)
+   - [Perspective Camera](#perspective-camera)
+   - [Grid Background](#grid-background)
 4. [Objects](#objects)
    - [Sphere](#sphere)
    - [Plane](#plane)
-   - [Cube](#cube)  
+   - [Cube](#cube)
    - [Mesh (STL)](#mesh-stl)
 5. [Materials](#materials)
-   - [Basic Material Properties](#basic-material-properties)
+   - [Basic Properties](#basic-properties)
    - [Reflectivity](#reflectivity)
    - [Textures](#textures)
 6. [Lighting](#lighting)
+   - [Point Lights](#point-lights)
+   - [Area Lights](#area-lights)
+
+### Rendering Configuration
 7. [Scene Settings](#scene-settings)
    - [Ambient Illumination](#ambient-illumination)
    - [Background Color](#background-color)
    - [Fog Effects](#fog-effects)
-8. [Stochastic Subsampling](#stochastic-subsampling)
+8. [Anti-Aliasing](#anti-aliasing)
+   - [Quincunx](#quincunx)
+   - [Stochastic](#stochastic)
+   - [No Jitter](#no-jitter)
+
+### Advanced Topics
 9. [Deterministic Rendering](#deterministic-rendering)
 10. [Examples](#examples)
 
@@ -77,9 +91,9 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 
 ## Scene Format Overview
 
-Scenes are defined in JSON format following a specific schema. Every scene requires four main sections:
+Scenes are defined in JSON format. Every scene requires four main sections:
 
-```json
+```jsonc
 {
   "camera": { /* Camera configuration */ },
   "objects": [ /* Array of objects in the scene */ ],
@@ -90,13 +104,15 @@ Scenes are defined in JSON format following a specific schema. Every scene requi
 
 ---
 
-## Camera Settings
+## Camera
 
-rtrace supports both orthographic and perspective projection cameras.
+The camera determines the view and perspective of your scene. rtrace supports orthographic and perspective cameras, each with different properties and use cases.
 
 ### Orthographic Camera
 
-```json
+Orthographic cameras provide parallel projection with no perspective distortion - useful for technical drawings and architectural views.
+
+```jsonc
 {
   "camera": {
     "kind": "ortho",
@@ -121,11 +137,11 @@ rtrace supports both orthographic and perspective projection cameras.
 | `grid_color` | string (optional) | Hex color for grid lines (e.g., "#444444") |
 | `grid_thickness` | number (optional) | Thickness of grid lines in world units |
 
-### Orthographic Grid Background
+### Grid Background
 
-Orthographic cameras support an optional grid background that renders world-coordinate grid lines when rays miss all objects. The grid appears on the world coordinate planes (XY, XZ, and YZ) centered at the origin.
+Orthographic cameras can display coordinate grid lines in the background when rays miss all objects. This feature helps with spatial reference and technical drawings.
 
-```json
+```jsonc
 {
   "camera": {
     "kind": "ortho",
@@ -134,9 +150,9 @@ Orthographic cameras support an optional grid background that renders world-coor
     "up": [0, 1, 0], 
     "width": 8,
     "height": 6,
-    "grid_pitch": 1.0,
-    "grid_color": "#444444",
-    "grid_thickness": 0.05
+    "grid_pitch": 1.0,      // Distance between grid lines
+    "grid_color": "#444444", // Grid line color
+    "grid_thickness": 0.05   // Line thickness in world units
   }
 }
 ```
@@ -146,15 +162,17 @@ Orthographic cameras support an optional grid background that renders world-coor
 - `grid_color`: Color of the grid lines in hex format
 - `grid_thickness`: Width of the grid lines in world units
 
-All three grid properties must be specified for the grid to appear. Grid backgrounds only work with orthographic cameras.
+All three grid properties must be specified for the grid to appear. Grid backgrounds only work with orthographic cameras and appear on the world coordinate planes (XY, XZ, and YZ) centered at the origin.
 
-**Example:** Orthographic scene with grid background
+**Example:** Technical drawing with coordinate grid
 
 ![Orthographic Grid](../examples/ortho_grid_demo_800x600.png)
 
 ### Perspective Camera
 
-```json
+Perspective cameras provide realistic 3D viewing with depth perspective, similar to how human eyes see the world.
+
+```jsonc
 {
   "camera": {
     "kind": "perspective",
@@ -178,21 +196,17 @@ All three grid properties must be specified for the grid to appear. Grid backgro
 | `height` | number | Viewport height in world units |
 | `fov` | number | Field of view angle in degrees |
 
-**Example:** Basic orthographic camera setup
-
-![Camera Setup](images/camera-basic.png)
-
 ---
 
 ## Objects
 
-rtrace supports four types of geometric objects: spheres, planes, cubes, and triangle meshes from STL files.
+Objects define the 3D geometry in your scene. rtrace supports four types of objects: spheres, planes, cubes, and triangle meshes from STL files.
 
 ### Sphere
 
-Spheres are defined by a center point and radius.
+Spheres are perfect for creating balls, planets, or any round object.
 
-```json
+```jsonc
 {
   "kind": "sphere",
   "center": [0, 0, 0],
@@ -201,22 +215,15 @@ Spheres are defined by a center point and radius.
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `kind` | string | Must be `"sphere"` |
-| `center` | [x, y, z] | Sphere center position |
-| `radius` | number | Sphere radius (must be positive) |
-| `material` | object | Material properties (see Materials section) |
-
 **Example:** Simple red sphere
 
 ![Simple Sphere](images/object-sphere.png)
 
 ### Plane
 
-Infinite planes defined by a point and normal vector.
+Infinite flat surfaces, perfect for ground, walls, or any flat surface in your scene.
 
-```json
+```jsonc
 {
   "kind": "plane",
   "point": [0, -2, 0],
@@ -225,22 +232,15 @@ Infinite planes defined by a point and normal vector.
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `kind` | string | Must be `"plane"` |
-| `point` | [x, y, z] | Any point on the plane |
-| `normal` | [x, y, z] | Plane normal vector |
-| `material` | object | Material properties |
-
-**Example:** Horizontal plane with grid texture
+**Example:** Textured ground plane
 
 ![Plane with Grid](images/object-plane-grid.png)
 
 ### Cube
 
-Axis-aligned rectangular boxes defined by center and dimensions.
+Rectangular boxes aligned with coordinate axes, ideal for buildings, containers, or geometric shapes.
 
-```json
+```jsonc
 {
   "kind": "cube",
   "center": [0, 0, 0],
@@ -249,22 +249,15 @@ Axis-aligned rectangular boxes defined by center and dimensions.
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `kind` | string | Must be `"cube"` |
-| `center` | [x, y, z] | Cube center position |
-| `size` | [w, h, d] | Width, height, and depth dimensions |
-| `material` | object | Material properties |
-
 **Example:** Blue cube
 
 ![Simple Cube](images/object-cube.png)
 
 ### Mesh (STL)
 
-Triangle meshes loaded from STL files (ASCII or binary format).
+Complex 3D models from STL files (ASCII or binary format), perfect for importing detailed geometry.
 
-```json
+```jsonc
 {
   "kind": "mesh",
   "filename": "models/example.stl",
@@ -272,13 +265,7 @@ Triangle meshes loaded from STL files (ASCII or binary format).
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `kind` | string | Must be `"mesh"` |
-| `filename` | string | Path to STL file |
-| `material` | object | Material properties |
-
-**Example:** Complex mesh model
+**Example:** STL mesh model
 
 ![STL Mesh](images/object-mesh.png)
 
@@ -286,29 +273,23 @@ Triangle meshes loaded from STL files (ASCII or binary format).
 
 ## Materials
 
-Materials define how objects interact with light and their visual appearance.
+Materials define how objects appear and interact with light in your scene.
 
-### Basic Material Properties
+### Basic Properties
 
-```json
+Every material needs basic color and lighting properties:
+
+```jsonc
 {
   "material": {
-    "color": "#FF4444",
-    "ambient": 0.1,
-    "diffuse": 0.8,
-    "specular": 0.4,
-    "shininess": 32
+    "color": "#FF4444",      // Base color as hex string
+    "ambient": 0.1,          // How much ambient light to reflect (0.0-1.0)
+    "diffuse": 0.8,          // How much direct light to scatter (0.0-1.0)
+    "specular": 0.4,         // How much light to reflect as highlights (0.0-1.0)
+    "shininess": 32          // Size of highlights (higher = smaller, sharper)
   }
 }
 ```
-
-| Property | Type | Range | Description |
-|----------|------|-------|-------------|
-| `color` | string | - | Base color as hex string (e.g., "#FF0000") |
-| `ambient` | number | 0.0-1.0 | Ambient light reflection coefficient |
-| `diffuse` | number | 0.0-1.0 | Diffuse light reflection coefficient |
-| `specular` | number | 0.0-1.0 | Specular light reflection coefficient |
-| `shininess` | number | ≥1 | Phong exponent for specular highlights |
 
 **Example:** Material property comparison
 
@@ -316,9 +297,9 @@ Materials define how objects interact with light and their visual appearance.
 
 ### Reflectivity
 
-Optional mirror-like reflections for surfaces.
+Add mirror-like reflections to create realistic shiny surfaces:
 
-```json
+```jsonc
 {
   "material": {
     "color": "#CCCCCC",
@@ -326,14 +307,10 @@ Optional mirror-like reflections for surfaces.
     "diffuse": 0.3,
     "specular": 0.8,
     "shininess": 100,
-    "reflectivity": 0.7
+    "reflectivity": 0.7      // Reflection strength (0.0=no reflection, 1.0=perfect mirror)
   }
 }
 ```
-
-| Property | Type | Range | Description |
-|----------|------|-------|-------------|
-| `reflectivity` | number | 0.0-1.0 | Reflection strength (0=no reflection, 1=perfect mirror) |
 
 **Example:** Reflective spheres
 
@@ -341,9 +318,9 @@ Optional mirror-like reflections for surfaces.
 
 ### Textures
 
-Currently supports grid patterns for planes.
+Add patterns to surfaces. Currently supports grid patterns for planes:
 
-```json
+```jsonc
 {
   "material": {
     "color": "#FFFFFF",
@@ -352,23 +329,24 @@ Currently supports grid patterns for planes.
     "specular": 0.1,
     "shininess": 10,
     "texture": {
-      "type": "grid",
-      "line_color": "#333333",
-      "line_width": 0.1,
-      "cell_size": 1.0
+      "type": "grid",           // Pattern type
+      "line_color": "#333333",  // Grid line color
+      "line_width": 0.1,        // Grid line thickness in world units
+      "cell_size": 1.0          // Size of each grid cell
     }
   }
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `type` | string | Texture type, must be `"grid"` |
-| `line_color` | string | Grid line color as hex string |
-| `line_width` | number | Grid line thickness in world units |
-| `cell_size` | number | Size of each grid cell in world units |
+**Example:** Different material configurations
 
-**Example:** Different grid patterns
+![Material Properties](images/material-properties.png)
+
+**Example:** Reflective surfaces
+
+![Reflectivity](images/material-reflectivity.png)
+
+**Example:** Grid texture patterns
 
 ![Grid Textures](images/texture-grid-variations.png)
 
@@ -376,76 +354,52 @@ Currently supports grid patterns for planes.
 
 ## Lighting
 
-rtrace supports both point lights and diffuse (area) lights for different lighting effects.
+Lighting determines how your scene is illuminated. rtrace supports two types of light sources with different visual characteristics.
 
 ### Point Lights
 
-Traditional point light sources with sharp shadows and fast rendering.
+Traditional point lights create sharp shadows and fast rendering:
 
-```json
+```jsonc
 {
   "lights": [
     {
-      "position": [3, 3, 5],
-      "color": "#FFFFFF", 
-      "intensity": 1.0
+      "position": [3, 3, 5],    // Light position in 3D space
+      "color": "#FFFFFF",       // Light color
+      "intensity": 1.0          // Light brightness (≥0)
     }
   ]
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `position` | [x, y, z] | Light position in 3D space |
-| `color` | string | Light color as hex string |
-| `intensity` | number | Light intensity multiplier (≥0) |
+### Area Lights
 
-### Diffuse (Area) Lights
+Area lights simulate realistic light sources with soft shadows:
 
-Area light sources that create soft shadows and realistic lighting by simulating light sources with physical size.
-
-```json
+```jsonc
 {
   "lights": [
     {
       "position": [2, 4, 3],
       "color": "#FFFFFF",
       "intensity": 1.0,
-      "diameter": 2.0
+      "diameter": 2.0           // Light disk size (omit for point light)
     }
   ]
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `position` | [x, y, z] | Light position in 3D space |
-| `color` | string | Light color as hex string |
-| `intensity` | number | Light intensity multiplier (≥0) |
-| `diameter` | number (optional) | Light disk diameter. If omitted or null, behaves as point light |
+**Light Type Comparison:**
+- **Point lights** (`diameter` omitted): Sharp shadows, fast rendering
+- **Area lights** (`diameter` > 0): Soft shadows, realistic lighting, slower rendering
 
-#### Light Type Comparison
-
-- **Point lights** (`diameter` omitted or null): Sharp shadows, fast rendering (1 shadow ray per pixel)
-- **Diffuse lights** (`diameter > 0`): Soft shadows, slower rendering (16 shadow rays per pixel)
-
-#### Visual Effects
-
-Diffuse lights create several realistic lighting phenomena:
-- **Soft shadows**: Shadow edges fade gradually from dark to light areas
-- **Contact shadows**: Areas near object contact points have sharper shadows  
-- **Penumbra effects**: Natural shadow falloff similar to real-world lighting
-- **Area lighting**: Objects receive illumination from multiple directions
-
-#### Performance Considerations
-
-Diffuse lights require 16x more shadow ray calculations than point lights. Use sparingly for optimal performance, or consider fewer samples for preview renders.
+Area lights create natural shadow falloff and contact shadows similar to real-world lighting, but require more processing time.
 
 **Example:** Multiple colored lights
 
 ![Multiple Lights](images/lighting-multiple.png)
 
-**Example:** Diffuse light comparison showing soft vs. sharp shadows
+**Example:** Soft shadows from area lights
 
 ![Diffuse Light Demo](images/diffuse_light_demo.png)
 
@@ -453,36 +407,31 @@ Diffuse lights require 16x more shadow ray calculations than point lights. Use s
 
 ## Scene Settings
 
-Global settings that affect the entire scene.
+Global settings that affect the overall appearance of your rendered scene.
 
 ### Ambient Illumination
 
-Base lighting that affects all surfaces uniformly.
+Base lighting that illuminates all surfaces uniformly, preventing completely dark shadows:
 
-```json
+```jsonc
 {
   "scene_settings": {
     "ambient_illumination": {
-      "color": "#FFFFFF",
-      "intensity": 0.1
+      "color": "#FFFFFF",       // Ambient light color
+      "intensity": 0.1          // Ambient light strength (≥0)
     }
   }
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `color` | string | Ambient light color as hex string |
-| `intensity` | number | Ambient light intensity (≥0) |
-
 ### Background Color
 
-Color displayed for rays that don't hit any objects.
+Color displayed when rays don't hit any objects:
 
-```json
+```jsonc
 {
   "scene_settings": {
-    "background_color": "#001122"
+    "background_color": "#001122"  // Background color in hex format
   }
 }
 ```
@@ -495,27 +444,22 @@ Color displayed for rays that don't hit any objects.
 
 ### Fog Effects
 
-Atmospheric fog with linear falloff.
+Atmospheric fog adds depth and realism to your scenes:
 
-```json
+```jsonc
 {
   "scene_settings": {
     "fog": {
-      "color": "#DDDDDD",
-      "density": 0.1,
-      "start": 2.0,
-      "end": 10.0
+      "color": "#DDDDDD",       // Fog color
+      "density": 0.1,           // Fog thickness (≥0)
+      "start": 2.0,             // Distance where fog begins
+      "end": 10.0               // Distance of maximum fog density
     }
   }
 }
 ```
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `color` | string | Fog color as hex string |
-| `density` | number | Fog density factor (≥0) |
-| `start` | number | Distance where fog begins |
-| `end` | number | Distance where fog reaches maximum density |
+Fog creates a linear falloff between the start and end distances, making distant objects appear hazier.
 
 **Example:** Fog density comparison
 
@@ -527,73 +471,56 @@ Atmospheric fog with linear falloff.
 
 ## Anti-Aliasing
 
-rtrace supports three different anti-aliasing methods for controlling image quality and edge smoothness:
+Anti-aliasing reduces jagged edges and improves image quality by taking multiple samples per pixel.
 
-### Anti-Aliasing Methods
+### Quincunx
 
-1. **Quincunx (default)**: Deterministic 5-sample pattern with center + 4 corners for high-quality anti-aliasing
-2. **Stochastic**: Random jittered sampling with configurable sample counts
-3. **No Jitter**: Deterministic center-pixel sampling with no anti-aliasing
-
-### How Each Method Works
-
-- **Quincunx**: Casts 5 rays per pixel in a fixed pattern: one at the center and four at the corners (±0.25 pixel offset). Provides consistent, high-quality anti-aliasing with deterministic results.
-- **Stochastic**: Uses random jittering within pixel bounds. Single sample mode uses random offset, multi-sample mode uses radially symmetric patterns with random phase.
-- **No Jitter**: Casts one ray per pixel at the exact center of each pixel - completely deterministic with no anti-aliasing
-- **Color Averaging**: When using multiple samples, all samples for each pixel are averaged to produce the final color
-
-### Usage Examples
+The default method uses 5 samples per pixel in a cross pattern for high-quality, predictable results:
 
 ```bash
-# Quincunx anti-aliasing (default, deterministic)
+# Default quincunx anti-aliasing (recommended)
 ./target/release/rtrace -i scene.json -o output.png --anti-aliasing quincunx
-
-# No anti-aliasing (fastest, deterministic)
-./target/release/rtrace -i scene.json -o no_aa.png --anti-aliasing no-jitter
-
-# Stochastic anti-aliasing with 1 sample
-./target/release/rtrace -i scene.json -o stochastic1.png --anti-aliasing stochastic --samples 1
-
-# Stochastic anti-aliasing with 4 samples per pixel
-./target/release/rtrace -i scene.json -o stochastic4.png --anti-aliasing stochastic --samples 4
-
-# High quality stochastic rendering with 16 samples
-./target/release/rtrace -i scene.json -o stochastic16.png --anti-aliasing stochastic --samples 16
 ```
 
-### Performance Impact
+### Stochastic  
 
-Different anti-aliasing modes have different performance characteristics:
-- **No Jitter**: Fastest, completely deterministic, may show aliasing (1x render time)
-- **Quincunx** (default): High quality deterministic anti-aliasing (5x render time)
-- **Stochastic (1 sample)**: Fast with basic randomized anti-aliasing (1x render time)  
-- **Stochastic (4 samples)**: Good balance of quality and speed (4x render time)
-- **Stochastic (16 samples)**: Highest quality, slowest (16x render time)
+Random sampling with configurable sample counts for flexible quality control:
 
-### Visual Comparison
+```bash
+# Stochastic with 4 samples per pixel
+./target/release/rtrace -i scene.json -o output.png --anti-aliasing stochastic --samples 4
 
-The difference is most noticeable on edges and fine details. Here's the same scene rendered with three different approaches:
+# High quality with 16 samples
+./target/release/rtrace -i scene.json -o output.png --anti-aliasing stochastic --samples 16
+```
+
+### No Jitter
+
+Single sample per pixel with no anti-aliasing - fastest rendering but may show jagged edges:
+
+```bash
+# No anti-aliasing (fastest)
+./target/release/rtrace -i scene.json -o output.png --anti-aliasing no-jitter
+```
+
+**Performance Comparison:**
+- **No Jitter**: Fastest (1x), predictable results, may show aliasing
+- **Quincunx**: High quality (5x), predictable results
+- **Stochastic**: Flexible quality (1x to 16x+), randomized results
+
+**Visual Comparison:**
 
 | No Anti-Aliasing | Quincunx (default) | Stochastic (4 samples) |
 |:-----------------:|:------------------:|:----------------------:|
 | ![No Anti-Aliasing](images/sampling-comparison-no-jitter.png) | ![Quincunx](images/sampling-comparison-quincunx.png) | ![4 Samples](images/sampling-comparison-4samples.png) |
 
-**Scene:** Complex geometry with grid textures and perspective camera demonstrates the effect of different anti-aliasing approaches on object edges and texture boundaries. Notice how:
-- **No anti-aliasing** produces sharp, aliased edges but is fastest and completely reproducible
-- **Quincunx** (default) provides high-quality deterministic anti-aliasing with smooth edges
-- **Stochastic sampling** offers flexible quality control but with randomized results
+The difference is most noticeable on edges and fine details - anti-aliasing provides smoother, more professional-looking results.
 
-### Anti-Aliasing Comparison
+**Basic Comparison:**
 
-Here's a simpler comparison showing the fundamental difference between no anti-aliasing and anti-aliasing:
-
-| No Anti-Aliasing | Quincunx Anti-Aliasing (default) |
-|:----------------:|:--------------------------------:|
+| No Anti-Aliasing | With Anti-Aliasing |
+|:----------------:|:------------------:|
 | ![No Anti-Aliasing](images/sampling-antialiasing-nosamples.png) | ![Anti-Aliasing](images/sampling-antialiasing.png) |
-
-This comparison clearly shows:
-- **Left (--anti-aliasing no-jitter)**: No anti-aliasing with visible aliasing on object edges but fastest rendering
-- **Right (--anti-aliasing quincunx)**: Quincunx anti-aliasing produces smooth, high-quality edges with deterministic results
 
 ---
 
@@ -601,9 +528,9 @@ This comparison clearly shows:
 
 ### Complete Scene Example
 
-Here's a comprehensive scene demonstrating multiple features:
+Here's a comprehensive scene demonstrating multiple features working together:
 
-```json
+```jsonc
 {
   "camera": {
     "kind": "ortho",
@@ -615,6 +542,7 @@ Here's a comprehensive scene demonstrating multiple features:
   },
   "objects": [
     {
+      // Red sphere with basic material
       "kind": "sphere",
       "center": [-2, 1, 0],
       "radius": 1.0,
@@ -627,6 +555,7 @@ Here's a comprehensive scene demonstrating multiple features:
       }
     },
     {
+      // Blue reflective cube
       "kind": "cube", 
       "center": [2, 0, 0],
       "size": [1.5, 1.5, 1.5],
@@ -640,6 +569,7 @@ Here's a comprehensive scene demonstrating multiple features:
       }
     },
     {
+      // Ground plane with grid texture
       "kind": "plane",
       "point": [0, -2, 0],
       "normal": [0, 1, 0],
@@ -660,11 +590,13 @@ Here's a comprehensive scene demonstrating multiple features:
   ],
   "lights": [
     {
+      // Main white light
       "position": [3, 4, 5],
       "color": "#FFFFFF",
       "intensity": 1.0
     },
     {
+      // Secondary warm light
       "position": [-3, 2, 3],
       "color": "#FFAAAA", 
       "intensity": 0.6
@@ -686,179 +618,40 @@ Here's a comprehensive scene demonstrating multiple features:
 }
 ```
 
-**Result:** Complete scene with multiple features
+**Result:** Complete scene with sphere, cube, textured plane, multiple lights, and fog
 
 ![Complete Example](images/example-complete.png)
 
-### Orthographic Grid Background Examples
-
-The following examples demonstrate the orthographic camera grid background feature:
-
-#### Basic Grid Background
-
-```json
-{
-  "camera": {
-    "kind": "ortho",
-    "position": [3, 3, 8],
-    "target": [0, 0, 0],
-    "up": [0, 1, 0],
-    "width": 8,
-    "height": 6,
-    "grid_pitch": 1.0,
-    "grid_color": "#444444",
-    "grid_thickness": 0.05
-  },
-  "objects": [
-    {
-      "kind": "sphere",
-      "center": [1, 1, 0],
-      "radius": 0.5,
-      "material": {
-        "color": "#FF4444",
-        "ambient": 0.1,
-        "diffuse": 0.8,
-        "specular": 0.4,
-        "shininess": 64
-      }
-    },
-    {
-      "kind": "cube", 
-      "center": [-1, -1, 0],
-      "size": [0.8, 0.8, 0.8],
-      "material": {
-        "color": "#4444FF",
-        "ambient": 0.1,
-        "diffuse": 0.8,
-        "specular": 0.4,
-        "shininess": 64
-      }
-    }
-  ],
-  "lights": [
-    {
-      "position": [3, 3, 5],
-      "color": "#FFFFFF",
-      "intensity": 1.0
-    }
-  ],
-  "scene_settings": {
-    "ambient_illumination": {
-      "color": "#FFFFFF",
-      "intensity": 0.1
-    },
-    "background_color": "#001122"
-  }
-}
-```
-
-![Orthographic Grid Demo](../examples/ortho_grid_demo_800x600.png)
-
-#### Fine Grid with Different Parameters
-
-```json
-{
-  "camera": {
-    "kind": "ortho",
-    "position": [0, 0, 8],
-    "target": [0, 0, 0],
-    "up": [0, 1, 0],
-    "width": 6,
-    "height": 6,
-    "grid_pitch": 0.5,
-    "grid_color": "#00FF00", 
-    "grid_thickness": 0.02
-  }
-  // ... rest of scene
-}
-```
-
-![Fine Grid Demo](../examples/fine_grid_demo_800x600.png)
-
-#### Side View with Grid
-
-```json
-{
-  "camera": {
-    "kind": "ortho",
-    "position": [5, 0, 0],
-    "target": [0, 0, 0],
-    "up": [0, 0, 1],
-    "width": 8,
-    "height": 6,
-    "grid_pitch": 2.0,
-    "grid_color": "#FFFFFF",
-    "grid_thickness": 0.1
-  }
-  // ... rest of scene  
-}
-```
-
-![Side View Grid](../examples/side_view_grid_800x600.png)
+This example demonstrates:
+- Multiple object types (sphere, cube, plane)
+- Different materials (basic, reflective, textured)
+- Multiple light sources with different colors
+- Atmospheric fog for depth
+- Orthographic camera with good framing
 
 ---
 
 ## Deterministic Rendering
 
-The ray tracer ensures **deterministic, reproducible results** by using deterministic randomness for all stochastic operations. This means that the same input scene will always produce byte-for-byte identical output images, regardless of hardware or thread count.
-
-### How It Works
-
-All randomness in the ray tracer is controlled by deterministic seeding:
-
-- **Anti-aliasing sampling**: Each pixel gets a unique deterministic seed based on coordinates
-- **Area light sampling**: Hit points generate consistent random sequences for soft shadows
-- **Thread-safe**: Results are independent of thread scheduling or execution order
-
-### Usage
-
-The ray tracer produces deterministic results by default:
-
-```bash
-# Always produces identical results
-./rtrace --input scene.json --output render1.png
-./rtrace --input scene.json --output render2.png
-# render1.png and render2.png are byte-for-byte identical
-```
+rtrace produces **consistent, reproducible results** - the same scene will always generate identical images, making it perfect for version control, collaboration, and reliable output.
 
 ### Benefits
 
-- **Reproducible renders**: Perfect for version control, debugging, and collaboration
-- **Consistent results**: Same scene always produces same output across systems
-- **Reliable output**: Eliminates randomness-related inconsistencies
+- **Reproducible renders**: Perfect for version control and debugging
+- **Consistent results**: Same scene always produces same output across different systems
 - **Thread-independent**: Results don't depend on CPU core count or scheduling
+- **Reliable testing**: Eliminates randomness-related inconsistencies
 
-### Anti-aliasing Modes
+### Usage
 
-All anti-aliasing modes are deterministic:
-
-- **Quincunx** (default): 5 samples per pixel (center + 4 corners), shared between adjacent pixels
-- **Stochastic**: Random jittered sampling within pixel bounds, configurable sample count
-- **No-jitter**: Single center sample per pixel, fastest rendering
+All rendering is deterministic by default:
 
 ```bash
-# Deterministic stochastic sampling with 16 samples per pixel
-./rtrace --input scene.json --output high_quality.png --anti-aliasing stochastic --samples 16
-
-# Deterministic quincunx (default)
-./rtrace --input scene.json --output default.png
-
-# No randomness needed
-./rtrace --input scene.json --output clean.png --anti-aliasing no-jitter
+# These commands always produce identical results
+./target/release/rtrace --input scene.json --output render1.png
+./target/release/rtrace --input scene.json --output render2.png
+# render1.png and render2.png are byte-for-byte identical
 ```
 
----
+This applies to all anti-aliasing modes, including stochastic sampling - even "random" sampling uses controlled randomness for predictable results.
 
-## Building and Rendering Documentation Images
-
-To generate all documentation images, use the hereby tasks:
-
-```bash
-# Render all documentation examples
-npm run doc:render
-
-# Build CLI first if needed
-npm run build:cli
-```
-
-The generated images follow the naming convention: `doc/images/feature-description.png`
