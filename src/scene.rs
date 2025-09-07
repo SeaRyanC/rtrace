@@ -38,6 +38,10 @@ pub struct Camera {
     pub width: f64,
     pub height: f64,
     pub fov: Option<f64>, // field of view in degrees for perspective cameras
+    // Grid background options for orthographic cameras
+    pub grid_pitch: Option<f64>, // Distance between grid lines
+    pub grid_color: Option<String>, // Hex color for grid lines
+    pub grid_thickness: Option<f64>, // Thickness of grid lines
 }
 
 impl Default for Camera {
@@ -50,6 +54,9 @@ impl Default for Camera {
             width: 10.0,
             height: 10.0,
             fov: None,
+            grid_pitch: None,
+            grid_color: None,
+            grid_thickness: None,
         }
     }
 }

@@ -1,0 +1,41 @@
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [0, 0, 8],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 6,
+    "height": 6,
+    "grid_pitch": 0.5,
+    "grid_color": "#00FF00",
+    "grid_thickness": 0.02
+  },
+  "objects": [
+    {
+      "kind": "sphere",
+      "center": [0.75, 0.75, 0],
+      "radius": 0.25,
+      "material": {
+        "color": "#FFAA00",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 64
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [2, 2, 5],
+      "color": "#FFFFFF",
+      "intensity": 1.0
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.1
+    },
+    "background_color": "#000033"
+  }
+}

@@ -294,6 +294,34 @@ pub fn ray_color(
     materials: &std::collections::HashMap<usize, Material>,
     max_depth: i32,
 ) -> Color {
+    ray_color_with_camera(
+        ray,
+        world,
+        lights,
+        ambient,
+        fog,
+        camera_pos,
+        background_color,
+        materials,
+        max_depth,
+        None,
+    )
+}
+
+/// Main ray color calculation with optional camera for grid background
+#[allow(clippy::too_many_arguments)]
+pub fn ray_color_with_camera(
+    ray: &Ray,
+    world: &World,
+    lights: &[Light],
+    ambient: &AmbientIllumination,
+    fog: &Option<Fog>,
+    camera_pos: &Point,
+    background_color: Color,
+    materials: &std::collections::HashMap<usize, Material>,
+    max_depth: i32,
+    camera: Option<&crate::camera::Camera>,
+) -> Color {
     if max_depth <= 0 {
         return Color::new(0.0, 0.0, 0.0);
     }
@@ -322,7 +350,7 @@ pub fn ray_color(
                     *reflect_dir.as_ref(),
                 );
 
-                let reflected_color = ray_color(
+                let reflected_color = ray_color_with_camera(
                     &reflect_ray,
                     world,
                     lights,
@@ -332,6 +360,7 @@ pub fn ray_color(
                     background_color,
                     materials,
                     max_depth - 1,
+                    camera,
                 );
 
                 color = color * (1.0 - reflectivity) + reflected_color * reflectivity;
@@ -340,6 +369,12 @@ pub fn ray_color(
 
         color
     } else {
+        // Ray missed all objects - check for grid background if camera is orthographic
+        if let Some(camera) = camera {
+            if let Some(grid_color) = camera.get_grid_color(ray) {
+                return grid_color;
+            }
+        }
         background_color
     }
 }
