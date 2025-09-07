@@ -215,6 +215,8 @@ const docSceneFiles = [
     "material-properties.json",
     "material-reflectivity.json",
     "texture-grid-variations.json",
+    "checkerboard-basic.json",
+    "checkerboard-advanced.json",
     "lighting-multiple.json",
     "sampling-antialiasing.json",
     "example-complete.json"
@@ -327,6 +329,8 @@ export const renderDocObjectMesh = docRenderTasks.renderDocObjectMesh;
 export const renderDocMaterialProperties = docRenderTasks.renderDocMaterialProperties;
 export const renderDocMaterialReflectivity = docRenderTasks.renderDocMaterialReflectivity;
 export const renderDocTextureGridVariations = docRenderTasks.renderDocTextureGridVariations;
+export const renderDocCheckerboardBasic = docRenderTasks.renderDocCheckerboardBasic;
+export const renderDocCheckerboardAdvanced = docRenderTasks.renderDocCheckerboardAdvanced;
 export const renderDocLightingMultiple = docRenderTasks.renderDocLightingMultiple;
 export const renderDocSamplingAntialiasing = docRenderTasks.renderDocSamplingAntialiasing;
 export const renderDocSamplingAntialiasingNosamples = docRenderTasks.renderDocSamplingAntialiasingNosamples;

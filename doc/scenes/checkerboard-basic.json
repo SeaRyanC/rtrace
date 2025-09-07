@@ -1,0 +1,55 @@
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [0, 4, 8],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 10,
+    "height": 10
+  },
+  "objects": [
+    {
+      "kind": "plane",
+      "point": [0, 0, 0],
+      "normal": [0, 1, 0],
+      "material": {
+        "color": "#FFFFFF",
+        "ambient": 0.2,
+        "diffuse": 0.8,
+        "specular": 0.1,
+        "shininess": 10,
+        "texture": {
+          "type": "checkerboard",
+          "material_a": {
+            "color": "#FFFFFF",
+            "ambient": 0.2,
+            "diffuse": 0.8,
+            "specular": 0.1,
+            "shininess": 10
+          },
+          "material_b": {
+            "color": "#333333",
+            "ambient": 0.2,
+            "diffuse": 0.8,
+            "specular": 0.1,
+            "shininess": 10
+          }
+        }
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [2, 4, 6],
+      "color": "#FFFFFF",
+      "intensity": 1.0
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.15
+    },
+    "background_color": "#4488CC"
+  }
+}
