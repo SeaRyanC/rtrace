@@ -1,5 +1,5 @@
 use crate::ray::Ray;
-use crate::scene::{Camera as CameraConfig, Point, Vec3};
+use crate::scene::{Camera as CameraConfig, Point, Vec3, Color, hex_to_color};
 use nalgebra::Unit;
 
 /// Camera implementation supporting both orthographic and perspective projection
@@ -12,6 +12,10 @@ pub struct Camera {
     pub view_direction: Unit<Vec3>,
     pub is_perspective: bool,
     pub focal_length: f64,
+    // Grid background configuration for orthographic cameras
+    pub grid_pitch: Option<f64>,
+    pub grid_color: Option<Color>,
+    pub grid_thickness: Option<f64>,
 }
 
 impl Camera {
@@ -21,6 +25,13 @@ impl Camera {
         let target = Point::new(config.target[0], config.target[1], config.target[2]);
         let up = Vec3::new(config.up[0], config.up[1], config.up[2]);
 
+        // Parse grid configuration
+        let grid_color = if let Some(color_str) = &config.grid_color {
+            Some(hex_to_color(color_str).map_err(|e| format!("Invalid grid color: {}", e))?)
+        } else {
+            None
+        };
+
         // Calculate camera coordinate system
         let w = Unit::new_normalize(origin - target); // Points away from target
         let u = Unit::new_normalize(up.cross(&w)); // Right vector
@@ -29,7 +40,7 @@ impl Camera {
 
         match config.kind.as_str() {
             "ortho" => {
-                Self::create_orthographic(origin, u, v, w, view_direction, config, aspect_ratio)
+                Self::create_orthographic(origin, u, v, w, view_direction, config, aspect_ratio, grid_color)
             }
             "perspective" => {
                 Self::create_perspective(origin, u, v, w, view_direction, config, aspect_ratio)
@@ -47,6 +58,7 @@ impl Camera {
         view_direction: Unit<Vec3>,
         config: &CameraConfig,
         aspect_ratio: f64,
+        grid_color: Option<Color>,
     ) -> Result<Self, String> {
         // Calculate viewport dimensions
         let viewport_height = config.height;
@@ -67,6 +79,9 @@ impl Camera {
             view_direction,
             is_perspective: false,
             focal_length: 0.0, // Not used for orthographic
+            grid_pitch: config.grid_pitch,
+            grid_color,
+            grid_thickness: config.grid_thickness,
         })
     }
 
@@ -115,6 +130,10 @@ impl Camera {
             view_direction,
             is_perspective: true,
             focal_length,
+            // Grid backgrounds not used for perspective cameras
+            grid_pitch: None,
+            grid_color: None,
+            grid_thickness: None,
         })
     }
 
@@ -227,5 +246,39 @@ mod tests {
         // Ray directions should be different (diverging)
         assert!((ray_center.direction.as_ref() - ray_left.direction.as_ref()).magnitude() > 1e-6);
         assert!((ray_center.direction.as_ref() - ray_right.direction.as_ref()).magnitude() > 1e-6);
+    }
+
+    #[test]
+    fn test_orthographic_camera_with_grid() {
+        let mut config = CameraConfig::default();
+        config.grid_pitch = Some(2.0);
+        config.grid_color = Some("#FF0000".to_string());
+        config.grid_thickness = Some(0.1);
+        
+        let camera = Camera::from_config(&config, 16.0 / 9.0).unwrap();
+
+        // Test that grid configuration is stored correctly
+        assert_eq!(camera.grid_pitch, Some(2.0));
+        assert!(camera.grid_color.is_some());
+        assert_eq!(camera.grid_thickness, Some(0.1));
+        assert!(!camera.is_perspective);
+    }
+
+    #[test]
+    fn test_perspective_camera_ignores_grid() {
+        let mut config = CameraConfig::default();
+        config.kind = "perspective".to_string();
+        config.fov = Some(45.0);
+        config.grid_pitch = Some(2.0);
+        config.grid_color = Some("#FF0000".to_string());
+        config.grid_thickness = Some(0.1);
+        
+        let camera = Camera::from_config(&config, 16.0 / 9.0).unwrap();
+
+        // Test that perspective cameras ignore grid configuration
+        assert_eq!(camera.grid_pitch, None);
+        assert_eq!(camera.grid_color, None);
+        assert_eq!(camera.grid_thickness, None);
+        assert!(camera.is_perspective);
     }
 }

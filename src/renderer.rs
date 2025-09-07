@@ -283,6 +283,7 @@ impl Renderer {
                         ambient,
                         fog,
                         camera_pos,
+                        &camera,
                         background_color,
                         materials,
                         self.max_depth,

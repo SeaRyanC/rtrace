@@ -45,6 +45,9 @@ impl AutoCamera {
             width: viewport_width,
             height: viewport_height,
             fov: None,
+            grid_pitch: None,
+            grid_color: None,
+            grid_thickness: None,
         }
     }
 
@@ -61,6 +64,9 @@ impl AutoCamera {
             width: viewport_width,
             height: viewport_height,
             fov: None,
+            grid_pitch: None,
+            grid_color: None,
+            grid_thickness: None,
         }
     }
 
@@ -77,6 +83,9 @@ impl AutoCamera {
             width: viewport_width,
             height: viewport_height,
             fov: None,
+            grid_pitch: None,
+            grid_color: None,
+            grid_thickness: None,
         }
     }
 
@@ -114,6 +123,9 @@ impl AutoCamera {
             width: 1.0,  // Not used for perspective cameras
             height: 1.0, // Not used for perspective cameras
             fov: Some(fov),
+            grid_pitch: None,
+            grid_color: None,
+            grid_thickness: None,
         })
     }
 }

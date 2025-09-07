@@ -1,4 +1,5 @@
 use crate::ray::{HitRecord, Ray, World};
+use crate::camera::Camera;
 use crate::scene::{
     hex_to_color, AmbientIllumination, Color, Fog, Light, Material, Point, Texture, Vec3,
 };
@@ -126,6 +127,72 @@ pub fn apply_fog(color: Color, fog: &Option<Fog>, distance: f64) -> Color {
     }
 }
 
+/// Calculate grid background for orthographic cameras
+fn calculate_grid_background(ray: &Ray, camera: &Camera, background_color: Color) -> Color {
+    let grid_pitch = camera.grid_pitch.unwrap();
+    let grid_color = camera.grid_color.unwrap();
+    let grid_thickness = camera.grid_thickness.unwrap_or(0.1); // Default thickness
+    
+    // For orthographic cameras, we need to find where the ray intersects a world plane
+    // We'll use the plane most perpendicular to the view direction
+    let view_dir = camera.view_direction.as_ref();
+    
+    // Choose the plane based on which axis the view direction is most aligned with
+    let abs_view = Vec3::new(view_dir.x.abs(), view_dir.y.abs(), view_dir.z.abs());
+    
+    let (plane_point, plane_normal, u_axis, v_axis) = if abs_view.z > abs_view.x && abs_view.z > abs_view.y {
+        // Looking mostly along Z axis, use XY plane (Z=0)
+        (Point::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0), Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, 0.0))
+    } else if abs_view.y > abs_view.x {
+        // Looking mostly along Y axis, use XZ plane (Y=0)  
+        (Point::new(0.0, 0.0, 0.0), Vec3::new(0.0, 1.0, 0.0), Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0))
+    } else {
+        // Looking mostly along X axis, use YZ plane (X=0)
+        (Point::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 1.0))
+    };
+    
+    // Calculate ray-plane intersection
+    let denom = ray.direction.dot(&plane_normal);
+    if denom.abs() < 1e-6 {
+        // Ray is parallel to plane, return background
+        return background_color;
+    }
+    
+    let t = (plane_point - ray.origin).dot(&plane_normal) / denom;
+    if t < 0.0 {
+        // Intersection is behind ray origin
+        return background_color;
+    }
+    
+    // Get intersection point
+    let intersection = ray.at(t);
+    
+    // Project intersection onto the 2D grid coordinate system
+    let u = intersection.coords.dot(&u_axis);
+    let v = intersection.coords.dot(&v_axis);
+    
+    // Check if we're on a grid line
+    let half_thickness = grid_thickness / 2.0;
+    
+    // Calculate distance to nearest grid lines
+    let u_mod = (u / grid_pitch).fract().abs();
+    let v_mod = (v / grid_pitch).fract().abs();
+    
+    // Adjust for the fact that fract() returns values in [0, 1), but we want [-0.5, 0.5)
+    let u_dist = if u_mod > 0.5 { 1.0 - u_mod } else { u_mod };
+    let v_dist = if v_mod > 0.5 { 1.0 - v_mod } else { v_mod };
+    
+    // Check if we're within grid line thickness
+    let on_u_line = u_dist <= half_thickness / grid_pitch;
+    let on_v_line = v_dist <= half_thickness / grid_pitch;
+    
+    if on_u_line || on_v_line {
+        grid_color
+    } else {
+        background_color
+    }
+}
+
 /// Main ray color calculation
 #[allow(clippy::too_many_arguments)]
 pub fn ray_color(
@@ -135,6 +202,7 @@ pub fn ray_color(
     ambient: &AmbientIllumination,
     fog: &Option<Fog>,
     camera_pos: &Point,
+    camera: &Camera,
     background_color: Color,
     materials: &std::collections::HashMap<usize, Material>,
     max_depth: i32,
@@ -174,6 +242,7 @@ pub fn ray_color(
                     ambient,
                     fog,
                     camera_pos,
+                    camera,
                     background_color,
                     materials,
                     max_depth - 1,
@@ -185,7 +254,12 @@ pub fn ray_color(
 
         color
     } else {
-        background_color
+        // Ray missed all objects, check for grid background on orthographic cameras
+        if !camera.is_perspective && camera.grid_pitch.is_some() && camera.grid_color.is_some() {
+            calculate_grid_background(ray, camera, background_color)
+        } else {
+            background_color
+        }
     }
 }
 
@@ -199,6 +273,40 @@ mod tests {
         assert!((color.x - 1.0).abs() < 1e-6);
         assert!((color.y - 0.0).abs() < 1e-6);
         assert!((color.z - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_grid_background_calculation() {
+        use crate::scene::Camera as CameraConfig;
+        use crate::camera::Camera;
+        use crate::ray::Ray;
+
+        // Create orthographic camera with grid configuration
+        let mut config = CameraConfig::default();
+        config.grid_pitch = Some(2.0);
+        config.grid_color = Some("#FF0000".to_string());
+        config.grid_thickness = Some(0.2);
+        
+        let camera = Camera::from_config(&config, 1.0).unwrap();
+        let background_color = Color::new(0.0, 0.0, 1.0); // Blue background
+        
+        // Test ray that should hit a grid line (at origin)
+        let ray_on_grid = Ray::new(Point::new(0.0, 0.0, 10.0), Vec3::new(0.0, 0.0, -1.0));
+        let color_on_grid = calculate_grid_background(&ray_on_grid, &camera, background_color);
+        
+        // Should return grid color (red)
+        assert!((color_on_grid.x - 1.0).abs() < 1e-6);
+        assert!(color_on_grid.y.abs() < 1e-6);
+        assert!(color_on_grid.z.abs() < 1e-6);
+        
+        // Test ray that should miss grid lines (between grid lines)
+        let ray_off_grid = Ray::new(Point::new(1.0, 1.0, 10.0), Vec3::new(0.0, 0.0, -1.0));
+        let color_off_grid = calculate_grid_background(&ray_off_grid, &camera, background_color);
+        
+        // Should return background color (blue)
+        assert!(color_off_grid.x.abs() < 1e-6);
+        assert!(color_off_grid.y.abs() < 1e-6);
+        assert!((color_off_grid.z - 1.0).abs() < 1e-6);
     }
 
     #[test]
