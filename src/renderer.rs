@@ -2,6 +2,9 @@ use image::{ImageBuffer, Rgb, RgbImage};
 use rand::Rng;
 use rayon::prelude::*;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex;
+use std::time::Instant;
 
 use crate::camera::Camera;
 use crate::lighting::ray_color;
@@ -80,6 +83,8 @@ impl Renderer {
         if self.samples == 0 {
             return Err("Samples must be greater than 0".into());
         }
+
+        let render_start_time = Instant::now();
 
         // Create camera
         let aspect_ratio = self.width as f64 / self.height as f64;
@@ -189,7 +194,10 @@ impl Renderer {
                 )
             });
 
-            Ok(self.create_image_from_data(image_data))
+            let total_time = render_start_time.elapsed();
+            let image = self.create_image_from_data(image_data);
+            println!("Total rendering time: {}", format_duration(total_time.as_secs_f64()));
+            Ok(image)
         } else {
             // Use default parallel rendering with all available cores
             let image_data = self.render_parallel(
@@ -203,7 +211,10 @@ impl Renderer {
                 &materials,
             );
 
-            Ok(self.create_image_from_data(image_data))
+            let total_time = render_start_time.elapsed();
+            let image = self.create_image_from_data(image_data);
+            println!("Total rendering time: {}", format_duration(total_time.as_secs_f64()));
+            Ok(image)
         }
     }
 
@@ -227,12 +238,14 @@ impl Renderer {
         // Progress tracking setup
         let total_pixels = self.width * self.height;
         let progress_step = (total_pixels / 10).max(1);
+        let completed_pixels = AtomicUsize::new(0);
+        let progress_mutex = Mutex::new(());
+        let start_time = Instant::now();
 
         // Render pixels in parallel
-        pixels
+        let results: Vec<(u32, u32, Color)> = pixels
             .par_iter()
-            .enumerate()
-            .map(|(pixel_index, &(x, y))| {
+            .map(|&(x, y)| {
                 // Calculate base pixel coordinates
                 let pixel_u = x as f64 / (self.width - 1) as f64;
                 let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
@@ -294,15 +307,33 @@ impl Renderer {
                 // Average the samples
                 let color = total_color / self.samples as f64;
 
-                // Print progress periodically (note: this might be out of order due to parallelism)
-                if pixel_index % progress_step as usize == 0 {
-                    let progress = (pixel_index as f64 / total_pixels as f64) * 100.0;
-                    println!("Rendering: {:.1}%", progress);
+                // Update progress tracking
+                let current_completed = completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
+                
+                // Print progress periodically with thread-safe output
+                if current_completed % progress_step as usize == 0 || current_completed == total_pixels as usize {
+                    if let Ok(_guard) = progress_mutex.lock() {
+                        let progress = (current_completed as f64 / total_pixels as f64) * 100.0;
+                        let elapsed = start_time.elapsed();
+                        
+                        if current_completed == total_pixels as usize {
+                            // Final progress update
+                            println!("Rendering: 100.0%");
+                        } else if progress > 0.0 {
+                            // Calculate estimated time remaining
+                            let estimated_total_time = elapsed.as_secs_f64() / (current_completed as f64 / total_pixels as f64);
+                            let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
+                            let eta_formatted = format_duration(estimated_remaining);
+                            println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
+                        }
+                    }
                 }
 
                 (x, y, color)
             })
-            .collect()
+            .collect();
+
+        results
     }
 
     fn create_image_from_data(&self, image_data: Vec<(u32, u32, Color)>) -> RgbImage {
@@ -317,7 +348,6 @@ impl Renderer {
             image.put_pixel(x, y, Rgb([r, g, b]));
         }
 
-        println!("Rendering: 100.0%");
         image
     }
 
@@ -454,5 +484,53 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Samples must be greater than 0"));
+    }
+
+    #[test]
+    fn test_format_duration() {
+        assert_eq!(format_duration(0.0), "0s");
+        assert_eq!(format_duration(-1.0), "0s");
+        assert_eq!(format_duration(5.0), "5s");
+        assert_eq!(format_duration(59.0), "59s");
+        assert_eq!(format_duration(60.0), "1m");
+        assert_eq!(format_duration(65.0), "1m5s");
+        assert_eq!(format_duration(125.0), "2m5s");
+        assert_eq!(format_duration(3600.0), "1h");
+        assert_eq!(format_duration(3665.0), "1h1m");
+        assert_eq!(format_duration(7200.0), "2h");
+        assert_eq!(format_duration(7325.0), "2h2m");
+    }
+}
+
+/// Format duration in seconds to a human-readable string (e.g., "3m45s", "1h23m", "45s")
+fn format_duration(seconds: f64) -> String {
+    if seconds < 0.0 {
+        return "0s".to_string();
+    }
+    
+    let total_seconds = seconds.round() as u64;
+    
+    if total_seconds == 0 {
+        return "0s".to_string();
+    }
+    
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let secs = total_seconds % 60;
+    
+    if hours > 0 {
+        if minutes > 0 {
+            format!("{}h{}m", hours, minutes)
+        } else {
+            format!("{}h", hours)
+        }
+    } else if minutes > 0 {
+        if secs > 0 {
+            format!("{}m{}s", minutes, secs)
+        } else {
+            format!("{}m", minutes)
+        }
+    } else {
+        format!("{}s", secs)
     }
 }
