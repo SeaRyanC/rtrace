@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use nalgebra::Vector3;
 use rtrace::{
     mesh::Mesh,
@@ -27,8 +28,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         total_tests += 1;
 
         // Test intersection with both methods
-        let hit_kdtree = mesh_kdtree.hit(&ray, 0.001, f64::INFINITY);
-        let hit_brute_force = mesh_brute_force.hit(&ray, 0.001, f64::INFINITY);
+        let hit_kdtree = mesh_kdtree.hit(ray, 0.001, f64::INFINITY);
+        let hit_brute_force = mesh_brute_force.hit(ray, 0.001, f64::INFINITY);
 
         // Compare results
         let mismatch = match (hit_kdtree.as_ref(), hit_brute_force.as_ref()) {

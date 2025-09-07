@@ -207,6 +207,7 @@ impl Renderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_parallel(
         &self,
         world: &World,

@@ -150,7 +150,7 @@ impl Intersectable for Plane {
         let point = ray.at(t);
         let mut hit_record = HitRecord::new(
             point,
-            self.normal.as_ref().clone(),
+            *self.normal.as_ref(),
             t,
             ray,
             self.material_color,
@@ -349,7 +349,7 @@ impl MeshObject {
         let s = ray.origin - triangle.vertices[0];
         let u = f * s.dot(&h);
 
-        if u < 0.0 || u > 1.0 {
+        if !(0.0..=1.0).contains(&u) {
             return None;
         }
 
@@ -454,7 +454,7 @@ impl Intersectable for MeshObject {
                 });
         } else {
             // Brute force: test all triangles
-            for (triangle_idx, triangle) in self.mesh.triangles.iter().enumerate() {
+            for triangle in self.mesh.triangles.iter() {
                 if let Some((t, normal, (u, v))) =
                     self.intersect_triangle(ray, triangle, t_min, closest_t)
                 {
@@ -485,6 +485,7 @@ impl Intersectable for MeshObject {
 }
 
 /// Collection of intersectable objects
+#[derive(Default)]
 pub struct World {
     pub objects: Vec<Box<dyn Intersectable + Send + Sync>>,
 }

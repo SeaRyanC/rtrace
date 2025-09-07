@@ -65,7 +65,7 @@ pub fn phong_lighting(
         // Check for shadows - cast ray from hit point to light
         let shadow_ray = Ray::new(
             hit_record.point + 0.001 * hit_record.normal.as_ref(),
-            light_dir.as_ref().clone(),
+            *light_dir.as_ref(),
         );
         let light_distance = (light_pos - hit_record.point).magnitude();
 
@@ -127,6 +127,7 @@ pub fn apply_fog(color: Color, fog: &Option<Fog>, distance: f64) -> Color {
 }
 
 /// Main ray color calculation
+#[allow(clippy::too_many_arguments)]
 pub fn ray_color(
     ray: &Ray,
     world: &World,
@@ -147,7 +148,7 @@ pub fn ray_color(
         let material = materials
             .get(&hit.material_index)
             .cloned()
-            .unwrap_or_else(|| Material::default());
+            .unwrap_or_else(Material::default);
 
         // Calculate lighting
         let mut color = phong_lighting(&hit, &material, lights, ambient, camera_pos, world);
@@ -163,7 +164,7 @@ pub fn ray_color(
                 let reflect_dir = reflect(&(-view_dir.as_ref()), &hit.normal);
                 let reflect_ray = Ray::new(
                     hit.point + 0.001 * hit.normal.as_ref(),
-                    reflect_dir.as_ref().clone(),
+                    *reflect_dir.as_ref(),
                 );
 
                 let reflected_color = ray_color(

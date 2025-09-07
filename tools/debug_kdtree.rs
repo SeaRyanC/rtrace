@@ -21,7 +21,7 @@ fn intersect_triangle_moller_trumbore(
     let s = ray.origin - triangle.vertices[0];
     let u = f * s.dot(&h);
 
-    if u < 0.0 || u > 1.0 {
+    if !(0.0..=1.0).contains(&u) {
         return None;
     }
 
