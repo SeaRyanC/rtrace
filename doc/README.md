@@ -113,6 +113,40 @@ rtrace supports both orthographic and perspective projection cameras.
 | `up` | [x, y, z] | Camera up vector (typically [0, 1, 0]) |
 | `width` | number | Viewport width in world units |
 | `height` | number | Viewport height in world units |
+| `grid_pitch` | number (optional) | Distance between grid lines for background grid |
+| `grid_color` | string (optional) | Hex color for grid lines (e.g., "#444444") |
+| `grid_thickness` | number (optional) | Thickness of grid lines in world units |
+
+### Orthographic Grid Background
+
+Orthographic cameras support an optional grid background that renders world-coordinate grid lines when rays miss all objects. The grid appears on the world coordinate planes (XY, XZ, and YZ) centered at the origin.
+
+```json
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [3, 3, 8],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0], 
+    "width": 8,
+    "height": 6,
+    "grid_pitch": 1.0,
+    "grid_color": "#444444",
+    "grid_thickness": 0.05
+  }
+}
+```
+
+**Grid Properties:**
+- `grid_pitch`: Distance between grid lines (e.g., 1.0 creates lines at x=0, x=1, x=2, etc.)
+- `grid_color`: Color of the grid lines in hex format
+- `grid_thickness`: Width of the grid lines in world units
+
+All three grid properties must be specified for the grid to appear. Grid backgrounds only work with orthographic cameras.
+
+**Example:** Orthographic scene with grid background
+
+![Orthographic Grid](../examples/ortho_grid_demo_800x600.png)
 
 ### Perspective Camera
 
@@ -647,6 +681,112 @@ Here's a comprehensive scene demonstrating multiple features:
 **Result:** Complete scene with multiple features
 
 ![Complete Example](images/example-complete.png)
+
+### Orthographic Grid Background Examples
+
+The following examples demonstrate the orthographic camera grid background feature:
+
+#### Basic Grid Background
+
+```json
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [3, 3, 8],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 8,
+    "height": 6,
+    "grid_pitch": 1.0,
+    "grid_color": "#444444",
+    "grid_thickness": 0.05
+  },
+  "objects": [
+    {
+      "kind": "sphere",
+      "center": [1, 1, 0],
+      "radius": 0.5,
+      "material": {
+        "color": "#FF4444",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 64
+      }
+    },
+    {
+      "kind": "cube", 
+      "center": [-1, -1, 0],
+      "size": [0.8, 0.8, 0.8],
+      "material": {
+        "color": "#4444FF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 64
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [3, 3, 5],
+      "color": "#FFFFFF",
+      "intensity": 1.0
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.1
+    },
+    "background_color": "#001122"
+  }
+}
+```
+
+![Orthographic Grid Demo](../examples/ortho_grid_demo_800x600.png)
+
+#### Fine Grid with Different Parameters
+
+```json
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [0, 0, 8],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 6,
+    "height": 6,
+    "grid_pitch": 0.5,
+    "grid_color": "#00FF00", 
+    "grid_thickness": 0.02
+  }
+  // ... rest of scene
+}
+```
+
+![Fine Grid Demo](../examples/fine_grid_demo_800x600.png)
+
+#### Side View with Grid
+
+```json
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [5, 0, 0],
+    "target": [0, 0, 0],
+    "up": [0, 0, 1],
+    "width": 8,
+    "height": 6,
+    "grid_pitch": 2.0,
+    "grid_color": "#FFFFFF",
+    "grid_thickness": 0.1
+  }
+  // ... rest of scene  
+}
+```
+
+![Side View Grid](../examples/side_view_grid_800x600.png)
 
 ---
 
