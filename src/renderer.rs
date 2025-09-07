@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::camera::Camera;
-use crate::lighting::ray_color_with_camera;
+use crate::lighting::{ray_color, ray_color_with_camera};
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 
@@ -649,6 +649,7 @@ mod tests {
             position: [2.0, 2.0, 2.0],
             color: "#FFFFFF".to_string(),
             intensity: 1.0,
+            diameter: None,
         });
 
         // Test quincunx mode with default samples
