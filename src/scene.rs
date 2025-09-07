@@ -267,9 +267,7 @@ impl Scene {
                     let half_size = Vec3::new(size[0], size[1], size[2]) / 2.0;
                     Some((center_point - half_size, center_point + half_size))
                 }
-                Object::Mesh { mesh_data, .. } => {
-                    mesh_data.as_ref().map(|mesh| mesh.bounds())
-                }
+                Object::Mesh { mesh_data, .. } => mesh_data.as_ref().map(|mesh| mesh.bounds()),
                 Object::Plane { .. } => {
                     // Planes have infinite bounds, so we exclude them
                     None

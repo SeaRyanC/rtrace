@@ -48,9 +48,9 @@ impl Renderer {
             width,
             height,
             max_depth: 10,
-            use_kdtree: false,  // Disable k-d tree
-            thread_count: None, // Use all available cores by default
-            samples: 5,         // Default to 5 samples for quincunx
+            use_kdtree: false,                              // Disable k-d tree
+            thread_count: None,                             // Use all available cores by default
+            samples: 5,                                     // Default to 5 samples for quincunx
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
@@ -63,7 +63,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,
             thread_count: Some(thread_count),
-            samples: 5,       // Default to 5 samples for quincunx
+            samples: 5, // Default to 5 samples for quincunx
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
@@ -81,7 +81,7 @@ impl Renderer {
             max_depth: 10,
             use_kdtree,
             thread_count,
-            samples: 5,       // Default to 5 samples for quincunx
+            samples: 5, // Default to 5 samples for quincunx
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
@@ -91,7 +91,7 @@ impl Renderer {
         if self.samples == 0 {
             return Err("Samples must be greater than 0".into());
         }
-        
+
         // Validate samples for quincunx mode
         if self.anti_aliasing_mode == AntiAliasingMode::Quincunx && self.samples != 5 {
             return Err("Quincunx anti-aliasing requires exactly 5 samples".into());
@@ -270,23 +270,11 @@ impl Renderer {
                         AntiAliasingMode::Quincunx => {
                             // Quincunx pattern: center + 4 corners/edges
                             match sample {
-                                0 => (pixel_u, pixel_v), // Center
-                                1 => (
-                                    pixel_u - 0.25 * pixel_width,
-                                    pixel_v - 0.25 * pixel_height,
-                                ), // Top-left
-                                2 => (
-                                    pixel_u + 0.25 * pixel_width,
-                                    pixel_v - 0.25 * pixel_height,
-                                ), // Top-right
-                                3 => (
-                                    pixel_u - 0.25 * pixel_width,
-                                    pixel_v + 0.25 * pixel_height,
-                                ), // Bottom-left
-                                4 => (
-                                    pixel_u + 0.25 * pixel_width,
-                                    pixel_v + 0.25 * pixel_height,
-                                ), // Bottom-right
+                                0 => (pixel_u, pixel_v),                                            // Center
+                                1 => (pixel_u - 0.25 * pixel_width, pixel_v - 0.25 * pixel_height), // Top-left
+                                2 => (pixel_u + 0.25 * pixel_width, pixel_v - 0.25 * pixel_height), // Top-right
+                                3 => (pixel_u - 0.25 * pixel_width, pixel_v + 0.25 * pixel_height), // Bottom-left
+                                4 => (pixel_u + 0.25 * pixel_width, pixel_v + 0.25 * pixel_height), // Bottom-right
                                 _ => unreachable!(), // Should never happen with samples=5
                             }
                         }
@@ -301,8 +289,8 @@ impl Renderer {
                                 )
                             } else {
                                 // Multiple samples: radially symmetric pattern with random phase
-                                let angle =
-                                    2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
+                                let angle = 2.0 * std::f64::consts::PI * sample as f64
+                                    / self.samples as f64;
                                 let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
                                 let rotated_angle = angle + random_phase;
 
@@ -394,7 +382,10 @@ mod tests {
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
         assert_eq!(renderer_threaded.thread_count, Some(4));
-        assert_eq!(renderer_threaded.anti_aliasing_mode, AntiAliasingMode::Quincunx);
+        assert_eq!(
+            renderer_threaded.anti_aliasing_mode,
+            AntiAliasingMode::Quincunx
+        );
     }
 
     #[test]

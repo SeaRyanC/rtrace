@@ -95,8 +95,10 @@ fn main() {
     renderer.samples = samples;
     renderer.anti_aliasing_mode = anti_aliasing_mode;
 
-    println!("Rendering {}x{} image with {} anti-aliasing ({} samples)...", 
-        args.width, args.height, args.anti_aliasing, samples);
+    println!(
+        "Rendering {}x{} image with {} anti-aliasing ({} samples)...",
+        args.width, args.height, args.anti_aliasing, samples
+    );
 
     // Render and save
     if let Err(e) = renderer.render_to_file(&scene, &args.output) {
