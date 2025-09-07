@@ -8,6 +8,17 @@ use crate::lighting::ray_color;
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 
+/// Anti-aliasing sampling modes
+#[derive(Debug, Clone, PartialEq)]
+pub enum AntiAliasingMode {
+    /// No jittering - deterministic center-pixel sampling
+    NoJitter,
+    /// Quincunx pattern - 5 samples (center + 4 corners) per pixel
+    Quincunx,
+    /// Stochastic sampling - random jittered sampling
+    Stochastic,
+}
+
 pub struct Renderer {
     pub width: u32,
     pub height: u32,
@@ -15,7 +26,7 @@ pub struct Renderer {
     pub use_kdtree: bool, // New field to control k-d tree usage for meshes
     pub thread_count: Option<usize>, // Number of threads to use (None = use all available cores)
     pub samples: u32,     // Number of samples per pixel for stochastic subsampling
-    pub no_jitter: bool,  // Disable stochastic jittering (use center-pixel sampling)
+    pub anti_aliasing_mode: AntiAliasingMode, // Anti-aliasing sampling mode
 }
 
 impl Renderer {
@@ -26,8 +37,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
-            samples: 1,         // Default to single sample per pixel
-            no_jitter: false,   // Default to using stochastic jittering
+            samples: 5,         // Default to 5 samples for quincunx
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -39,8 +50,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: false,  // Disable k-d tree
             thread_count: None, // Use all available cores by default
-            samples: 1,         // Default to single sample per pixel
-            no_jitter: false,   // Default to using stochastic jittering
+            samples: 5,         // Default to 5 samples for quincunx
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -52,8 +63,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,
             thread_count: Some(thread_count),
-            samples: 1,       // Default to single sample per pixel
-            no_jitter: false, // Default to using stochastic jittering
+            samples: 5,       // Default to 5 samples for quincunx
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -70,8 +81,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree,
             thread_count,
-            samples: 1,       // Default to single sample per pixel
-            no_jitter: false, // Default to using stochastic jittering
+            samples: 5,       // Default to 5 samples for quincunx
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -79,6 +90,11 @@ impl Renderer {
         // Validate samples parameter
         if self.samples == 0 {
             return Err("Samples must be greater than 0".into());
+        }
+        
+        // Validate samples for quincunx mode
+        if self.anti_aliasing_mode == AntiAliasingMode::Quincunx && self.samples != 5 {
+            return Err("Quincunx anti-aliasing requires exactly 5 samples".into());
         }
 
         // Create camera
@@ -246,33 +262,61 @@ impl Renderer {
                 let mut rng = rand::thread_rng();
 
                 for sample in 0..self.samples {
-                    let (sample_u, sample_v) = if self.no_jitter {
-                        // No jittering: sample at exact pixel center
-                        (pixel_u, pixel_v)
-                    } else if self.samples == 1 {
-                        // Single sample with random jitter within pixel bounds
-                        let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                        let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                        (
-                            pixel_u + jitter_u * pixel_width,
-                            pixel_v + jitter_v * pixel_height,
-                        )
-                    } else {
-                        // Multiple samples: radially symmetric pattern with random phase
-                        let angle =
-                            2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
-                        let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
-                        let rotated_angle = angle + random_phase;
+                    let (sample_u, sample_v) = match self.anti_aliasing_mode {
+                        AntiAliasingMode::NoJitter => {
+                            // No jittering: sample at exact pixel center
+                            (pixel_u, pixel_v)
+                        }
+                        AntiAliasingMode::Quincunx => {
+                            // Quincunx pattern: center + 4 corners/edges
+                            match sample {
+                                0 => (pixel_u, pixel_v), // Center
+                                1 => (
+                                    pixel_u - 0.25 * pixel_width,
+                                    pixel_v - 0.25 * pixel_height,
+                                ), // Top-left
+                                2 => (
+                                    pixel_u + 0.25 * pixel_width,
+                                    pixel_v - 0.25 * pixel_height,
+                                ), // Top-right
+                                3 => (
+                                    pixel_u - 0.25 * pixel_width,
+                                    pixel_v + 0.25 * pixel_height,
+                                ), // Bottom-left
+                                4 => (
+                                    pixel_u + 0.25 * pixel_width,
+                                    pixel_v + 0.25 * pixel_height,
+                                ), // Bottom-right
+                                _ => unreachable!(), // Should never happen with samples=5
+                            }
+                        }
+                        AntiAliasingMode::Stochastic => {
+                            if self.samples == 1 {
+                                // Single sample with random jitter within pixel bounds
+                                let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                                let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                                (
+                                    pixel_u + jitter_u * pixel_width,
+                                    pixel_v + jitter_v * pixel_height,
+                                )
+                            } else {
+                                // Multiple samples: radially symmetric pattern with random phase
+                                let angle =
+                                    2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
+                                let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
+                                let rotated_angle = angle + random_phase;
 
-                        // Use a smaller radius to keep samples within pixel bounds
-                        let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
-                        let jitter_u = radius * rotated_angle.cos();
-                        let jitter_v = radius * rotated_angle.sin();
+                                // Use a smaller radius to keep samples within pixel bounds
+                                let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
+                                let jitter_u = radius * rotated_angle.cos();
+                                let jitter_v = radius * rotated_angle.sin();
 
-                        (
-                            pixel_u + jitter_u * pixel_width,
-                            pixel_v + jitter_v * pixel_height,
-                        )
+                                (
+                                    pixel_u + jitter_u * pixel_width,
+                                    pixel_v + jitter_v * pixel_height,
+                                )
+                            }
+                        }
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
@@ -344,10 +388,13 @@ mod tests {
         assert_eq!(renderer.width, 800);
         assert_eq!(renderer.height, 600);
         assert_eq!(renderer.thread_count, None);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
+        assert_eq!(renderer.samples, 5); // Default for quincunx
 
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
         assert_eq!(renderer_threaded.thread_count, Some(4));
+        assert_eq!(renderer_threaded.anti_aliasing_mode, AntiAliasingMode::Quincunx);
     }
 
     #[test]
@@ -393,6 +440,7 @@ mod tests {
 
         // Test with multiple samples
         let mut renderer = Renderer::new(50, 50);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Stochastic;
         renderer.samples = 4;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
@@ -423,16 +471,63 @@ mod tests {
 
         // Test no-jitter mode with single sample
         let mut renderer = Renderer::new(50, 50);
+        renderer.anti_aliasing_mode = AntiAliasingMode::NoJitter;
         renderer.samples = 1;
-        renderer.no_jitter = true;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
 
-        // Test no-jitter mode with multiple samples (should still work but be redundant)
+        // Test no-jitter mode with multiple samples (should still work)
         renderer.samples = 4;
-        renderer.no_jitter = true;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_quincunx_sampling() {
+        let mut scene = Scene::default();
+
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a light
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+        });
+
+        // Test quincunx mode with 5 samples (default)
+        let renderer = Renderer::new(50, 50);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
+        assert_eq!(renderer.samples, 5);
+        let result = renderer.render(&scene);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_quincunx_wrong_samples_error() {
+        let mut scene = Scene::default();
+
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        let mut renderer = Renderer::new(10, 10);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Quincunx;
+        renderer.samples = 4; // Wrong number for quincunx
+        let result = renderer.render(&scene);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Quincunx anti-aliasing requires exactly 5 samples"));
     }
 
     #[test]

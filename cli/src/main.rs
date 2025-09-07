@@ -1,5 +1,5 @@
 use clap::Parser;
-use rtrace::{Renderer, Scene};
+use rtrace::{AntiAliasingMode, Renderer, Scene};
 use std::path::Path;
 
 /// Ray tracer CLI - renders 3D scenes from JSON descriptions
@@ -26,13 +26,13 @@ struct Args {
     #[arg(long, default_value_t = 10)]
     max_depth: i32,
 
-    /// Number of samples per pixel for stochastic subsampling
-    #[arg(long, default_value_t = 1)]
-    samples: u32,
-
-    /// Disable stochastic jittering (use center-pixel sampling)
+    /// Number of samples per pixel
     #[arg(long)]
-    no_jitter: bool,
+    samples: Option<u32>,
+
+    /// Anti-aliasing mode: quincunx (default), stochastic, or no-jitter
+    #[arg(long, default_value = "quincunx")]
+    anti_aliasing: String,
 }
 
 fn main() {
@@ -44,8 +44,32 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Parse anti-aliasing mode
+    let anti_aliasing_mode = match args.anti_aliasing.as_str() {
+        "quincunx" => AntiAliasingMode::Quincunx,
+        "stochastic" => AntiAliasingMode::Stochastic,
+        "no-jitter" => AntiAliasingMode::NoJitter,
+        _ => {
+            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, no-jitter", args.anti_aliasing);
+            std::process::exit(1);
+        }
+    };
+
+    // Determine sample count based on mode and user input
+    let samples = match anti_aliasing_mode {
+        AntiAliasingMode::Quincunx => {
+            if let Some(samples) = args.samples {
+                if samples != 5 {
+                    eprintln!("Warning: Quincunx anti-aliasing requires exactly 5 samples, overriding --samples {} with 5", samples);
+                }
+            }
+            5
+        }
+        _ => args.samples.unwrap_or(1), // Default to 1 sample for other modes
+    };
+
     // Validate samples parameter
-    if args.samples == 0 {
+    if samples == 0 {
         eprintln!("Error: Samples must be greater than 0");
         std::process::exit(1);
     }
@@ -68,10 +92,11 @@ fn main() {
     // Create renderer
     let mut renderer = Renderer::new(args.width, args.height);
     renderer.max_depth = args.max_depth;
-    renderer.samples = args.samples;
-    renderer.no_jitter = args.no_jitter;
+    renderer.samples = samples;
+    renderer.anti_aliasing_mode = anti_aliasing_mode;
 
-    println!("Rendering {}x{} image...", args.width, args.height);
+    println!("Rendering {}x{} image with {} anti-aliasing ({} samples)...", 
+        args.width, args.height, args.anti_aliasing, samples);
 
     // Render and save
     if let Err(e) = renderer.render_to_file(&scene, &args.output) {
