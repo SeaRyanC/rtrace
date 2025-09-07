@@ -1,0 +1,87 @@
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [0, 2, 10],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 10,
+    "height": 10
+  },
+  "objects": [
+    {
+      "kind": "sphere",
+      "center": [-2, 0, 0],
+      "radius": 1.2,
+      "material": {
+        "color": "#FF6666",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [2, 0, 0],
+      "radius": 1.2,
+      "material": {
+        "color": "#6666FF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "plane",
+      "point": [0, -2, 0],
+      "normal": [0, 1, 0],
+      "material": {
+        "color": "#CCCCCC",
+        "ambient": 0.2,
+        "diffuse": 0.6,
+        "specular": 0.1,
+        "shininess": 8,
+        "texture": {
+          "type": "grid",
+          "line_color": "#888888",
+          "line_width": 0.05,
+          "cell_size": 1.0
+        }
+      }
+    },
+    {
+      "kind": "cube",
+      "center": [0, -0.5, -3],
+      "size": [6, 3, 0.5],
+      "material": {
+        "color": "#448844",
+        "ambient": 0.1,
+        "diffuse": 0.7,
+        "specular": 0.2,
+        "shininess": 16
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [-2, 4, 3],
+      "color": "#FFFFFF",
+      "intensity": 1.0,
+      "diameter": null
+    },
+    {
+      "position": [2, 4, 3],
+      "color": "#FFFFFF",
+      "intensity": 1.0,
+      "diameter": 2.0
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.1
+    },
+    "background_color": "#001133"
+  }
+}

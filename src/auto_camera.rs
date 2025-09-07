@@ -159,6 +159,7 @@ mod tests {
                 position: [2.0, 2.0, 2.0],
                 color: "#FFFFFF".to_string(),
                 intensity: 1.0,
+                diameter: None,
             }],
             scene_settings: SceneSettings::default(),
         };

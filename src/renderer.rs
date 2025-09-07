@@ -396,6 +396,7 @@ mod tests {
             position: [2.0, 2.0, 2.0],
             color: "#FFFFFF".to_string(),
             intensity: 1.0,
+            diameter: None,
         });
 
         let renderer = Renderer::new(100, 100);
@@ -419,6 +420,7 @@ mod tests {
             position: [2.0, 2.0, 2.0],
             color: "#FFFFFF".to_string(),
             intensity: 1.0,
+            diameter: None,
         });
 
         // Test with multiple samples
@@ -449,6 +451,7 @@ mod tests {
             position: [2.0, 2.0, 2.0],
             color: "#FFFFFF".to_string(),
             intensity: 1.0,
+            diameter: None,
         });
 
         // Test no-jitter mode with single sample
