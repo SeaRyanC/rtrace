@@ -5,13 +5,15 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
 ## Features
 
 - **Ray Tracer**: Complete ray tracing engine with modern lighting models
-  - Orthographic camera projection
+  - Orthographic and perspective camera projections
   - Geometric primitives (sphere, plane, cube)
   - Phong lighting model with ambient, diffuse, and specular components
-  - Point light sources with colors and intensities
+  - Point and area light sources with soft shadows
+  - Anti-aliasing with multiple sampling modes (quincunx, stochastic, no-jitter)
   - Atmospheric fog with configurable density and falloff
   - Surface reflections
   - Grid texture patterns for planes
+  - **Deterministic rendering** for reproducible results
 - **CLI Tool**: Command-line ray tracer for rendering scenes from JSON
 - **Node.js Bindings**: Native Node.js modules using napi-rs
 - **JSON Scene Format**: Flexible scene description with JSON schema validation
@@ -60,10 +62,26 @@ cargo build --release -p rtrace-cli
 
 **CLI Options:**
 - `-i, --input <FILE>`: Input JSON scene file (required)
-- `-o, --output <FILE>`: Output PNG image file (required)
+- `-o, --output <FILE>`: Output PNG image file (required)  
 - `-w, --width <WIDTH>`: Image width in pixels (default: 800)
 - `-H, --height <HEIGHT>`: Image height in pixels (default: 600)
 - `--max-depth <DEPTH>`: Maximum ray bounces for reflections (default: 10)
+- `--samples <SAMPLES>`: Number of samples per pixel for anti-aliasing
+- `--anti-aliasing <MODE>`: Anti-aliasing mode - `quincunx` (default), `stochastic`, or `no-jitter`
+
+**Deterministic Rendering:**
+
+The ray tracer ensures reproducible results by using deterministic randomness for all stochastic operations:
+- Same input scene = identical output image (byte-for-byte)
+- Consistent results across different hardware and thread counts
+- Works across different thread counts and hardware
+
+```bash
+# Renders are always deterministic and reproducible
+./target/release/rtrace --input scene.json --output render1.png
+./target/release/rtrace --input scene.json --output render2.png
+# render1.png and render2.png are identical
+```
 
 ### Auto Camera Bounds CLI
 

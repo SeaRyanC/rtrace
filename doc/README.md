@@ -22,7 +22,8 @@ This comprehensive guide covers all features and options available in the rtrace
    - [Background Color](#background-color)
    - [Fog Effects](#fog-effects)
 8. [Stochastic Subsampling](#stochastic-subsampling)
-9. [Examples](#examples)
+9. [Deterministic Rendering](#deterministic-rendering)
+10. [Examples](#examples)
 
 ---
 
@@ -794,6 +795,57 @@ The following examples demonstrate the orthographic camera grid background featu
 ```
 
 ![Side View Grid](../examples/side_view_grid_800x600.png)
+
+---
+
+## Deterministic Rendering
+
+The ray tracer ensures **deterministic, reproducible results** by using deterministic randomness for all stochastic operations. This means that the same input scene will always produce byte-for-byte identical output images, regardless of hardware or thread count.
+
+### How It Works
+
+All randomness in the ray tracer is controlled by deterministic seeding:
+
+- **Anti-aliasing sampling**: Each pixel gets a unique deterministic seed based on coordinates
+- **Area light sampling**: Hit points generate consistent random sequences for soft shadows
+- **Thread-safe**: Results are independent of thread scheduling or execution order
+
+### Usage
+
+The ray tracer produces deterministic results by default:
+
+```bash
+# Always produces identical results
+./rtrace --input scene.json --output render1.png
+./rtrace --input scene.json --output render2.png
+# render1.png and render2.png are byte-for-byte identical
+```
+
+### Benefits
+
+- **Reproducible renders**: Perfect for version control, debugging, and collaboration
+- **Consistent results**: Same scene always produces same output across systems
+- **Reliable output**: Eliminates randomness-related inconsistencies
+- **Thread-independent**: Results don't depend on CPU core count or scheduling
+
+### Anti-aliasing Modes
+
+All anti-aliasing modes are deterministic:
+
+- **Quincunx** (default): 5 samples per pixel (center + 4 corners), shared between adjacent pixels
+- **Stochastic**: Random jittered sampling within pixel bounds, configurable sample count
+- **No-jitter**: Single center sample per pixel, fastest rendering
+
+```bash
+# Deterministic stochastic sampling with 16 samples per pixel
+./rtrace --input scene.json --output high_quality.png --anti-aliasing stochastic --samples 16
+
+# Deterministic quincunx (default)
+./rtrace --input scene.json --output default.png
+
+# No randomness needed
+./rtrace --input scene.json --output clean.png --anti-aliasing no-jitter
+```
 
 ---
 

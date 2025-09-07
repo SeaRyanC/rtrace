@@ -1,5 +1,5 @@
 use image::{ImageBuffer, Rgb, RgbImage};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::camera::Camera;
-use crate::lighting::ray_color_with_camera;
+use crate::lighting::{ray_color, ray_color_with_camera};
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 
@@ -30,6 +30,7 @@ pub struct Renderer {
     pub thread_count: Option<usize>, // Number of threads to use (None = use all available cores)
     pub samples: u32,     // Number of samples per pixel for stochastic subsampling
     pub anti_aliasing_mode: AntiAliasingMode, // Anti-aliasing sampling mode
+    pub seed: Option<u64>, // Seed for deterministic randomness (None = use default seed)
 }
 
 impl Renderer {
@@ -42,6 +43,7 @@ impl Renderer {
             thread_count: None, // Use all available cores by default
             samples: 1,         // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            seed: Some(0),      // Default to deterministic seed for reproducibility
         }
     }
 
@@ -55,6 +57,7 @@ impl Renderer {
             thread_count: None,                             // Use all available cores by default
             samples: 1,                                     // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            seed: Some(0),                                  // Default to deterministic seed for reproducibility
         }
     }
 
@@ -68,6 +71,7 @@ impl Renderer {
             thread_count: Some(thread_count),
             samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            seed: Some(0), // Default to deterministic seed for reproducibility
         }
     }
 
@@ -86,6 +90,7 @@ impl Renderer {
             thread_count,
             samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            seed: Some(0), // Default to deterministic seed for reproducibility
         }
     }
 
@@ -289,7 +294,13 @@ impl Renderer {
 
                 // Collect samples for this pixel
                 let mut total_color = Color::new(0.0, 0.0, 0.0);
-                let mut rng = rand::thread_rng();
+                
+                // Create deterministic RNG seeded by pixel coordinates and global seed
+                let pixel_seed = self.seed.unwrap_or(0)
+                    .wrapping_mul(0x9E3779B97F4A7C15_u64)
+                    .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
+                    .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
+                let mut rng = rand::rngs::StdRng::seed_from_u64(pixel_seed);
 
                 for sample in 0..self.samples {
                     let (sample_u, sample_v) = match self.anti_aliasing_mode {
@@ -328,6 +339,10 @@ impl Renderer {
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
+                    
+                    // Create sample-specific seed for ray tracing consistency
+                    let sample_seed = pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED));
+                    
                     let sample_color = ray_color_with_camera(
                         &ray,
                         world,
@@ -339,6 +354,7 @@ impl Renderer {
                         materials,
                         self.max_depth,
                         Some(camera),
+                        sample_seed,
                     );
 
                     total_color += sample_color;
@@ -418,6 +434,13 @@ impl Renderer {
             let corner_v = (1.0 - corner_y as f64 * pixel_height).clamp(0.0, 1.0); // Flip Y coordinate
             
             let ray = camera.get_ray(corner_u, corner_v);
+            
+            // Create deterministic seed for corner based on corner coordinates
+            let corner_seed = self.seed.unwrap_or(0)
+                .wrapping_mul(0x9E3779B97F4A7C15_u64)
+                .wrapping_add(corner_x as u64)
+                .wrapping_add((corner_y as u64).wrapping_mul(0x85EBCA6B));
+            
             let color = ray_color(
                 &ray,
                 world,
@@ -428,6 +451,7 @@ impl Renderer {
                 background_color,
                 materials,
                 self.max_depth,
+                corner_seed,
             );
             
             // Cache the result
@@ -459,6 +483,14 @@ impl Renderer {
 
                 // Center sample
                 let center_ray = camera.get_ray(pixel_center_u, pixel_center_v);
+                
+                // Create deterministic seed for center sample based on pixel coordinates
+                let center_seed = self.seed.unwrap_or(0)
+                    .wrapping_mul(0x9E3779B97F4A7C15_u64)
+                    .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
+                    .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35))
+                    .wrapping_add(0x12345678_u64); // Different constant for center vs corners
+                
                 let center_color = ray_color(
                     &center_ray,
                     world,
@@ -469,6 +501,7 @@ impl Renderer {
                     background_color,
                     materials,
                     self.max_depth,
+                    center_seed,
                 );
 
                 // Get corner samples (these are shared between neighboring pixels)
@@ -649,6 +682,7 @@ mod tests {
             position: [2.0, 2.0, 2.0],
             color: "#FFFFFF".to_string(),
             intensity: 1.0,
+            diameter: None,
         });
 
         // Test quincunx mode with default samples
@@ -663,6 +697,132 @@ mod tests {
         renderer2.samples = 4;
         let result = renderer2.render(&scene);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_deterministic_rendering() {
+        let mut scene = Scene::default();
+        
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a diffuse light for area light sampling 
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: Some(0.5), // Area light to trigger stochastic sampling
+        });
+
+        // Create renderer with stochastic anti-aliasing and multiple samples
+        let mut renderer = Renderer::new(50, 50);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Stochastic;
+        renderer.samples = 4;
+        renderer.seed = Some(42); // Fixed seed
+        
+        // Render the same scene multiple times
+        let result1 = renderer.render(&scene).expect("First render failed");
+        let result2 = renderer.render(&scene).expect("Second render failed");
+        
+        // Extract pixel data for comparison
+        let pixels1: Vec<_> = result1.pixels().collect();
+        let pixels2: Vec<_> = result2.pixels().collect();
+        
+        // Results should be byte-for-byte identical
+        assert_eq!(pixels1.len(), pixels2.len());
+        for (i, (&pixel1, &pixel2)) in pixels1.iter().zip(pixels2.iter()).enumerate() {
+            assert_eq!(pixel1, pixel2, 
+                "Pixel {} differs between renders: {:?} vs {:?}", i, pixel1, pixel2);
+        }
+    }
+
+    #[test]
+    fn test_deterministic_rendering_with_threading() {
+        let mut scene = Scene::default();
+        
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a diffuse light for area light sampling 
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: Some(0.5), // Area light to trigger stochastic sampling
+        });
+
+        // Test with different thread counts to ensure thread scheduling doesn't affect results
+        let mut renderer1 = Renderer::new_with_threads(50, 50, 1);
+        renderer1.anti_aliasing_mode = AntiAliasingMode::Stochastic;
+        renderer1.samples = 4;
+        renderer1.seed = Some(42);
+
+        let mut renderer4 = Renderer::new_with_threads(50, 50, 4);
+        renderer4.anti_aliasing_mode = AntiAliasingMode::Stochastic;
+        renderer4.samples = 4;
+        renderer4.seed = Some(42);
+        
+        // Render with different thread counts
+        let result1 = renderer1.render(&scene).expect("Single-threaded render failed");
+        let result4 = renderer4.render(&scene).expect("Multi-threaded render failed");
+        
+        // Extract pixel data for comparison
+        let pixels1: Vec<_> = result1.pixels().collect();
+        let pixels4: Vec<_> = result4.pixels().collect();
+        
+        // Results should be identical regardless of thread count
+        assert_eq!(pixels1.len(), pixels4.len());
+        for (i, (&pixel1, &pixel4)) in pixels1.iter().zip(pixels4.iter()).enumerate() {
+            assert_eq!(pixel1, pixel4, 
+                "Pixel {} differs between thread counts: {:?} vs {:?}", i, pixel1, pixel4);
+        }
+    }
+
+    #[test]
+    fn test_quincunx_deterministic() {
+        let mut scene = Scene::default();
+        
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a diffuse light
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: Some(0.5), // Area light to trigger stochastic sampling
+        });
+
+        // Test quincunx mode (which should also be deterministic)
+        let mut renderer = Renderer::new(50, 50);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
+        renderer.seed = Some(123);
+        
+        let result1 = renderer.render(&scene).expect("First quincunx render failed");
+        let result2 = renderer.render(&scene).expect("Second quincunx render failed");
+        
+        // Extract pixel data for comparison
+        let pixels1: Vec<_> = result1.pixels().collect();
+        let pixels2: Vec<_> = result2.pixels().collect();
+        
+        // Results should be identical
+        assert_eq!(pixels1.len(), pixels2.len());
+        for (i, (&pixel1, &pixel2)) in pixels1.iter().zip(pixels2.iter()).enumerate() {
+            assert_eq!(pixel1, pixel2, 
+                "Quincunx pixel {} differs between renders: {:?} vs {:?}", i, pixel1, pixel2);
+        }
     }
 
     #[test]

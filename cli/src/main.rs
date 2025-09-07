@@ -84,6 +84,7 @@ fn main() {
     renderer.max_depth = args.max_depth;
     renderer.samples = samples;
     renderer.anti_aliasing_mode = anti_aliasing_mode;
+    renderer.seed = Some(0); // Always use deterministic seed 0
 
     println!(
         "Rendering {}x{} image with {} anti-aliasing ({} samples)...",
