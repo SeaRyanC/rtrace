@@ -17,6 +17,7 @@ This comprehensive guide covers all features and options available in the rtrace
    - [Plane](#plane)
    - [Cube](#cube)
    - [Mesh (STL)](#mesh-stl)
+   - [Object Transforms](#object-transforms)
 5. [Materials](#materials)
    - [Basic Properties](#basic-properties)
    - [Reflectivity](#reflectivity)
@@ -268,6 +269,137 @@ Complex 3D models from STL files (ASCII or binary format), perfect for importing
 **Example:** STL mesh model
 
 ![STL Mesh](images/object-mesh.png)
+
+### Object Transforms
+
+All objects (spheres, planes, cubes, and meshes) support optional transform operations for flexible positioning, rotation, and scaling. Transforms allow you to precisely place and orient objects in your scene without modifying the base geometry.
+
+#### Transform Operations
+
+rtrace supports three types of transforms that can be combined in any order:
+
+**Rotation** - `"rotate(x, y, z)"`
+- Rotates object around the X, Y, and Z axes
+- Values are in degrees (e.g., 90, 180, 270)
+- Rotation order: Z-axis → Y-axis → X-axis
+
+**Translation** - `"translate(x, y, z)"`  
+- Moves object along the X, Y, and Z axes
+- Values are in world coordinate units
+- Positive values move in positive axis directions
+
+**Scaling** - `"scale(x, y, z)"`
+- Scales object size along the X, Y, and Z axes
+- Values are scale factors (1.0 = original size, 2.0 = double, 0.5 = half)
+- Different values per axis allow stretching/squashing
+
+#### Transform Syntax
+
+Transforms are defined as an optional array of strings in any object:
+
+```jsonc
+{
+  "kind": "sphere",
+  "center": [0, 0, 0],
+  "radius": 1.0,
+  "material": { /* ... */ },
+  "transform": [
+    "rotate(0, 0, 45)",      // Rotate 45° around Z-axis
+    "translate(3, 1, 0)",    // Move 3 units right, 1 unit up
+    "scale(2, 1, 1)"         // Double width, keep height/depth
+  ]
+}
+```
+
+#### Transform Order
+
+Transforms are applied in the order they appear in the array. This order matters for the final result:
+
+```jsonc
+// Option 1: Scale, then translate
+"transform": [
+  "scale(2, 2, 2)",
+  "translate(5, 0, 0)"
+]
+
+// Option 2: Translate, then scale  
+"transform": [
+  "translate(5, 0, 0)",
+  "scale(2, 2, 2)"
+]
+```
+
+In Option 1, the object is doubled in size, then moved 5 units along X-axis.
+In Option 2, the object is moved 5 units, then doubled (so it ends up 10 units along X-axis).
+
+#### Practical Examples
+
+**Rotating a cube 45 degrees:**
+```jsonc
+{
+  "kind": "cube",
+  "center": [0, 0, 0],
+  "size": [2, 2, 2],
+  "material": { "color": "#4444FF", /* ... */ },
+  "transform": ["rotate(0, 0, 45)"]
+}
+```
+
+**Creating a scaled and positioned mesh:**
+```jsonc
+{
+  "kind": "mesh",
+  "filename": "model.stl",
+  "material": { "color": "#FF8080", /* ... */ },
+  "transform": [
+    "scale(8, 8, 8)",        // Make 8x larger
+    "rotate(0, 0, 180)",     // Flip upside down
+    "translate(15, 0, 0)"    // Move to the right
+  ]
+}
+```
+
+**Multiple objects with different transforms:**
+```jsonc
+{
+  "objects": [
+    {
+      "kind": "sphere",
+      "center": [0, 0, 0],
+      "radius": 1,
+      "material": { "color": "#FF4444", /* ... */ },
+      "transform": ["translate(-3, 0, 0)"]
+    },
+    {
+      "kind": "sphere", 
+      "center": [0, 0, 0],
+      "radius": 1,
+      "material": { "color": "#4444FF", /* ... */ },
+      "transform": [
+        "scale(1.5, 1.5, 1.5)",
+        "translate(3, 0, 0)"
+      ]
+    }
+  ]
+}
+```
+
+**Example:** Transform demonstration with two mesh objects
+
+![Transform Example](images/transform-example.png)
+
+#### Transform Notes
+
+**Performance:** Transforms are applied during scene setup, not during rendering, so they don't affect render performance.
+
+**Coordinate System:** rtrace uses a right-handed coordinate system:
+- +X points right
+- +Y points up  
+- +Z points toward the camera
+
+**Mesh Transforms:** For STL meshes, transforms are applied to all vertices, and spatial acceleration structures (like K-d trees) are rebuilt automatically.
+
+**Precision:** All transform calculations use 64-bit floating-point math for high precision.
 
 ---
 
