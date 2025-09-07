@@ -25,7 +25,7 @@ impl Camera {
         let w = Unit::new_normalize(origin - target); // Points away from target
         let u = Unit::new_normalize(up.cross(&w)); // Right vector
         let v = w.cross(&u); // Up vector
-        let view_direction = Unit::new_normalize(-w.as_ref().clone());
+        let view_direction = Unit::new_normalize(-*w.as_ref());
 
         match config.kind.as_str() {
             "ortho" => {
@@ -124,12 +124,12 @@ impl Camera {
             // For perspective projection, rays diverge from the camera origin
             let viewport_point = self.lower_left_corner + u * self.horizontal + v * self.vertical;
             let ray_direction = Unit::new_normalize(viewport_point - self.origin);
-            Ray::new(self.origin, ray_direction.as_ref().clone())
+            Ray::new(self.origin, *ray_direction.as_ref())
         } else {
             // For orthographic projection, all rays are parallel to the view direction
             // The ray origin should be on the viewport plane, not at the camera position
             let viewport_point = self.lower_left_corner + u * self.horizontal + v * self.vertical;
-            Ray::new(viewport_point, self.view_direction.as_ref().clone())
+            Ray::new(viewport_point, *self.view_direction.as_ref())
         }
     }
 }

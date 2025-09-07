@@ -1,7 +1,7 @@
 use image::{ImageBuffer, Rgb, RgbImage};
+use rand::Rng;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use rand::Rng;
 
 use crate::camera::Camera;
 use crate::lighting::ray_color;
@@ -14,8 +14,8 @@ pub struct Renderer {
     pub max_depth: i32,
     pub use_kdtree: bool, // New field to control k-d tree usage for meshes
     pub thread_count: Option<usize>, // Number of threads to use (None = use all available cores)
-    pub samples: u32, // Number of samples per pixel for stochastic subsampling
-    pub no_jitter: bool, // Disable stochastic jittering (use center-pixel sampling)
+    pub samples: u32,     // Number of samples per pixel for stochastic subsampling
+    pub no_jitter: bool,  // Disable stochastic jittering (use center-pixel sampling)
 }
 
 impl Renderer {
@@ -52,8 +52,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,
             thread_count: Some(thread_count),
-            samples: 1,         // Default to single sample per pixel
-            no_jitter: false,   // Default to using stochastic jittering
+            samples: 1,       // Default to single sample per pixel
+            no_jitter: false, // Default to using stochastic jittering
         }
     }
 
@@ -70,8 +70,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree,
             thread_count,
-            samples: 1,         // Default to single sample per pixel
-            no_jitter: false,   // Default to using stochastic jittering
+            samples: 1,       // Default to single sample per pixel
+            no_jitter: false, // Default to using stochastic jittering
         }
     }
 
@@ -80,7 +80,7 @@ impl Renderer {
         if self.samples == 0 {
             return Err("Samples must be greater than 0".into());
         }
-        
+
         // Create camera
         let aspect_ratio = self.width as f64 / self.height as f64;
         let camera = Camera::from_config(&scene.camera, aspect_ratio)?;
@@ -207,6 +207,7 @@ impl Renderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_parallel(
         &self,
         world: &World,
@@ -235,7 +236,7 @@ impl Renderer {
                 // Calculate base pixel coordinates
                 let pixel_u = x as f64 / (self.width - 1) as f64;
                 let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
-                
+
                 // Calculate pixel size in UV coordinates
                 let pixel_width = 1.0 / (self.width - 1) as f64;
                 let pixel_height = 1.0 / (self.height - 1) as f64;
@@ -258,15 +259,16 @@ impl Renderer {
                         )
                     } else {
                         // Multiple samples: radially symmetric pattern with random phase
-                        let angle = 2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
+                        let angle =
+                            2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
                         let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
                         let rotated_angle = angle + random_phase;
-                        
+
                         // Use a smaller radius to keep samples within pixel bounds
                         let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
                         let jitter_u = radius * rotated_angle.cos();
                         let jitter_v = radius * rotated_angle.sin();
-                        
+
                         (
                             pixel_u + jitter_u * pixel_width,
                             pixel_v + jitter_v * pixel_height,
@@ -285,7 +287,7 @@ impl Renderer {
                         materials,
                         self.max_depth,
                     );
-                    
+
                     total_color += sample_color;
                 }
 
@@ -395,7 +397,7 @@ mod tests {
         let result = renderer.render(&scene);
         assert!(result.is_ok());
 
-        // Test with single sample 
+        // Test with single sample
         renderer.samples = 1;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
@@ -448,6 +450,9 @@ mod tests {
         renderer.samples = 0;
         let result = renderer.render(&scene);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Samples must be greater than 0"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Samples must be greater than 0"));
     }
 }

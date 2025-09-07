@@ -183,6 +183,7 @@ pub struct Scene {
     pub scene_settings: SceneSettings,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for Scene {
     fn default() -> Self {
         Self {
@@ -267,11 +268,7 @@ impl Scene {
                     Some((center_point - half_size, center_point + half_size))
                 }
                 Object::Mesh { mesh_data, .. } => {
-                    if let Some(mesh) = mesh_data {
-                        Some(mesh.bounds())
-                    } else {
-                        None
-                    }
+                    mesh_data.as_ref().map(|mesh| mesh.bounds())
                 }
                 Object::Plane { .. } => {
                     // Planes have infinite bounds, so we exclude them

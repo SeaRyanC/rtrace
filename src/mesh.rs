@@ -109,6 +109,7 @@ impl KdTree {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn count_leaf_nodes_recursive(&self, node: &KdNode) -> (usize, usize) {
         match node {
             KdNode::Leaf { triangles, .. } => (1, triangles.len()),
@@ -263,6 +264,7 @@ impl KdTree {
         }
     }
 
+    #[allow(dead_code, clippy::only_used_in_recursion)]
     fn traverse_recursive_with_count<F>(
         &self,
         node: &KdNode,
@@ -290,7 +292,8 @@ impl KdTree {
                         bounds.1.x, bounds.1.y, bounds.1.z);
 
                     // Let's check the first few triangles in this leaf to see their actual bounds
-                    for (i, &tri_idx) in triangles.iter().take(2).enumerate() {
+                    #[allow(clippy::unused_enumerate_index)]
+                    for (_i, &_tri_idx) in triangles.iter().take(2).enumerate() {
                         // This is a problem - we can't access the triangles array from here
                         // But we can check if any triangles have z-coordinates that would intersect our ray
                     }
@@ -392,6 +395,7 @@ impl KdTree {
     }
 
     /// Recursive traversal of the k-d tree
+    #[allow(clippy::only_used_in_recursion)]
     fn traverse_recursive<F>(
         &self,
         node: &KdNode,
@@ -461,6 +465,7 @@ impl KdTree {
     }
 
     /// Calculate ray-box intersection and return (t_near, t_far) if intersection exists
+    #[allow(dead_code)]
     fn ray_bounds_intersection(
         ray_origin: &Point,
         ray_direction: &Vec3,
@@ -505,6 +510,7 @@ impl KdTree {
     }
 
     /// Recursive traversal of the k-d tree with debug output
+    #[allow(clippy::only_used_in_recursion)]
     fn traverse_recursive_debug<F>(
         &self,
         node: &KdNode,
@@ -858,6 +864,7 @@ impl Mesh {
 
                 // Parse three vertices
                 let mut vertices = [Point::origin(); 3];
+                #[allow(clippy::needless_range_loop)]
                 for j in 0..3 {
                     i += 1;
                     if i >= lines.len() {
@@ -960,6 +967,7 @@ impl Mesh {
 
             // Read three vertices (3 * 3 * f32)
             let mut vertices = [Point::origin(); 3];
+            #[allow(clippy::needless_range_loop)]
             for i in 0..3 {
                 let x = f32::from_le_bytes([
                     bytes[offset],
