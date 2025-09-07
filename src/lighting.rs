@@ -3,7 +3,7 @@ use crate::scene::{
     hex_to_color, AmbientIllumination, Color, Fog, Light, Material, Point, Texture, Vec3,
 };
 use nalgebra::Unit;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 
 /// Calculate grid pattern for a texture at given texture coordinates
 fn apply_grid_texture(texture: &Texture, u: f64, v: f64, base_color: Color) -> Color {
@@ -131,11 +131,18 @@ fn calculate_diffuse_light_contribution(
     camera_pos: &Point,
     world: &World,
     material_color: &Color,
+    seed: u64,
 ) -> Color {
     // Number of samples to take on the light disk
     const SAMPLES: u32 = 16;
     
-    let mut rng = rand::thread_rng();
+    // Create deterministic RNG seeded by hit point coordinates and global seed
+    let light_seed = seed
+        .wrapping_mul(0x9E3779B97F4A7C15_u64)
+        .wrapping_add(((hit_record.point.x * 1000.0) as u64).wrapping_mul(0x85EBCA6B))
+        .wrapping_add(((hit_record.point.y * 1000.0) as u64).wrapping_mul(0xC2B2AE35))
+        .wrapping_add(((hit_record.point.z * 1000.0) as u64).wrapping_mul(0x6C8E9CF5));
+    let mut rng = rand::rngs::StdRng::seed_from_u64(light_seed);
     let mut total_contribution = Color::new(0.0, 0.0, 0.0);
     let mut visible_samples = 0;
 
@@ -195,6 +202,7 @@ pub fn phong_lighting(
     ambient: &AmbientIllumination,
     camera_pos: &Point,
     world: &World,
+    seed: u64,
 ) -> Color {
     // Get base material color
     let mut material_color = hex_to_color(&material.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
@@ -229,6 +237,7 @@ pub fn phong_lighting(
                 camera_pos,
                 world,
                 &material_color,
+                seed,
             )
         } else {
             // Point light - use single shadow ray
@@ -293,6 +302,7 @@ pub fn ray_color(
     background_color: Color,
     materials: &std::collections::HashMap<usize, Material>,
     max_depth: i32,
+    seed: u64,
 ) -> Color {
     ray_color_with_camera(
         ray,
@@ -305,6 +315,7 @@ pub fn ray_color(
         materials,
         max_depth,
         None,
+        seed,
     )
 }
 
@@ -321,6 +332,7 @@ pub fn ray_color_with_camera(
     materials: &std::collections::HashMap<usize, Material>,
     max_depth: i32,
     camera: Option<&crate::camera::Camera>,
+    seed: u64,
 ) -> Color {
     if max_depth <= 0 {
         return Color::new(0.0, 0.0, 0.0);
@@ -334,7 +346,7 @@ pub fn ray_color_with_camera(
             .unwrap_or_else(Material::default);
 
         // Calculate lighting
-        let mut color = phong_lighting(&hit, &material, lights, ambient, camera_pos, world);
+        let mut color = phong_lighting(&hit, &material, lights, ambient, camera_pos, world, seed);
 
         // Apply fog based on distance from camera
         let distance = (hit.point - *camera_pos).magnitude();
@@ -361,6 +373,7 @@ pub fn ray_color_with_camera(
                     materials,
                     max_depth - 1,
                     camera,
+                    seed,
                 );
 
                 color = color * (1.0 - reflectivity) + reflected_color * reflectivity;
@@ -492,6 +505,7 @@ mod tests {
             &camera_pos,
             &world,
             &material_color,
+            42, // Fixed seed for test
         );
 
         // With no shadows and small diameter, diffuse light should be similar to point light

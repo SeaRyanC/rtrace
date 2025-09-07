@@ -33,6 +33,10 @@ struct Args {
     /// Anti-aliasing mode: quincunx (default), stochastic, or no-jitter
     #[arg(long, default_value = "quincunx")]
     anti_aliasing: String,
+
+    /// Random seed for deterministic rendering (default: 0)
+    #[arg(long)]
+    seed: Option<u64>,
 }
 
 fn main() {
@@ -84,10 +88,12 @@ fn main() {
     renderer.max_depth = args.max_depth;
     renderer.samples = samples;
     renderer.anti_aliasing_mode = anti_aliasing_mode;
+    renderer.seed = args.seed.or(Some(0)); // Default to seed 0 if not specified
 
     println!(
-        "Rendering {}x{} image with {} anti-aliasing ({} samples)...",
-        args.width, args.height, args.anti_aliasing, samples
+        "Rendering {}x{} image with {} anti-aliasing ({} samples, seed: {})...",
+        args.width, args.height, args.anti_aliasing, samples, 
+        renderer.seed.unwrap_or(0)
     );
 
     // Render and save
