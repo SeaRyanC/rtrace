@@ -45,15 +45,15 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 | `--width <WIDTH>` | `-w` | Image width in pixels | 800 |
 | `--height <HEIGHT>` | `-H` | Image height in pixels | 600 |
 | `--max-depth <MAX_DEPTH>` | - | Maximum ray bounces for reflections | 10 |
-| `--samples <SAMPLES>` | - | Number of samples per pixel for anti-aliasing | 1 |
-| `--no-jitter` | - | Disable stochastic jittering (use center-pixel sampling) | false |
+| `--samples <SAMPLES>` | - | Number of samples per pixel | Auto (5 for quincunx) |
+| `--anti-aliasing <MODE>` | - | Anti-aliasing mode: quincunx, stochastic, or no-jitter | quincunx |
 | `--help` | `-h` | Print help information | - |
 | `--version` | `-V` | Print version information | - |
 
 ### Example Commands
 
 ```bash
-# Basic rendering
+# Basic rendering (uses quincunx anti-aliasing by default)
 ./target/release/rtrace -i examples/simple_sphere.json -o output.png
 
 # Custom resolution
@@ -62,11 +62,14 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 # High reflection depth for mirror effects
 ./target/release/rtrace -i mirror_scene.json -o mirrors.png --max-depth 20
 
-# Deterministic rendering (no stochastic sampling)
-./target/release/rtrace -i scene.json -o deterministic.png --samples 1 --no-jitter
+# Deterministic rendering (no anti-aliasing)
+./target/release/rtrace -i scene.json -o deterministic.png --anti-aliasing no-jitter
 
-# Anti-aliasing with stochastic subsampling  
-./target/release/rtrace -i scene.json -o smooth.png --samples 4
+# Stochastic anti-aliasing with 4 samples
+./target/release/rtrace -i scene.json -o stochastic.png --anti-aliasing stochastic --samples 4
+
+# High-quality quincunx anti-aliasing (default, 5 samples)
+./target/release/rtrace -i scene.json -o smooth.png --anti-aliasing quincunx
 ```
 
 ---
@@ -487,71 +490,75 @@ Atmospheric fog with linear falloff.
 
 ---
 
-## Stochastic Subsampling
+## Anti-Aliasing
 
-rtrace supports three different sampling approaches for controlling image quality and anti-aliasing:
+rtrace supports three different anti-aliasing methods for controlling image quality and edge smoothness:
 
-### Sampling Methods
+### Anti-Aliasing Methods
 
-1. **No Jittering (--no-jitter)**: Deterministic center-pixel sampling with no randomization
-2. **Stochastic Sampling (--samples 1)**: Single sample per pixel with random jittering for basic anti-aliasing  
-3. **Multi-Sample Stochastic (--samples N)**: Multiple samples per pixel with stochastic patterns for high-quality anti-aliasing
+1. **Quincunx (default)**: Deterministic 5-sample pattern with center + 4 corners for high-quality anti-aliasing
+2. **Stochastic**: Random jittered sampling with configurable sample counts
+3. **No Jitter**: Deterministic center-pixel sampling with no anti-aliasing
 
 ### How Each Method Works
 
-- **No Jittering**: Casts one ray per pixel at the exact center of each pixel - completely deterministic
-- **Single Sample Stochastic**: Casts one ray per pixel with random jitter within pixel bounds
-- **Multi-Sample Stochastic**: Casts N rays per pixel in a radially symmetric pattern with random phase
+- **Quincunx**: Casts 5 rays per pixel in a fixed pattern: one at the center and four at the corners (±0.25 pixel offset). Provides consistent, high-quality anti-aliasing with deterministic results.
+- **Stochastic**: Uses random jittering within pixel bounds. Single sample mode uses random offset, multi-sample mode uses radially symmetric patterns with random phase.
+- **No Jitter**: Casts one ray per pixel at the exact center of each pixel - completely deterministic with no anti-aliasing
 - **Color Averaging**: When using multiple samples, all samples for each pixel are averaged to produce the final color
 
 ### Usage Examples
 
 ```bash
-# No jittering: deterministic center-pixel sampling
-./target/release/rtrace -i scene.json -o output.png --samples 1 --no-jitter
+# Quincunx anti-aliasing (default, deterministic)
+./target/release/rtrace -i scene.json -o output.png --anti-aliasing quincunx
 
-# Single sample with stochastic jittering (default)
-./target/release/rtrace -i scene.json -o output.png --samples 1
+# No anti-aliasing (fastest, deterministic)
+./target/release/rtrace -i scene.json -o no_aa.png --anti-aliasing no-jitter
 
-# Anti-aliasing with 4 samples per pixel
-./target/release/rtrace -i scene.json -o smooth.png --samples 4
+# Stochastic anti-aliasing with 1 sample
+./target/release/rtrace -i scene.json -o stochastic1.png --anti-aliasing stochastic --samples 1
 
-# High quality rendering with 16 samples
-./target/release/rtrace -i scene.json -o ultra_smooth.png --samples 16
+# Stochastic anti-aliasing with 4 samples per pixel
+./target/release/rtrace -i scene.json -o stochastic4.png --anti-aliasing stochastic --samples 4
+
+# High quality stochastic rendering with 16 samples
+./target/release/rtrace -i scene.json -o stochastic16.png --anti-aliasing stochastic --samples 16
 ```
 
 ### Performance Impact
 
-Higher sample counts improve quality but increase render time linearly:
-- `--no-jitter --samples 1`: Fastest, completely deterministic, may show aliasing
-- `--samples 1`: Fast, good for previews with basic anti-aliasing
-- `--samples 4`: Good balance of quality and speed
-- `--samples 16`: High quality, 16x slower render time
+Different anti-aliasing modes have different performance characteristics:
+- **No Jitter**: Fastest, completely deterministic, may show aliasing (1x render time)
+- **Quincunx** (default): High quality deterministic anti-aliasing (5x render time)
+- **Stochastic (1 sample)**: Fast with basic randomized anti-aliasing (1x render time)  
+- **Stochastic (4 samples)**: Good balance of quality and speed (4x render time)
+- **Stochastic (16 samples)**: Highest quality, slowest (16x render time)
 
 ### Visual Comparison
 
 The difference is most noticeable on edges and fine details. Here's the same scene rendered with three different approaches:
 
-| No Jittering (deterministic) | Stochastic (1 sample) | Stochastic (4 samples) |
-|:----------------------------:|:---------------------:|:----------------------:|
-| ![No Jittering](images/sampling-comparison-no-jitter.png) | ![1 Sample](images/sampling-comparison-1sample.png) | ![4 Samples](images/sampling-comparison-4samples.png) |
+| No Anti-Aliasing | Quincunx (default) | Stochastic (4 samples) |
+|:-----------------:|:------------------:|:----------------------:|
+| ![No Anti-Aliasing](images/sampling-comparison-no-jitter.png) | ![Quincunx](images/sampling-comparison-quincunx.png) | ![4 Samples](images/sampling-comparison-4samples.png) |
 
-**Scene:** Complex geometry with grid textures and perspective camera demonstrates the effect of different sampling approaches on object edges and texture boundaries. Notice how:
-- **No jittering** produces sharp, aliased edges but is completely reproducible
-- **1-sample jittering** reduces aliasing while maintaining fast render times
-- **4-sample jittering** provides smooth edges with minimal visual artifacts
+**Scene:** Complex geometry with grid textures and perspective camera demonstrates the effect of different anti-aliasing approaches on object edges and texture boundaries. Notice how:
+- **No anti-aliasing** produces sharp, aliased edges but is fastest and completely reproducible
+- **Quincunx** (default) provides high-quality deterministic anti-aliasing with smooth edges
+- **Stochastic sampling** offers flexible quality control but with randomized results
 
 ### Anti-Aliasing Comparison
 
-Here's a simpler comparison showing the fundamental difference between deterministic and stochastic sampling:
+Here's a simpler comparison showing the fundamental difference between no anti-aliasing and anti-aliasing:
 
-| No Sampling & No Jitter | Stochastic Anti-Aliasing |
-|:------------------------:|:------------------------:|
-| ![No Sampling](images/sampling-antialiasing-nosamples.png) | ![Anti-Aliasing](images/sampling-antialiasing.png) |
+| No Anti-Aliasing | Quincunx Anti-Aliasing (default) |
+|:----------------:|:--------------------------------:|
+| ![No Anti-Aliasing](images/sampling-antialiasing-nosamples.png) | ![Anti-Aliasing](images/sampling-antialiasing.png) |
 
 This comparison clearly shows:
-- **Left (--samples 1 --no-jitter)**: Completely deterministic rendering with visible aliasing on object edges
-- **Right (--samples 4)**: Stochastic anti-aliasing produces smooth, high-quality edges
+- **Left (--anti-aliasing no-jitter)**: No anti-aliasing with visible aliasing on object edges but fastest rendering
+- **Right (--anti-aliasing quincunx)**: Quincunx anti-aliasing produces smooth, high-quality edges with deterministic results
 
 ---
 

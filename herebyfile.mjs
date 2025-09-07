@@ -233,7 +233,7 @@ const docSpecialScenes = [
     {
         name: "sampling-antialiasing-nosamples",
         scene: "sampling-antialiasing.json",
-        params: "--samples 1 --no-jitter",
+        params: "--anti-aliasing no-jitter",
         description: "Demonstrates no sampling and no jitter (deterministic)"
     }
 ];

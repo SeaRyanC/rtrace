@@ -18,7 +18,7 @@ pub mod scene;
 
 pub use auto_camera::{AutoCamera, AutoCameraResult};
 pub use mesh::{Mesh, Triangle};
-pub use renderer::Renderer;
+pub use renderer::{AntiAliasingMode, Renderer};
 pub use scene::{
     AmbientIllumination, Camera, Fog, Light, Material, Object, Scene, SceneSettings, Texture,
 };

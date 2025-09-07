@@ -11,6 +11,17 @@ use crate::lighting::ray_color;
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 
+/// Anti-aliasing sampling modes
+#[derive(Debug, Clone, PartialEq)]
+pub enum AntiAliasingMode {
+    /// No jittering - deterministic center-pixel sampling
+    NoJitter,
+    /// Quincunx pattern - 5 samples (center + 4 corners) per pixel
+    Quincunx,
+    /// Stochastic sampling - random jittered sampling
+    Stochastic,
+}
+
 pub struct Renderer {
     pub width: u32,
     pub height: u32,
@@ -18,7 +29,7 @@ pub struct Renderer {
     pub use_kdtree: bool, // New field to control k-d tree usage for meshes
     pub thread_count: Option<usize>, // Number of threads to use (None = use all available cores)
     pub samples: u32,     // Number of samples per pixel for stochastic subsampling
-    pub no_jitter: bool,  // Disable stochastic jittering (use center-pixel sampling)
+    pub anti_aliasing_mode: AntiAliasingMode, // Anti-aliasing sampling mode
 }
 
 impl Renderer {
@@ -29,8 +40,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
-            samples: 1,         // Default to single sample per pixel
-            no_jitter: false,   // Default to using stochastic jittering
+            samples: 1,         // Default to 1 sample (quincunx adds shared corner samples)
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -40,10 +51,10 @@ impl Renderer {
             width,
             height,
             max_depth: 10,
-            use_kdtree: false,  // Disable k-d tree
-            thread_count: None, // Use all available cores by default
-            samples: 1,         // Default to single sample per pixel
-            no_jitter: false,   // Default to using stochastic jittering
+            use_kdtree: false,                              // Disable k-d tree
+            thread_count: None,                             // Use all available cores by default
+            samples: 1,                                     // Default to 1 sample (quincunx adds shared corner samples)
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -55,8 +66,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,
             thread_count: Some(thread_count),
-            samples: 1,       // Default to single sample per pixel
-            no_jitter: false, // Default to using stochastic jittering
+            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -73,8 +84,8 @@ impl Renderer {
             max_depth: 10,
             use_kdtree,
             thread_count,
-            samples: 1,       // Default to single sample per pixel
-            no_jitter: false, // Default to using stochastic jittering
+            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
+            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
         }
     }
 
@@ -230,6 +241,28 @@ impl Renderer {
         background_color: Color,
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> Vec<(u32, u32, Color)> {
+        match self.anti_aliasing_mode {
+            AntiAliasingMode::Quincunx => {
+                self.render_quincunx(world, camera, lights, ambient, fog, camera_pos, background_color, materials)
+            }
+            _ => {
+                self.render_standard(world, camera, lights, ambient, fog, camera_pos, background_color, materials)
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_standard(
+        &self,
+        world: &World,
+        camera: &Camera,
+        lights: &[crate::scene::Light],
+        ambient: &crate::scene::AmbientIllumination,
+        fog: &Option<crate::scene::Fog>,
+        camera_pos: &Point,
+        background_color: Color,
+        materials: &HashMap<usize, crate::scene::Material>,
+    ) -> Vec<(u32, u32, Color)> {
         // Create a vector of all pixel coordinates
         let pixels: Vec<(u32, u32)> = (0..self.height)
             .flat_map(|y| (0..self.width).map(move |x| (x, y)))
@@ -259,33 +292,39 @@ impl Renderer {
                 let mut rng = rand::thread_rng();
 
                 for sample in 0..self.samples {
-                    let (sample_u, sample_v) = if self.no_jitter {
-                        // No jittering: sample at exact pixel center
-                        (pixel_u, pixel_v)
-                    } else if self.samples == 1 {
-                        // Single sample with random jitter within pixel bounds
-                        let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                        let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                        (
-                            pixel_u + jitter_u * pixel_width,
-                            pixel_v + jitter_v * pixel_height,
-                        )
-                    } else {
-                        // Multiple samples: radially symmetric pattern with random phase
-                        let angle =
-                            2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
-                        let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
-                        let rotated_angle = angle + random_phase;
+                    let (sample_u, sample_v) = match self.anti_aliasing_mode {
+                        AntiAliasingMode::NoJitter => {
+                            // No jittering: sample at exact pixel center
+                            (pixel_u, pixel_v)
+                        }
+                        AntiAliasingMode::Stochastic => {
+                            if self.samples == 1 {
+                                // Single sample with random jitter within pixel bounds
+                                let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                                let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                                (
+                                    pixel_u + jitter_u * pixel_width,
+                                    pixel_v + jitter_v * pixel_height,
+                                )
+                            } else {
+                                // Multiple samples: radially symmetric pattern with random phase
+                                let angle = 2.0 * std::f64::consts::PI * sample as f64
+                                    / self.samples as f64;
+                                let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
+                                let rotated_angle = angle + random_phase;
 
-                        // Use a smaller radius to keep samples within pixel bounds
-                        let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
-                        let jitter_u = radius * rotated_angle.cos();
-                        let jitter_v = radius * rotated_angle.sin();
+                                // Use a smaller radius to keep samples within pixel bounds
+                                let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
+                                let jitter_u = radius * rotated_angle.cos();
+                                let jitter_v = radius * rotated_angle.sin();
 
-                        (
-                            pixel_u + jitter_u * pixel_width,
-                            pixel_v + jitter_v * pixel_height,
-                        )
+                                (
+                                    pixel_u + jitter_u * pixel_width,
+                                    pixel_v + jitter_v * pixel_height,
+                                )
+                            }
+                        }
+                        AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
@@ -336,6 +375,125 @@ impl Renderer {
         results
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn render_quincunx(
+        &self,
+        world: &World,
+        camera: &Camera,
+        lights: &[crate::scene::Light],
+        ambient: &crate::scene::AmbientIllumination,
+        fog: &Option<crate::scene::Fog>,
+        camera_pos: &Point,
+        background_color: Color,
+        materials: &HashMap<usize, crate::scene::Material>,
+    ) -> Vec<(u32, u32, Color)> {
+        use std::sync::{Arc, Mutex};
+        use std::collections::HashMap as StdHashMap;
+
+        // Pre-compute corner samples that will be shared between pixels
+        // Each corner is identified by its grid position
+        let corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>> = Arc::new(Mutex::new(StdHashMap::new()));
+
+        // Calculate pixel size in UV coordinates
+        let pixel_width = 1.0 / self.width as f64;
+        let pixel_height = 1.0 / self.height as f64;
+
+        // Helper function to get corner sample color (with caching)
+        let get_corner_sample = |corner_x: u32, corner_y: u32, 
+                               corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>>,
+                               world: &World, camera: &Camera| -> Color {
+            let key = (corner_x, corner_y);
+            
+            // Check cache first
+            {
+                let cache = corner_cache.lock().unwrap();
+                if let Some(&color) = cache.get(&key) {
+                    return color;
+                }
+            }
+            
+            // Calculate corner UV coordinates (corners are at pixel boundaries)
+            let corner_u = (corner_x as f64 * pixel_width).clamp(0.0, 1.0);
+            let corner_v = (1.0 - corner_y as f64 * pixel_height).clamp(0.0, 1.0); // Flip Y coordinate
+            
+            let ray = camera.get_ray(corner_u, corner_v);
+            let color = ray_color(
+                &ray,
+                world,
+                lights,
+                ambient,
+                fog,
+                camera_pos,
+                background_color,
+                materials,
+                self.max_depth,
+            );
+            
+            // Cache the result
+            {
+                let mut cache = corner_cache.lock().unwrap();
+                cache.insert(key, color);
+            }
+            
+            color
+        };
+
+        // Create a vector of all pixel coordinates
+        let pixels: Vec<(u32, u32)> = (0..self.height)
+            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+            .collect();
+
+        // Progress tracking setup
+        let total_pixels = self.width * self.height;
+        let progress_step = (total_pixels / 10).max(1);
+
+        // Render pixels in parallel
+        pixels
+            .par_iter()
+            .enumerate()
+            .map(|(pixel_index, &(x, y))| {
+                // Calculate center sample coordinates
+                let pixel_center_u = (x as f64 + 0.5) * pixel_width;
+                let pixel_center_v = 1.0 - (y as f64 + 0.5) * pixel_height; // Flip Y coordinate
+
+                // Center sample
+                let center_ray = camera.get_ray(pixel_center_u, pixel_center_v);
+                let center_color = ray_color(
+                    &center_ray,
+                    world,
+                    lights,
+                    ambient,
+                    fog,
+                    camera_pos,
+                    background_color,
+                    materials,
+                    self.max_depth,
+                );
+
+                // Get corner samples (these are shared between neighboring pixels)
+                // Corner positions are at pixel grid intersections
+                let corner_colors = [
+                    get_corner_sample(x, y, corner_cache.clone(), world, camera),               // Top-left corner
+                    get_corner_sample(x + 1, y, corner_cache.clone(), world, camera),         // Top-right corner
+                    get_corner_sample(x, y + 1, corner_cache.clone(), world, camera),         // Bottom-left corner
+                    get_corner_sample(x + 1, y + 1, corner_cache.clone(), world, camera),     // Bottom-right corner
+                ];
+
+                // Average center + 4 corner samples (true quincunx pattern)
+                let total_color = center_color + corner_colors[0] + corner_colors[1] + corner_colors[2] + corner_colors[3];
+                let color = total_color / 5.0;
+
+                // Print progress periodically (note: this might be out of order due to parallelism)
+                if pixel_index % progress_step as usize == 0 {
+                    let progress = (pixel_index as f64 / total_pixels as f64) * 100.0;
+                    println!("Rendering: {:.1}%", progress);
+                }
+
+                (x, y, color)
+            })
+            .collect()
+    }
+
     fn create_image_from_data(&self, image_data: Vec<(u32, u32, Color)>) -> RgbImage {
         let mut image = ImageBuffer::new(self.width, self.height);
 
@@ -374,10 +532,16 @@ mod tests {
         assert_eq!(renderer.width, 800);
         assert_eq!(renderer.height, 600);
         assert_eq!(renderer.thread_count, None);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
+        assert_eq!(renderer.samples, 1); // Default for quincunx with shared samples
 
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
         assert_eq!(renderer_threaded.thread_count, Some(4));
+        assert_eq!(
+            renderer_threaded.anti_aliasing_mode,
+            AntiAliasingMode::Quincunx
+        );
     }
 
     #[test]
@@ -425,6 +589,7 @@ mod tests {
 
         // Test with multiple samples
         let mut renderer = Renderer::new(50, 50);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Stochastic;
         renderer.samples = 4;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
@@ -456,15 +621,46 @@ mod tests {
 
         // Test no-jitter mode with single sample
         let mut renderer = Renderer::new(50, 50);
+        renderer.anti_aliasing_mode = AntiAliasingMode::NoJitter;
         renderer.samples = 1;
-        renderer.no_jitter = true;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
 
-        // Test no-jitter mode with multiple samples (should still work but be redundant)
+        // Test no-jitter mode with multiple samples (should still work)
         renderer.samples = 4;
-        renderer.no_jitter = true;
         let result = renderer.render(&scene);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_quincunx_sampling() {
+        let mut scene = Scene::default();
+
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a light
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+        });
+
+        // Test quincunx mode with default samples
+        let renderer = Renderer::new(50, 50);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
+        assert_eq!(renderer.samples, 1);
+        let result = renderer.render(&scene);
+        assert!(result.is_ok());
+
+        // Test quincunx mode with custom samples  
+        let mut renderer2 = Renderer::new(50, 50);
+        renderer2.samples = 4;
+        let result = renderer2.render(&scene);
         assert!(result.is_ok());
     }
 
