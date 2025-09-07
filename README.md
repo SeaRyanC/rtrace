@@ -6,7 +6,8 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
 
 - **Ray Tracer**: Complete ray tracing engine with modern lighting models
   - Orthographic and perspective camera projections
-  - Geometric primitives (sphere, plane, cube)
+  - Geometric primitives (sphere, plane, cube, STL mesh)
+  - **Object transforms** (rotate, translate, scale) for flexible positioning
   - Phong lighting model with ambient, diffuse, and specular components
   - Point and area light sources with soft shadows
   - Anti-aliasing with multiple sampling modes (quincunx, stochastic, no-jitter)
@@ -140,7 +141,12 @@ Create JSON files following the schema in `schema.json`. Example:
         "diffuse": 0.8,
         "specular": 0.4,
         "shininess": 32
-      }
+      },
+      "transform": [
+        "rotate(0, 0, 45)",
+        "translate(2, 0, 0)",
+        "scale(1.5, 1.5, 1.5)"
+      ]
     }
   ],
   "lights": [
@@ -158,6 +164,24 @@ Create JSON files following the schema in `schema.json`. Example:
     "background_color": "#001122"
   }
 }
+```
+
+**Object Transforms:**
+
+All objects support optional transforms for positioning and scaling:
+
+- **`"rotate(x, y, z)"`** - Rotate around X, Y, Z axes (degrees)  
+- **`"translate(x, y, z)"`** - Move along X, Y, Z axes (world units)
+- **`"scale(x, y, z)"`** - Scale along X, Y, Z axes (multipliers)
+
+Transforms are applied in the order listed, allowing complex positioning:
+
+```json
+"transform": [
+  "scale(2, 2, 2)",      // Double the size first
+  "rotate(0, 45, 0)",    // Then rotate 45° around Y-axis
+  "translate(10, 0, 0)"  // Finally move to position
+]
 ```
 
 ### Core Library
@@ -298,6 +322,7 @@ The `examples/` directory contains several demonstration scenes:
 1. **Simple Sphere**: Basic sphere with Phong lighting
 2. **Multiple Objects**: Sphere, cube, and textured plane with multiple lights
 3. **Fog Scene**: Atmospheric fog effects with reflective surfaces
+4. **Transform Demo**: Object transforms (rotate, translate, scale) demonstration
 
 Each example includes both the JSON scene file and rendered PNG output at 800x600 resolution.
 
