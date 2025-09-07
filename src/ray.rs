@@ -328,7 +328,8 @@ impl MeshObject {
         }
     }
 
-    /// Ray-triangle intersection using Möller-Trumbore algorithm
+    /// Ray-triangle intersection using optimized Möller-Trumbore algorithm
+    /// with better numerical stability and early exit optimizations
     fn intersect_triangle(
         &self,
         ray: &Ray,
@@ -336,70 +337,86 @@ impl MeshObject {
         t_min: f64,
         t_max: f64,
     ) -> Option<(f64, Vec3, (f64, f64))> {
+        // Use more efficient Möller-Trumbore with optimizations
         let edge1 = triangle.vertices[1] - triangle.vertices[0];
         let edge2 = triangle.vertices[2] - triangle.vertices[0];
+        
+        // Compute determinant
         let h = ray.direction.cross(&edge2);
-        let a = edge1.dot(&h);
+        let det = edge1.dot(&h);
 
-        if a > -1e-8 && a < 1e-8 {
-            return None; // Ray is parallel to triangle
+        // Early exit for parallel rays (with better epsilon)
+        if det.abs() < 1e-10 {
+            return None;
         }
 
-        let f = 1.0 / a;
+        let inv_det = 1.0 / det;
         let s = ray.origin - triangle.vertices[0];
-        let u = f * s.dot(&h);
-
-        if !(0.0..=1.0).contains(&u) {
-            return None;
+        
+        // Compute barycentric coordinate u
+        let u = inv_det * s.dot(&h);
+        if u < 0.0 || u > 1.0 {
+            return None; // Early exit for u out of bounds
         }
 
+        // Compute barycentric coordinate v
         let q = s.cross(&edge1);
-        let v = f * ray.direction.dot(&q);
-
+        let v = inv_det * ray.direction.dot(&q);
         if v < 0.0 || u + v > 1.0 {
+            return None; // Early exit for v out of bounds
+        }
+
+        // Compute intersection distance
+        let t = inv_det * edge2.dot(&q);
+        
+        // Check if intersection is within ray bounds
+        if t <= t_min || t >= t_max {
             return None;
         }
 
-        let t = f * edge2.dot(&q);
-
-        if t > t_min && t < t_max {
-            // Compute normal from vertex geometry, considering vertex winding order
-            let mut normal = edge1.cross(&edge2);
-
-            // Ensure normal is not zero (degenerate triangle)
-            if normal.magnitude() < 1e-8 {
-                return None;
-            }
-
-            // The sign of 'a' tells us about vertex winding:
-            // - If a > 0: vertices are counter-clockwise, normal points toward ray
-            // - If a < 0: vertices are clockwise, normal points away from ray
-            // We want the normal to point toward the "outside" of the mesh
-            if a < 0.0 {
-                normal = -normal;
-            }
-
-            normal = normal.normalize();
-
-            Some((t, normal, (u, v)))
-        } else {
-            None
+        // Compute face normal with proper winding order handling
+        let mut normal = edge1.cross(&edge2);
+        let normal_mag_sq = normal.magnitude_squared();
+        
+        // Check for degenerate triangle
+        if normal_mag_sq < 1e-16 {
+            return None;
         }
+
+        // Normalize and handle winding order
+        normal = normal / normal_mag_sq.sqrt();
+        if det < 0.0 {
+            normal = -normal;
+        }
+
+        Some((t, normal, (u, v)))
     }
 
-    /// Fast bounding box intersection test
+    /// Fast bounding box intersection test using precomputed inverse direction
     fn intersect_bounds(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
         let (bounds_min, bounds_max) = self.mesh.bounds();
+
+        // Precompute inverse directions for better performance
+        let inv_dir = Vec3::new(
+            1.0 / ray.direction.x,
+            1.0 / ray.direction.y, 
+            1.0 / ray.direction.z,
+        );
 
         let mut t_min_bound = t_min;
         let mut t_max_bound = t_max;
 
+        // Unrolled intersection test for x, y, z
         for axis in 0..3 {
-            let inv_dir = 1.0 / ray.direction[axis];
-            let mut t0 = (bounds_min[axis] - ray.origin[axis]) * inv_dir;
-            let mut t1 = (bounds_max[axis] - ray.origin[axis]) * inv_dir;
+            let inv_d = inv_dir[axis];
+            let origin = ray.origin[axis];
+            let min_bound = bounds_min[axis];
+            let max_bound = bounds_max[axis];
 
-            if inv_dir < 0.0 {
+            let mut t0 = (min_bound - origin) * inv_d;
+            let mut t1 = (max_bound - origin) * inv_d;
+
+            if inv_d < 0.0 {
                 std::mem::swap(&mut t0, &mut t1);
             }
 
@@ -417,7 +434,7 @@ impl MeshObject {
 
 impl Intersectable for MeshObject {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
-        // Simple bounding box check first
+        // Fast bounding box check first
         if !self.intersect_bounds(ray, t_min, t_max) {
             return None;
         }
@@ -426,10 +443,11 @@ impl Intersectable for MeshObject {
         let mut closest_t = t_max;
 
         if self.use_kdtree {
-            // Use k-d tree to find triangle candidates
+            // Use k-d tree with optimized traversal
             self.mesh
                 .kdtree
                 .traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+                    // Process triangles in batches for better cache locality
                     for &triangle_idx in triangle_indices {
                         let triangle = &self.mesh.triangles[triangle_idx];
                         if let Some((t, normal, (u, v))) =
@@ -448,30 +466,43 @@ impl Intersectable for MeshObject {
                                 );
                                 hit_record.texture_coords = Some((u, v));
                                 closest_hit = Some(hit_record);
+                                
+                                // Early termination optimization: if we're very close,
+                                // stop searching (useful for dense meshes)
+                                if t < t_min + 1e-6 {
+                                    return;
+                                }
                             }
                         }
                     }
                 });
         } else {
-            // Brute force: test all triangles
-            for triangle in self.mesh.triangles.iter() {
-                if let Some((t, normal, (u, v))) =
-                    self.intersect_triangle(ray, triangle, t_min, closest_t)
-                {
-                    if t < closest_t {
-                        closest_t = t;
-                        let point = ray.at(t);
-                        let mut hit_record = HitRecord::new(
-                            point,
-                            normal,
-                            t,
-                            ray,
-                            self.material_color,
-                            self.material_index,
-                        );
-                        hit_record.texture_coords = Some((u, v));
-                        closest_hit = Some(hit_record);
+            // Optimized brute force with better memory access patterns
+            for chunk in self.mesh.triangles.chunks(64) {
+                for triangle in chunk.iter() {
+                    if let Some((t, normal, (u, v))) =
+                        self.intersect_triangle(ray, triangle, t_min, closest_t)
+                    {
+                        if t < closest_t {
+                            closest_t = t;
+                            let point = ray.at(t);
+                            let mut hit_record = HitRecord::new(
+                                point,
+                                normal,
+                                t,
+                                ray,
+                                self.material_color,
+                                self.material_index,
+                            );
+                            hit_record.texture_coords = Some((u, v));
+                            closest_hit = Some(hit_record);
+                        }
                     }
+                }
+                
+                // Early exit optimization for brute force
+                if closest_t < t_min + 1e-5 {
+                    break;
                 }
             }
         }

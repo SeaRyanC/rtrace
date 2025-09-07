@@ -32,3 +32,7 @@ path = "tools/test_kdtree_consistency.rs"
 [[bin]]
 name = "debug_kdtree"
 path = "tools/debug_kdtree.rs"
+
+[[bin]]
+name = "benchmark_optimizations"
+path = "tools/benchmark_optimizations.rs"

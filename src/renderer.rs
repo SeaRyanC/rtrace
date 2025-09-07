@@ -228,7 +228,7 @@ impl Renderer {
         let total_pixels = self.width * self.height;
         let progress_step = (total_pixels / 10).max(1);
 
-        // Render pixels in parallel
+        // Render pixels in parallel with optimized processing
         pixels
             .par_iter()
             .enumerate()
@@ -241,34 +241,14 @@ impl Renderer {
                 let pixel_width = 1.0 / (self.width - 1) as f64;
                 let pixel_height = 1.0 / (self.height - 1) as f64;
 
-                // Collect samples for this pixel
-                let mut total_color = Color::new(0.0, 0.0, 0.0);
-                let mut rng = rand::thread_rng();
-
-                for sample in 0..self.samples {
+                // Optimized single sample case (most common)
+                let color = if self.samples == 1 {
+                    let mut rng = rand::thread_rng();
                     let (sample_u, sample_v) = if self.no_jitter {
-                        // No jittering: sample at exact pixel center
                         (pixel_u, pixel_v)
-                    } else if self.samples == 1 {
-                        // Single sample with random jitter within pixel bounds
-                        let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                        let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                        (
-                            pixel_u + jitter_u * pixel_width,
-                            pixel_v + jitter_v * pixel_height,
-                        )
                     } else {
-                        // Multiple samples: radially symmetric pattern with random phase
-                        let angle =
-                            2.0 * std::f64::consts::PI * sample as f64 / self.samples as f64;
-                        let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
-                        let rotated_angle = angle + random_phase;
-
-                        // Use a smaller radius to keep samples within pixel bounds
-                        let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
-                        let jitter_u = radius * rotated_angle.cos();
-                        let jitter_v = radius * rotated_angle.sin();
-
+                        let jitter_u = rng.gen::<f64>() - 0.5;
+                        let jitter_v = rng.gen::<f64>() - 0.5;
                         (
                             pixel_u + jitter_u * pixel_width,
                             pixel_v + jitter_v * pixel_height,
@@ -276,7 +256,7 @@ impl Renderer {
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
-                    let sample_color = ray_color(
+                    ray_color(
                         &ray,
                         world,
                         lights,
@@ -286,15 +266,51 @@ impl Renderer {
                         background_color,
                         materials,
                         self.max_depth,
-                    );
+                    )
+                } else {
+                    // Multi-sample case with optimized accumulation
+                    let mut total_color = Color::new(0.0, 0.0, 0.0);
+                    let mut rng = rand::thread_rng();
 
-                    total_color += sample_color;
-                }
+                    for sample in 0..self.samples {
+                        let (sample_u, sample_v) = if self.no_jitter {
+                            (pixel_u, pixel_v)
+                        } else {
+                            // Stratified sampling for better distribution
+                            let grid_size = (self.samples as f64).sqrt() as u32;
+                            let sub_x = (sample % grid_size) as f64;
+                            let sub_y = (sample / grid_size) as f64;
+                            let sub_pixel_size = 1.0 / grid_size as f64;
+                            
+                            let jitter_u = (sub_x + rng.gen::<f64>()) * sub_pixel_size - 0.5;
+                            let jitter_v = (sub_y + rng.gen::<f64>()) * sub_pixel_size - 0.5;
+                            
+                            (
+                                pixel_u + jitter_u * pixel_width,
+                                pixel_v + jitter_v * pixel_height,
+                            )
+                        };
 
-                // Average the samples
-                let color = total_color / self.samples as f64;
+                        let ray = camera.get_ray(sample_u, sample_v);
+                        let sample_color = ray_color(
+                            &ray,
+                            world,
+                            lights,
+                            ambient,
+                            fog,
+                            camera_pos,
+                            background_color,
+                            materials,
+                            self.max_depth,
+                        );
 
-                // Print progress periodically (note: this might be out of order due to parallelism)
+                        total_color += sample_color;
+                    }
+                    
+                    total_color / self.samples as f64
+                };
+
+                // Print progress periodically
                 if pixel_index % progress_step as usize == 0 {
                     let progress = (pixel_index as f64 / total_pixels as f64) * 100.0;
                     println!("Rendering: {:.1}%", progress);
