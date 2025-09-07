@@ -129,6 +129,7 @@ pub struct Light {
     pub position: [f64; 3],
     pub color: String, // hex color
     pub intensity: f64,
+    pub diameter: Option<f64>, // optional diameter for diffuse light sources
 }
 
 /// Ambient illumination settings

@@ -153,10 +153,15 @@
             "type": "number",
             "minimum": 0,
             "description": "Light intensity multiplier"
+          },
+          "diameter": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Optional diameter for diffuse (area) light sources. If null or omitted, the light behaves as a point light with sharp shadows. If specified, creates soft shadows."
           }
         }
       },
-      "description": "Array of point light sources"
+      "description": "Array of light sources (point lights and diffuse area lights)"
     },
     "scene_settings": {
       "type": "object",
