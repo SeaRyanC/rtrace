@@ -12,6 +12,10 @@ pub struct Camera {
     pub view_direction: Unit<Vec3>,
     pub is_perspective: bool,
     pub focal_length: f64,
+    // Grid background fields for orthographic cameras
+    pub grid_pitch: Option<f64>,
+    pub grid_color: Option<crate::scene::Color>,
+    pub grid_thickness: Option<f64>,
 }
 
 impl Camera {
@@ -27,12 +31,19 @@ impl Camera {
         let v = w.cross(&u); // Up vector
         let view_direction = Unit::new_normalize(-*w.as_ref());
 
+        // Parse grid color if provided
+        let grid_color = if let Some(color_str) = &config.grid_color {
+            Some(crate::scene::hex_to_color(color_str)?)
+        } else {
+            None
+        };
+
         match config.kind.as_str() {
             "ortho" => {
-                Self::create_orthographic(origin, u, v, w, view_direction, config, aspect_ratio)
+                Self::create_orthographic(origin, u, v, w, view_direction, config, aspect_ratio, grid_color)
             }
             "perspective" => {
-                Self::create_perspective(origin, u, v, w, view_direction, config, aspect_ratio)
+                Self::create_perspective(origin, u, v, w, view_direction, config, aspect_ratio, grid_color)
             }
             _ => Err(format!("Unsupported camera type: {}", config.kind)),
         }
@@ -47,6 +58,7 @@ impl Camera {
         view_direction: Unit<Vec3>,
         config: &CameraConfig,
         aspect_ratio: f64,
+        grid_color: Option<crate::scene::Color>,
     ) -> Result<Self, String> {
         // Calculate viewport dimensions
         let viewport_height = config.height;
@@ -67,6 +79,9 @@ impl Camera {
             view_direction,
             is_perspective: false,
             focal_length: 0.0, // Not used for orthographic
+            grid_pitch: config.grid_pitch,
+            grid_color,
+            grid_thickness: config.grid_thickness,
         })
     }
 
@@ -79,6 +94,7 @@ impl Camera {
         view_direction: Unit<Vec3>,
         config: &CameraConfig,
         aspect_ratio: f64,
+        grid_color: Option<crate::scene::Color>,
     ) -> Result<Self, String> {
         // Get field of view, default to 45 degrees if not specified
         let fov = config.fov.unwrap_or(45.0);
@@ -115,6 +131,9 @@ impl Camera {
             view_direction,
             is_perspective: true,
             focal_length,
+            grid_pitch: config.grid_pitch,
+            grid_color,
+            grid_thickness: config.grid_thickness,
         })
     }
 
@@ -131,6 +150,95 @@ impl Camera {
             let viewport_point = self.lower_left_corner + u * self.horizontal + v * self.vertical;
             Ray::new(viewport_point, *self.view_direction.as_ref())
         }
+    }
+
+    /// Check if an orthographic camera ray intersects with grid lines
+    /// Returns the grid color if the ray hits a grid line, None otherwise
+    pub fn get_grid_color(&self, ray: &Ray) -> Option<crate::scene::Color> {
+        // Only orthographic cameras support grid backgrounds
+        if self.is_perspective {
+            return None;
+        }
+
+        // Check if grid is configured
+        let (grid_pitch, grid_color, grid_thickness) = match (
+            self.grid_pitch,
+            &self.grid_color,
+            self.grid_thickness,
+        ) {
+            (Some(pitch), Some(color), Some(thickness)) if pitch > 0.0 && thickness > 0.0 => {
+                (pitch, color, thickness)
+            }
+            _ => return None,
+        };
+
+        let half_thickness = grid_thickness / 2.0;
+
+        // For orthographic rays, we need to find intersections with the origin planes
+        // and check if we're close to grid lines
+
+        // Check intersection with XY plane (z = 0)
+        if ray.direction.z.abs() > 1e-10 {
+            let t = -ray.origin.z / ray.direction.z;
+            if t > 0.0 {
+                let intersection_point = ray.origin + t * ray.direction.as_ref();
+                let x = intersection_point.x;
+                let y = intersection_point.y;
+
+                // Check if we're on a grid line
+                let x_mod = (x / grid_pitch).fract().abs();
+                let y_mod = (y / grid_pitch).fract().abs();
+
+                let x_grid_dist = (x_mod * grid_pitch).min((1.0 - x_mod) * grid_pitch);
+                let y_grid_dist = (y_mod * grid_pitch).min((1.0 - y_mod) * grid_pitch);
+
+                if x_grid_dist <= half_thickness || y_grid_dist <= half_thickness {
+                    return Some(*grid_color);
+                }
+            }
+        }
+
+        // Check intersection with XZ plane (y = 0)
+        if ray.direction.y.abs() > 1e-10 {
+            let t = -ray.origin.y / ray.direction.y;
+            if t > 0.0 {
+                let intersection_point = ray.origin + t * ray.direction.as_ref();
+                let x = intersection_point.x;
+                let z = intersection_point.z;
+
+                let x_mod = (x / grid_pitch).fract().abs();
+                let z_mod = (z / grid_pitch).fract().abs();
+
+                let x_grid_dist = (x_mod * grid_pitch).min((1.0 - x_mod) * grid_pitch);
+                let z_grid_dist = (z_mod * grid_pitch).min((1.0 - z_mod) * grid_pitch);
+
+                if x_grid_dist <= half_thickness || z_grid_dist <= half_thickness {
+                    return Some(*grid_color);
+                }
+            }
+        }
+
+        // Check intersection with YZ plane (x = 0)
+        if ray.direction.x.abs() > 1e-10 {
+            let t = -ray.origin.x / ray.direction.x;
+            if t > 0.0 {
+                let intersection_point = ray.origin + t * ray.direction.as_ref();
+                let y = intersection_point.y;
+                let z = intersection_point.z;
+
+                let y_mod = (y / grid_pitch).fract().abs();
+                let z_mod = (z / grid_pitch).fract().abs();
+
+                let y_grid_dist = (y_mod * grid_pitch).min((1.0 - y_mod) * grid_pitch);
+                let z_grid_dist = (z_mod * grid_pitch).min((1.0 - z_mod) * grid_pitch);
+
+                if y_grid_dist <= half_thickness || z_grid_dist <= half_thickness {
+                    return Some(*grid_color);
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -227,5 +335,71 @@ mod tests {
         // Ray directions should be different (diverging)
         assert!((ray_center.direction.as_ref() - ray_left.direction.as_ref()).magnitude() > 1e-6);
         assert!((ray_center.direction.as_ref() - ray_right.direction.as_ref()).magnitude() > 1e-6);
+    }
+
+    #[test]
+    fn test_orthographic_grid_background() {
+        let mut config = CameraConfig::default();
+        config.grid_pitch = Some(1.0);
+        config.grid_color = Some("#FF0000".to_string()); // Red grid
+        config.grid_thickness = Some(0.1);
+        
+        let camera = Camera::from_config(&config, 1.0).unwrap();
+        
+        // Test that grid fields are properly set
+        assert_eq!(camera.grid_pitch, Some(1.0));
+        assert!(camera.grid_color.is_some());
+        assert_eq!(camera.grid_thickness, Some(0.1));
+        
+        // Create a ray that should hit the grid (looking towards a grid line on XY plane)
+        // Grid lines are at integer coordinates, so (0.0, 0.3) should hit the x=0 line
+        let ray = crate::ray::Ray::new(
+            crate::scene::Point::new(0.0, 0.3, 5.0), // Start above the XY plane, on x=0 line
+            crate::scene::Vec3::new(0.0, 0.0, -1.0), // Look down towards XY plane
+        );
+        
+        // Check if the ray hits the grid
+        let grid_color = camera.get_grid_color(&ray);
+        assert!(grid_color.is_some(), "Ray should hit grid line at x=0");
+        
+        // Create a ray that should also hit the grid (y=1 line)
+        let ray_y_grid = crate::ray::Ray::new(
+            crate::scene::Point::new(0.3, 1.0, 5.0), // Start above the XY plane, on y=1 line
+            crate::scene::Vec3::new(0.0, 0.0, -1.0), 
+        );
+        
+        let grid_color_y = camera.get_grid_color(&ray_y_grid);
+        assert!(grid_color_y.is_some(), "Ray should hit grid line at y=1");
+        
+        // Create a ray that should miss the grid (between lines)
+        let ray_miss = crate::ray::Ray::new(
+            crate::scene::Point::new(0.3, 0.3, 5.0), // Position away from grid lines
+            crate::scene::Vec3::new(0.0, 0.0, -1.0), 
+        );
+        
+        let grid_color_miss = camera.get_grid_color(&ray_miss);
+        assert!(grid_color_miss.is_none(), "Ray should miss grid lines");
+    }
+
+    #[test]
+    fn test_perspective_camera_no_grid() {
+        let mut config = CameraConfig::default();
+        config.kind = "perspective".to_string();
+        config.fov = Some(45.0);
+        config.grid_pitch = Some(1.0); // Grid settings should be ignored for perspective
+        config.grid_color = Some("#FF0000".to_string());
+        config.grid_thickness = Some(0.1);
+        
+        let camera = Camera::from_config(&config, 1.0).unwrap();
+        
+        // Create any ray
+        let ray = crate::ray::Ray::new(
+            crate::scene::Point::new(0.0, 0.0, 5.0),
+            crate::scene::Vec3::new(0.0, 0.0, -1.0),
+        );
+        
+        // Grid should not work for perspective cameras
+        let grid_color = camera.get_grid_color(&ray);
+        assert!(grid_color.is_none(), "Perspective cameras should not support grid backgrounds");
     }
 }

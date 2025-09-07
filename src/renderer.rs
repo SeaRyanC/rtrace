@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::camera::Camera;
-use crate::lighting::ray_color;
+use crate::lighting::ray_color_with_camera;
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 
@@ -289,7 +289,7 @@ impl Renderer {
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
-                    let sample_color = ray_color(
+                    let sample_color = ray_color_with_camera(
                         &ray,
                         world,
                         lights,
@@ -299,6 +299,7 @@ impl Renderer {
                         background_color,
                         materials,
                         self.max_depth,
+                        Some(camera),
                     );
 
                     total_color += sample_color;
