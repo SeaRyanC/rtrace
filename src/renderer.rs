@@ -121,12 +121,31 @@ impl Renderer {
                     center,
                     radius,
                     material,
+                    transform,
                 } => {
-                    let center = Point::new(center[0], center[1], center[2]);
+                    let mut center_point = Point::new(center[0], center[1], center[2]);
+                    let mut effective_radius = *radius;
+                    
+                    // Apply transforms if present
+                    if let Some(transform_strings) = transform {
+                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                            // Transform the center point
+                            let center_homogeneous = transform_matrix * center_point.to_homogeneous();
+                            center_point = Point::new(center_homogeneous.x, center_homogeneous.y, center_homogeneous.z);
+                            
+                            // For radius, we need to consider scaling - use the maximum scale component
+                            let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
+                            let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
+                            let scale_z = (transform_matrix.column(2).xyz().magnitude()) as f64;
+                            let max_scale = scale_x.max(scale_y).max(scale_z);
+                            effective_radius *= max_scale;
+                        }
+                    }
+                    
                     let color = hex_to_color(&material.color)?;
                     let sphere = Box::new(Sphere {
-                        center,
-                        radius: *radius,
+                        center: center_point,
+                        radius: effective_radius,
                         material_color: color,
                         material_index: index,
                     });
@@ -137,14 +156,32 @@ impl Renderer {
                     point,
                     normal,
                     material,
+                    transform,
                 } => {
-                    let point = Point::new(point[0], point[1], point[2]);
-                    let normal =
-                        nalgebra::Unit::new_normalize(Vec3::new(normal[0], normal[1], normal[2]));
+                    let mut plane_point = Point::new(point[0], point[1], point[2]);
+                    let mut plane_normal = Vec3::new(normal[0], normal[1], normal[2]);
+                    
+                    // Apply transforms if present
+                    if let Some(transform_strings) = transform {
+                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                            // Transform the point
+                            let point_homogeneous = transform_matrix * plane_point.to_homogeneous();
+                            plane_point = Point::new(point_homogeneous.x, point_homogeneous.y, point_homogeneous.z);
+                            
+                            // Transform the normal (inverse transpose for normals)
+                            if let Some(inverse_matrix) = transform_matrix.try_inverse() {
+                                let inverse_transpose = inverse_matrix.transpose();
+                                let normal_homogeneous = inverse_transpose * plane_normal.to_homogeneous();
+                                plane_normal = Vec3::new(normal_homogeneous.x, normal_homogeneous.y, normal_homogeneous.z);
+                            }
+                        }
+                    }
+                    
+                    let normal_unit = nalgebra::Unit::new_normalize(plane_normal);
                     let color = hex_to_color(&material.color)?;
                     let plane = Box::new(Plane {
-                        point,
-                        normal,
+                        point: plane_point,
+                        normal: normal_unit,
                         material_color: color,
                         material_index: index,
                     });
@@ -155,25 +192,63 @@ impl Renderer {
                     center,
                     size,
                     material,
+                    transform,
                 } => {
-                    let center = Point::new(center[0], center[1], center[2]);
-                    let size = Vec3::new(size[0], size[1], size[2]);
+                    let mut center_point = Point::new(center[0], center[1], center[2]);
+                    let mut cube_size = Vec3::new(size[0], size[1], size[2]);
+                    
+                    // Apply transforms if present
+                    if let Some(transform_strings) = transform {
+                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                            // Transform the center point
+                            let center_homogeneous = transform_matrix * center_point.to_homogeneous();
+                            center_point = Point::new(center_homogeneous.x, center_homogeneous.y, center_homogeneous.z);
+                            
+                            // For size, we need to consider scaling
+                            let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
+                            let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
+                            let scale_z = (transform_matrix.column(2).xyz().magnitude()) as f64;
+                            cube_size.x *= scale_x;
+                            cube_size.y *= scale_y;
+                            cube_size.z *= scale_z;
+                        }
+                    }
+                    
                     let color = hex_to_color(&material.color)?;
-                    let cube = Box::new(Cube::new(center, size, color, index));
+                    let cube = Box::new(Cube::new(center_point, cube_size, color, index));
                     world.add(cube);
                     materials.insert(index, material.clone());
                 }
                 Object::Mesh {
                     mesh_data,
                     material,
+                    transform,
                     ..
                 } => {
                     if let Some(mesh) = mesh_data {
+                        let mut transformed_mesh = mesh.clone();
+                        
+                        // Apply transforms if present
+                        if let Some(transform_strings) = transform {
+                            if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                                // Transform all vertices in the mesh
+                                for triangle in &mut transformed_mesh.triangles {
+                                    for vertex in &mut triangle.vertices {
+                                        let vertex_homogeneous = transform_matrix * vertex.to_homogeneous();
+                                        *vertex = Point::new(vertex_homogeneous.x, vertex_homogeneous.y, vertex_homogeneous.z);
+                                    }
+                                }
+                                
+                                // Rebuild the KD-tree with transformed vertices
+                                transformed_mesh.build_kdtree();
+                            }
+                        }
+                        
                         let color = hex_to_color(&material.color)?;
                         let mesh_object = if self.use_kdtree {
-                            Box::new(MeshObject::new(mesh.clone(), color, index))
+                            Box::new(MeshObject::new(transformed_mesh, color, index))
                         } else {
-                            Box::new(MeshObject::new_brute_force(mesh.clone(), color, index))
+                            Box::new(MeshObject::new_brute_force(transformed_mesh, color, index))
                         };
                         world.add(mesh_object);
                         materials.insert(index, material.clone());
@@ -586,7 +661,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         // Add a light
@@ -610,7 +685,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         // Add a light
@@ -642,7 +717,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         // Add a light
@@ -674,7 +749,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         // Add a light
@@ -707,7 +782,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         // Add a diffuse light for area light sampling 
@@ -748,7 +823,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         // Add a diffuse light for area light sampling 
@@ -794,7 +869,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         // Add a diffuse light
@@ -833,7 +908,7 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(),
+            material: Material::default(), transform: None,
         });
 
         let mut renderer = Renderer::new(10, 10);

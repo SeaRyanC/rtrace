@@ -1033,7 +1033,7 @@ impl Mesh {
     }
 
     /// Build k-d tree for accelerating ray intersections
-    fn build_kdtree(&mut self) {
+    pub fn build_kdtree(&mut self) {
         // Use reasonable defaults: max depth 16, max 10 triangles per leaf
         self.kdtree = KdTree::new(&self.triangles, 16, 10);
     }
