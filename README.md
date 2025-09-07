@@ -5,13 +5,15 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
 ## Features
 
 - **Ray Tracer**: Complete ray tracing engine with modern lighting models
-  - Orthographic camera projection
+  - Orthographic and perspective camera projections
   - Geometric primitives (sphere, plane, cube)
   - Phong lighting model with ambient, diffuse, and specular components
-  - Point light sources with colors and intensities
+  - Point and area light sources with soft shadows
+  - Anti-aliasing with multiple sampling modes (quincunx, stochastic, no-jitter)
   - Atmospheric fog with configurable density and falloff
   - Surface reflections
   - Grid texture patterns for planes
+  - **Deterministic rendering** with seeded randomness for reproducible results
 - **CLI Tool**: Command-line ray tracer for rendering scenes from JSON
 - **Node.js Bindings**: Native Node.js modules using napi-rs
 - **JSON Scene Format**: Flexible scene description with JSON schema validation
@@ -60,10 +62,29 @@ cargo build --release -p rtrace-cli
 
 **CLI Options:**
 - `-i, --input <FILE>`: Input JSON scene file (required)
-- `-o, --output <FILE>`: Output PNG image file (required)
+- `-o, --output <FILE>`: Output PNG image file (required)  
 - `-w, --width <WIDTH>`: Image width in pixels (default: 800)
 - `-H, --height <HEIGHT>`: Image height in pixels (default: 600)
 - `--max-depth <DEPTH>`: Maximum ray bounces for reflections (default: 10)
+- `--samples <SAMPLES>`: Number of samples per pixel for anti-aliasing
+- `--anti-aliasing <MODE>`: Anti-aliasing mode - `quincunx` (default), `stochastic`, or `no-jitter`
+- `--seed <SEED>`: Random seed for deterministic rendering (default: 0)
+
+**Deterministic Rendering:**
+
+The ray tracer ensures reproducible results by using deterministic seeding for all randomness:
+- Same input scene + seed = identical output image (byte-for-byte)
+- Different seeds produce different random sampling patterns
+- Works across different thread counts and hardware
+
+```bash
+# Two identical renders (same result)
+./target/release/rtrace --input scene.json --output render1.png --seed 42
+./target/release/rtrace --input scene.json --output render2.png --seed 42
+
+# Different seeds for variation
+./target/release/rtrace --input scene.json --output variation.png --seed 123
+```
 
 ### Auto Camera Bounds CLI
 

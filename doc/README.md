@@ -22,7 +22,8 @@ This comprehensive guide covers all features and options available in the rtrace
    - [Background Color](#background-color)
    - [Fog Effects](#fog-effects)
 8. [Stochastic Subsampling](#stochastic-subsampling)
-9. [Examples](#examples)
+9. [Deterministic Rendering](#deterministic-rendering)
+10. [Examples](#examples)
 
 ---
 
@@ -47,6 +48,7 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 | `--max-depth <MAX_DEPTH>` | - | Maximum ray bounces for reflections | 10 |
 | `--samples <SAMPLES>` | - | Number of samples per pixel | Auto (5 for quincunx) |
 | `--anti-aliasing <MODE>` | - | Anti-aliasing mode: quincunx, stochastic, or no-jitter | quincunx |
+| `--seed <SEED>` | - | Random seed for deterministic rendering | 0 |
 | `--help` | `-h` | Print help information | - |
 | `--version` | `-V` | Print version information | - |
 
@@ -794,6 +796,62 @@ The following examples demonstrate the orthographic camera grid background featu
 ```
 
 ![Side View Grid](../examples/side_view_grid_800x600.png)
+
+---
+
+## Deterministic Rendering
+
+The ray tracer ensures **deterministic, reproducible results** by using seeded randomness for all stochastic operations. This means that the same input scene with the same seed will always produce byte-for-byte identical output images, regardless of hardware or thread count.
+
+### How It Works
+
+All randomness in the ray tracer is controlled by deterministic seeding:
+
+- **Anti-aliasing sampling**: Each pixel gets a unique seed based on coordinates
+- **Area light sampling**: Hit points generate consistent random sequences for soft shadows
+- **Thread-safe**: Results are independent of thread scheduling or execution order
+
+### Usage
+
+Use the `--seed` parameter to control deterministic behavior:
+
+```bash
+# Same seed = identical results
+./rtrace --input scene.json --output render1.png --seed 42
+./rtrace --input scene.json --output render2.png --seed 42
+# render1.png and render2.png are byte-for-byte identical
+
+# Different seeds = different random sampling
+./rtrace --input scene.json --output variation1.png --seed 100
+./rtrace --input scene.json --output variation2.png --seed 200
+# Different noise patterns but same scene
+```
+
+### Benefits
+
+- **Reproducible renders**: Perfect for version control, debugging, and collaboration
+- **Consistent results**: Same scene always produces same output across systems
+- **Controllable variation**: Use different seeds for artistic variation
+- **Thread-independent**: Results don't depend on CPU core count or scheduling
+
+### Anti-aliasing Modes
+
+All anti-aliasing modes are deterministic:
+
+- **Quincunx** (default): 5 samples per pixel (center + 4 corners), shared between adjacent pixels
+- **Stochastic**: Random jittered sampling within pixel bounds, configurable sample count
+- **No-jitter**: Single center sample per pixel, fastest rendering
+
+```bash
+# Deterministic stochastic sampling with 16 samples per pixel
+./rtrace --input scene.json --output high_quality.png --anti-aliasing stochastic --samples 16 --seed 42
+
+# Deterministic quincunx (default)
+./rtrace --input scene.json --output default.png --seed 42
+
+# No randomness needed
+./rtrace --input scene.json --output clean.png --anti-aliasing no-jitter
+```
 
 ---
 
