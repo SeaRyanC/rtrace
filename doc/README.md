@@ -338,7 +338,11 @@ Currently supports grid patterns for planes.
 
 ## Lighting
 
-Point light sources with position, color, and intensity.
+rtrace supports both point lights and diffuse (area) lights for different lighting effects.
+
+### Point Lights
+
+Traditional point light sources with sharp shadows and fast rendering.
 
 ```json
 {
@@ -358,9 +362,54 @@ Point light sources with position, color, and intensity.
 | `color` | string | Light color as hex string |
 | `intensity` | number | Light intensity multiplier (≥0) |
 
+### Diffuse (Area) Lights
+
+Area light sources that create soft shadows and realistic lighting by simulating light sources with physical size.
+
+```json
+{
+  "lights": [
+    {
+      "position": [2, 4, 3],
+      "color": "#FFFFFF",
+      "intensity": 1.0,
+      "diameter": 2.0
+    }
+  ]
+}
+```
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `position` | [x, y, z] | Light position in 3D space |
+| `color` | string | Light color as hex string |
+| `intensity` | number | Light intensity multiplier (≥0) |
+| `diameter` | number (optional) | Light disk diameter. If omitted or null, behaves as point light |
+
+#### Light Type Comparison
+
+- **Point lights** (`diameter` omitted or null): Sharp shadows, fast rendering (1 shadow ray per pixel)
+- **Diffuse lights** (`diameter > 0`): Soft shadows, slower rendering (16 shadow rays per pixel)
+
+#### Visual Effects
+
+Diffuse lights create several realistic lighting phenomena:
+- **Soft shadows**: Shadow edges fade gradually from dark to light areas
+- **Contact shadows**: Areas near object contact points have sharper shadows  
+- **Penumbra effects**: Natural shadow falloff similar to real-world lighting
+- **Area lighting**: Objects receive illumination from multiple directions
+
+#### Performance Considerations
+
+Diffuse lights require 16x more shadow ray calculations than point lights. Use sparingly for optimal performance, or consider fewer samples for preview renders.
+
 **Example:** Multiple colored lights
 
 ![Multiple Lights](images/lighting-multiple.png)
+
+**Example:** Diffuse light comparison showing soft vs. sharp shadows
+
+![Diffuse Light Demo](images/diffuse_light_demo.png)
 
 ---
 

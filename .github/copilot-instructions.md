@@ -91,21 +91,21 @@ cargo clippy --workspace -- -D warnings
 2. Write unit tests
 3. Document with examples
 4. Update bindings if needed
-5. **Add example scenes and documentation in `doc/` folder**
+5. **Update existing documentation in `doc/README.md` and add example scenes in `doc/` folder**
 
 ### New Binding Functions
 1. Add to core library first
 2. Create binding wrapper in appropriate crate
 3. Test the binding works correctly
 4. Update documentation
-5. **Add example scenes and documentation in `doc/` folder**
+5. **Update existing documentation in `doc/README.md` and add example scenes in `doc/` folder**
 
 ### CLI Features
 1. Add new clap arguments/subcommands
 2. Implement logic using core library
 3. Add tests for new CLI behavior
 4. Update help text and documentation
-5. **Add example scenes and documentation in `doc/` folder**
+5. **Update existing documentation in `doc/README.md` and add example scenes in `doc/` folder**
 
 ## Common Patterns
 
@@ -202,7 +202,7 @@ When helping with rtrace development:
 4. **Consider all targets**: Changes may affect multiple bindings
 5. **Update documentation**: Keep README and examples current
 6. **Security conscious**: Avoid unsafe code unless necessary
-7. **Document new features**: Any new rtrace features must include example scenes and documentation in the `doc/` folder
+7. **Document new features**: Update existing documentation in `doc/README.md` with new feature information integrated into appropriate sections, and add example scenes to `doc/scenes/` or `examples/`. Do not create standalone documentation files unless absolutely necessary.
 
 ## Resources
 
