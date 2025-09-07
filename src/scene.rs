@@ -183,6 +183,17 @@ pub struct Scene {
     pub scene_settings: SceneSettings,
 }
 
+#[allow(clippy::derivable_impls)]
+impl Default for Scene {
+    fn default() -> Self {
+        Self {
+            camera: Camera::default(),
+            objects: Vec::new(),
+            lights: Vec::new(),
+            scene_settings: SceneSettings::default(),
+        }
+    }
+}
 
 impl Scene {
     /// Load scene from JSON file
