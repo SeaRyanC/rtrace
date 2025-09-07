@@ -68,7 +68,12 @@
                 "minimum": 0,
                 "description": "Sphere radius"
               },
-              "material": { "$ref": "#/definitions/material" }
+              "material": { "$ref": "#/definitions/material" },
+              "transform": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
+              }
             }
           },
           {
@@ -90,7 +95,12 @@
                 "maxItems": 3,
                 "description": "Plane normal vector as [x, y, z]"
               },
-              "material": { "$ref": "#/definitions/material" }
+              "material": { "$ref": "#/definitions/material" },
+              "transform": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
+              }
             }
           },
           {
@@ -112,7 +122,12 @@
                 "maxItems": 3,
                 "description": "Cube dimensions as [width, height, depth]"
               },
-              "material": { "$ref": "#/definitions/material" }
+              "material": { "$ref": "#/definitions/material" },
+              "transform": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
+              }
             }
           },
           {
@@ -124,7 +139,12 @@
                 "type": "string",
                 "description": "Path to STL file (binary or ASCII format)"
               },
-              "material": { "$ref": "#/definitions/material" }
+              "material": { "$ref": "#/definitions/material" },
+              "transform": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
+              }
             }
           }
         ]

@@ -162,6 +162,7 @@ mod tests {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
             material: Material::default(),
+            transform: None,
         };
 
         let scene = Scene {
@@ -204,6 +205,7 @@ mod tests {
             center: [1.0, 1.0, 1.0],
             size: [2.0, 2.0, 2.0],
             material: Material::default(),
+            transform: None,
         };
 
         let scene = Scene {
@@ -242,6 +244,7 @@ mod tests {
             point: [0.0, 0.0, 0.0],
             normal: [0.0, 0.0, 1.0],
             material: Material::default(),
+            transform: None,
         };
 
         let scene = Scene {
