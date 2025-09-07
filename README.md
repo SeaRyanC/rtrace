@@ -5,7 +5,8 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
 ## Features
 
 - **Ray Tracer**: Complete ray tracing engine with modern lighting models
-  - Orthographic camera projection
+  - Orthographic and perspective camera projections
+  - Orthographic grid backgrounds for world coordinate reference
   - Geometric primitives (sphere, plane, cube)
   - Phong lighting model with ambient, diffuse, and specular components
   - Point light sources with colors and intensities
