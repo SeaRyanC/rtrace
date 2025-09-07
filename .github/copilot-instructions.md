@@ -161,7 +161,7 @@ pub fn node_function(input: String) -> String {
 3. Run clippy: `cargo clippy --workspace -- -D warnings`
 4. Build all targets: `cargo build --workspace --release`
 5. Update CHANGELOG.md with new features
-6. Regenerate documentation images: `npm run doc:render` (validates rendering consistency)
+6. Regenerate documentation images: `npx hereby doc:render` (validates rendering consistency)
 7. Create git tag for release
 8. Publish crates to crates.io
 9. Publish npm package if bindings changed
@@ -192,7 +192,7 @@ When contributing to rtrace:
 4. **Check all targets**: Ensure changes work across all bindings
 5. **Performance aware**: Consider impact on bundle size and speed
 6. **Backward compatibility**: Avoid breaking changes when possible
-7. **Regenerate image samples**: As the final step in any PR, regenerate documentation images in `/doc/images/` using `npm run doc:render`. These images serve as an ad hoc test suite and should NOT change unless rendering code has actually been modified.
+7. **Regenerate image samples**: As the final step in any PR, regenerate documentation images in `/doc/images/` using `npx hereby doc:render`. These images serve as an ad hoc test suite and should NOT change unless rendering code has actually been modified.
 
 ## AI Assistant Guidelines
 
@@ -205,7 +205,7 @@ When helping with rtrace development:
 5. **Update documentation**: Keep README and examples current
 6. **Security conscious**: Avoid unsafe code unless necessary
 7. **Document new features**: Update existing documentation in `doc/README.md` with new feature information integrated into appropriate sections, and add example scenes to `doc/scenes/` or `examples/`. Do not create standalone documentation files unless absolutely necessary.
-8. **Validate with images**: Before completing any PR, regenerate documentation images using `npm run doc:render` to ensure rendering behavior hasn't unintentionally changed. Images in `/doc/images/` serve as an ad hoc test suite and should remain consistent unless rendering logic was specifically modified.
+8. **Validate with images**: Before completing any PR, regenerate documentation images using `npx hereby doc:render` to ensure rendering behavior hasn't unintentionally changed. Images in `/doc/images/` serve as an ad hoc test suite and should remain consistent unless rendering logic was specifically modified.
 
 ## Resources
 
