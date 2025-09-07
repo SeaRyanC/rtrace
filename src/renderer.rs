@@ -1,5 +1,5 @@
 use image::{ImageBuffer, Rgb, RgbImage};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -196,7 +196,10 @@ impl Renderer {
 
             let total_time = render_start_time.elapsed();
             let image = self.create_image_from_data(image_data);
-            println!("Total rendering time: {}", format_duration(total_time.as_secs_f64()));
+            println!(
+                "Total rendering time: {}",
+                format_duration(total_time.as_secs_f64())
+            );
             Ok(image)
         } else {
             // Use default parallel rendering with all available cores
@@ -213,7 +216,10 @@ impl Renderer {
 
             let total_time = render_start_time.elapsed();
             let image = self.create_image_from_data(image_data);
-            println!("Total rendering time: {}", format_duration(total_time.as_secs_f64()));
+            println!(
+                "Total rendering time: {}",
+                format_duration(total_time.as_secs_f64())
+            );
             Ok(image)
         }
     }
@@ -256,7 +262,10 @@ impl Renderer {
 
                 // Collect samples for this pixel
                 let mut total_color = Color::new(0.0, 0.0, 0.0);
-                let mut rng = rand::thread_rng();
+
+                // Create deterministic RNG seeded by pixel coordinates
+                let pixel_seed = (x as u64) * 1000000 + (y as u64);
+                let mut rng = rand::rngs::StdRng::seed_from_u64(pixel_seed);
 
                 for sample in 0..self.samples {
                     let (sample_u, sample_v) = if self.no_jitter {
@@ -289,6 +298,10 @@ impl Renderer {
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
+
+                    // Create deterministic seed for this specific ray/sample
+                    let ray_seed = pixel_seed.wrapping_mul(100).wrapping_add(sample as u64);
+
                     let sample_color = ray_color(
                         &ray,
                         world,
@@ -299,6 +312,7 @@ impl Renderer {
                         background_color,
                         materials,
                         self.max_depth,
+                        ray_seed,
                     );
 
                     total_color += sample_color;
@@ -309,19 +323,22 @@ impl Renderer {
 
                 // Update progress tracking
                 let current_completed = completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
-                
+
                 // Print progress periodically with thread-safe output
-                if current_completed % progress_step as usize == 0 || current_completed == total_pixels as usize {
+                if current_completed % progress_step as usize == 0
+                    || current_completed == total_pixels as usize
+                {
                     if let Ok(_guard) = progress_mutex.lock() {
                         let progress = (current_completed as f64 / total_pixels as f64) * 100.0;
                         let elapsed = start_time.elapsed();
-                        
+
                         if current_completed == total_pixels as usize {
                             // Final progress update
                             println!("Rendering: 100.0%");
                         } else if progress > 0.0 {
                             // Calculate estimated time remaining
-                            let estimated_total_time = elapsed.as_secs_f64() / (current_completed as f64 / total_pixels as f64);
+                            let estimated_total_time = elapsed.as_secs_f64()
+                                / (current_completed as f64 / total_pixels as f64);
                             let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
                             let eta_formatted = format_duration(estimated_remaining);
                             println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
@@ -503,6 +520,53 @@ mod tests {
         assert_eq!(format_duration(7200.0), "2h");
         assert_eq!(format_duration(7325.0), "2h2m");
     }
+
+    #[test]
+    fn test_determinism_with_stochastic_sampling() {
+        let mut scene = Scene::default();
+
+        // Add a simple sphere
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+        });
+
+        // Add a light with diameter to trigger diffuse light sampling
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: Some(0.5), // Enable diffuse light sampling
+        });
+
+        // Create renderer with stochastic sampling
+        let mut renderer = Renderer::new(50, 50);
+        renderer.samples = 4; // Enable multiple samples to trigger randomness
+
+        // Render twice
+        let image1 = renderer.render(&scene).expect("First render failed");
+        let image2 = renderer.render(&scene).expect("Second render failed");
+
+        // Compare images - they should be identical for deterministic rendering
+        let mut different_pixels = 0;
+        for (pixel1, pixel2) in image1.pixels().zip(image2.pixels()) {
+            if pixel1 != pixel2 {
+                different_pixels += 1;
+            }
+        }
+
+        // Verify deterministic behavior - images should be identical
+        println!(
+            "Different pixels: {} out of {}",
+            different_pixels,
+            renderer.width * renderer.height
+        );
+        assert_eq!(
+            different_pixels, 0,
+            "Rendering should be deterministic - all pixels should be identical between renders"
+        );
+    }
 }
 
 /// Format duration in seconds to a human-readable string (e.g., "3m45s", "1h23m", "45s")
@@ -510,17 +574,17 @@ fn format_duration(seconds: f64) -> String {
     if seconds < 0.0 {
         return "0s".to_string();
     }
-    
+
     let total_seconds = seconds.round() as u64;
-    
+
     if total_seconds == 0 {
         return "0s".to_string();
     }
-    
+
     let hours = total_seconds / 3600;
     let minutes = (total_seconds % 3600) / 60;
     let secs = total_seconds % 60;
-    
+
     if hours > 0 {
         if minutes > 0 {
             format!("{}h{}m", hours, minutes)

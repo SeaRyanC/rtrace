@@ -3,7 +3,7 @@ use crate::scene::{
     hex_to_color, AmbientIllumination, Color, Fog, Light, Material, Point, Texture, Vec3,
 };
 use nalgebra::Unit;
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 
 /// Calculate grid pattern for a texture at given texture coordinates
 fn apply_grid_texture(texture: &Texture, u: f64, v: f64, base_color: Color) -> Color {
@@ -52,10 +52,10 @@ fn sample_disk_light_point<R: Rng>(
     diameter: f64,
 ) -> Point {
     let radius = diameter / 2.0;
-    
+
     // Direction from hit point to light center
     let light_dir = Unit::new_normalize(*light_center - *hit_point);
-    
+
     // Create an orthogonal basis for the disk
     // Find a vector not parallel to light_dir
     let up = if light_dir.x.abs() < 0.9 {
@@ -63,19 +63,20 @@ fn sample_disk_light_point<R: Rng>(
     } else {
         Vec3::new(0.0, 1.0, 0.0)
     };
-    
+
     // Create orthogonal vectors for the disk plane
     let u = Unit::new_normalize(up.cross(light_dir.as_ref()));
     let v = Unit::new_normalize(light_dir.cross(u.as_ref()));
-    
+
     // Sample random point on disk
     let (disk_u, disk_v) = sample_disk_point(rng, radius);
-    
+
     // Convert to world coordinates
     light_center + disk_u * u.as_ref() + disk_v * v.as_ref()
 }
 
 /// Calculate light contribution from a point light source
+#[allow(clippy::too_many_arguments)]
 fn calculate_point_light_contribution(
     hit_record: &HitRecord,
     material: &Material,
@@ -121,6 +122,7 @@ fn calculate_point_light_contribution(
 }
 
 /// Calculate light contribution from a diffuse (area) light source
+#[allow(clippy::too_many_arguments)]
 fn calculate_diffuse_light_contribution(
     hit_record: &HitRecord,
     material: &Material,
@@ -131,18 +133,21 @@ fn calculate_diffuse_light_contribution(
     camera_pos: &Point,
     world: &World,
     material_color: &Color,
+    rng_seed: u64, // New parameter for deterministic sampling
 ) -> Color {
     // Number of samples to take on the light disk
     const SAMPLES: u32 = 16;
-    
-    let mut rng = rand::thread_rng();
+
+    // Create deterministic RNG from the provided seed
+    let mut rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
     let mut total_contribution = Color::new(0.0, 0.0, 0.0);
     let mut visible_samples = 0;
 
     for _ in 0..SAMPLES {
         // Sample a random point on the light disk
-        let sample_point = sample_disk_light_point(&mut rng, light_center, &hit_record.point, diameter);
-        
+        let sample_point =
+            sample_disk_light_point(&mut rng, light_center, &hit_record.point, diameter);
+
         let light_dir = Unit::new_normalize(sample_point - hit_record.point);
         let light_distance = (sample_point - hit_record.point).magnitude();
 
@@ -195,6 +200,7 @@ pub fn phong_lighting(
     ambient: &AmbientIllumination,
     camera_pos: &Point,
     world: &World,
+    rng_seed: u64, // New parameter for deterministic light sampling
 ) -> Color {
     // Get base material color
     let mut material_color = hex_to_color(&material.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
@@ -212,12 +218,15 @@ pub fn phong_lighting(
         material.ambient * ambient.intensity * ambient_color.component_mul(&material_color);
 
     // Add contribution from each light source
-    for light in lights {
+    for (light_index, light) in lights.iter().enumerate() {
         let light_pos = Point::new(light.position[0], light.position[1], light.position[2]);
         let light_color = hex_to_color(&light.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
 
         // Handle diffuse (area) lights vs point lights
         let light_contribution = if let Some(diameter) = light.diameter {
+            // Create deterministic seed for this specific light
+            let light_seed = rng_seed.wrapping_mul(1000).wrapping_add(light_index as u64);
+
             // Diffuse light - sample multiple points on the disk
             calculate_diffuse_light_contribution(
                 hit_record,
@@ -229,6 +238,7 @@ pub fn phong_lighting(
                 camera_pos,
                 world,
                 &material_color,
+                light_seed,
             )
         } else {
             // Point light - use single shadow ray
@@ -243,7 +253,7 @@ pub fn phong_lighting(
                 &material_color,
             )
         };
-        
+
         color += light_contribution;
     }
 
@@ -293,6 +303,7 @@ pub fn ray_color(
     background_color: Color,
     materials: &std::collections::HashMap<usize, Material>,
     max_depth: i32,
+    rng_seed: u64, // New parameter for deterministic sampling
 ) -> Color {
     if max_depth <= 0 {
         return Color::new(0.0, 0.0, 0.0);
@@ -306,7 +317,9 @@ pub fn ray_color(
             .unwrap_or_else(Material::default);
 
         // Calculate lighting
-        let mut color = phong_lighting(&hit, &material, lights, ambient, camera_pos, world);
+        let mut color = phong_lighting(
+            &hit, &material, lights, ambient, camera_pos, world, rng_seed,
+        );
 
         // Apply fog based on distance from camera
         let distance = (hit.point - *camera_pos).magnitude();
@@ -332,6 +345,7 @@ pub fn ray_color(
                     background_color,
                     materials,
                     max_depth - 1,
+                    rng_seed.wrapping_mul(31), // Modify seed for reflections
                 );
 
                 color = color * (1.0 - reflectivity) + reflected_color * reflectivity;
@@ -378,12 +392,18 @@ mod tests {
     fn test_sample_disk_point() {
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let radius = 2.0;
-        
+
         // Sample multiple points and verify they're within the disk
         for _ in 0..100 {
             let (x, y) = sample_disk_point(&mut rng, radius);
             let distance_from_center = (x * x + y * y).sqrt();
-            assert!(distance_from_center <= radius, "Point ({}, {}) is outside disk of radius {}", x, y, radius);
+            assert!(
+                distance_from_center <= radius,
+                "Point ({}, {}) is outside disk of radius {}",
+                x,
+                y,
+                radius
+            );
         }
     }
 
@@ -396,23 +416,29 @@ mod tests {
 
         // Sample multiple points on the light disk
         for _ in 0..100 {
-            let sample_point = sample_disk_light_point(&mut rng, &light_center, &hit_point, diameter);
-            
+            let sample_point =
+                sample_disk_light_point(&mut rng, &light_center, &hit_point, diameter);
+
             // The sampled point should be roughly the same distance from hit point as the light center
             let center_distance = (light_center - hit_point).magnitude();
             let sample_distance = (sample_point - hit_point).magnitude();
-            
+
             // Allow for some variation due to the disk sampling, but it shouldn't be too far off
             let distance_diff = (sample_distance - center_distance).abs();
-            assert!(distance_diff <= diameter / 2.0, "Sample point distance {} varies too much from center distance {}", sample_distance, center_distance);
+            assert!(
+                distance_diff <= diameter / 2.0,
+                "Sample point distance {} varies too much from center distance {}",
+                sample_distance,
+                center_distance
+            );
         }
     }
 
     #[test]
     fn test_diffuse_light_vs_point_light() {
+        use crate::ray::HitRecord;
         use crate::ray::World;
         use crate::scene::Material;
-        use crate::ray::HitRecord;
         use nalgebra::Unit;
 
         // Create a simple test setup
@@ -425,7 +451,7 @@ mod tests {
             material_index: 0,
             texture_coords: None,
         };
-        
+
         let material = Material::default();
         let light_center = Point::new(0.0, 5.0, 0.0);
         let light_color = Color::new(1.0, 1.0, 1.0);
@@ -457,12 +483,16 @@ mod tests {
             &camera_pos,
             &world,
             &material_color,
+            42, // Deterministic seed
         );
 
         // With no shadows and small diameter, diffuse light should be similar to point light
         // Allow some variation due to random sampling
-        assert!((point_contrib.magnitude() - diffuse_contrib.magnitude()).abs() < 0.5,
-                "Point light magnitude {} and small diffuse light magnitude {} should be similar",
-                point_contrib.magnitude(), diffuse_contrib.magnitude());
+        assert!(
+            (point_contrib.magnitude() - diffuse_contrib.magnitude()).abs() < 0.5,
+            "Point light magnitude {} and small diffuse light magnitude {} should be similar",
+            point_contrib.magnitude(),
+            diffuse_contrib.magnitude()
+        );
     }
 }
