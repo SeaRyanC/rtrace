@@ -13,7 +13,7 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
   - Atmospheric fog with configurable density and falloff
   - Surface reflections
   - Grid texture patterns for planes
-  - **Deterministic rendering** with seeded randomness for reproducible results
+  - **Deterministic rendering** for reproducible results
 - **CLI Tool**: Command-line ray tracer for rendering scenes from JSON
 - **Node.js Bindings**: Native Node.js modules using napi-rs
 - **JSON Scene Format**: Flexible scene description with JSON schema validation
@@ -68,22 +68,19 @@ cargo build --release -p rtrace-cli
 - `--max-depth <DEPTH>`: Maximum ray bounces for reflections (default: 10)
 - `--samples <SAMPLES>`: Number of samples per pixel for anti-aliasing
 - `--anti-aliasing <MODE>`: Anti-aliasing mode - `quincunx` (default), `stochastic`, or `no-jitter`
-- `--seed <SEED>`: Random seed for deterministic rendering (default: 0)
 
 **Deterministic Rendering:**
 
-The ray tracer ensures reproducible results by using deterministic seeding for all randomness:
-- Same input scene + seed = identical output image (byte-for-byte)
-- Different seeds produce different random sampling patterns
+The ray tracer ensures reproducible results by using deterministic randomness for all stochastic operations:
+- Same input scene = identical output image (byte-for-byte)
+- Consistent results across different hardware and thread counts
 - Works across different thread counts and hardware
 
 ```bash
-# Two identical renders (same result)
-./target/release/rtrace --input scene.json --output render1.png --seed 42
-./target/release/rtrace --input scene.json --output render2.png --seed 42
-
-# Different seeds for variation
-./target/release/rtrace --input scene.json --output variation.png --seed 123
+# Renders are always deterministic and reproducible
+./target/release/rtrace --input scene.json --output render1.png
+./target/release/rtrace --input scene.json --output render2.png
+# render1.png and render2.png are identical
 ```
 
 ### Auto Camera Bounds CLI
