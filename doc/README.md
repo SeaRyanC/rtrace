@@ -626,28 +626,48 @@ Color displayed when rays don't hit any objects:
 
 ### Fog Effects
 
-Atmospheric fog adds depth and realism to your scenes:
+Atmospheric fog adds depth and realism to your scenes by gradually blending distant objects with the fog color:
 
 ```jsonc
 {
   "scene_settings": {
     "fog": {
       "color": "#DDDDDD",       // Fog color
-      "density": 0.1,           // Fog thickness (≥0)
-      "start": 2.0,             // Distance where fog begins
-      "end": 10.0               // Distance of maximum fog density
+      "density": 0.1,           // Fog density factor (≥0, higher = thicker fog)
+      "start": 2.0,             // Distance where fog begins (near distance)
+      "end": 10.0               // Distance where fog calculation reaches maximum (far distance)
     }
   }
 }
 ```
 
-Fog creates a linear falloff between the start and end distances, making distant objects appear hazier.
+**How Fog Works:**
+
+1. **Distance Calculation**: The distance from the camera to each rendered point is calculated
+2. **Linear Interpolation**: Between `start` and `end` distances, a linear factor is computed:
+   - At `start` distance: 0% fog influence
+   - At `end` distance: 100% fog calculation applied
+   - Beyond `end`: Maximum fog influence
+3. **Exponential Density**: The linear factor is transformed using exponential fog: `1.0 - exp(-density * linear_factor)`
+4. **Color Blending**: The final color is blended between the original color and fog color based on the fog factor
+
+**Parameter Guidelines:**
+- `start`: Distance where fog begins to appear (objects closer than this are unaffected)
+- `end`: Distance where the fog calculation reaches its maximum intensity
+- `density`: Controls how thick the fog becomes (0.1 = light fog, 0.5+ = heavy fog)
+- `color`: The color that distant objects fade toward
 
 **Example:** Fog density comparison
 
 | Light Fog | Heavy Fog |
 |:---------:|:---------:|
 | ![Light Fog](images/scene-fog-light.png) | ![Heavy Fog](images/scene-fog-heavy.png) |
+
+**Example:** Fog effect demonstration - near objects clear, distant objects fogged
+
+This example shows how fog affects objects at different distances from the camera. The red sphere (closest) appears clear, while more distant objects progressively fade into the fog color.
+
+![Fog Demonstration](images/fog-demonstration.png)
 
 ---
 
