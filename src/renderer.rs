@@ -55,9 +55,9 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: false,                              // Disable k-d tree
             thread_count: None,                             // Use all available cores by default
-            samples: 1,                                     // Default to 1 sample (quincunx adds shared corner samples)
+            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
-            seed: Some(0),                                  // Default to deterministic seed for reproducibility
+            seed: Some(0), // Default to deterministic seed for reproducibility
         }
     }
 
@@ -125,14 +125,21 @@ impl Renderer {
                 } => {
                     let mut center_point = Point::new(center[0], center[1], center[2]);
                     let mut effective_radius = *radius;
-                    
+
                     // Apply transforms if present
                     if let Some(transform_strings) = transform {
-                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                        if let Ok(transform_matrix) =
+                            crate::scene::parse_transforms(transform_strings)
+                        {
                             // Transform the center point
-                            let center_homogeneous = transform_matrix * center_point.to_homogeneous();
-                            center_point = Point::new(center_homogeneous.x, center_homogeneous.y, center_homogeneous.z);
-                            
+                            let center_homogeneous =
+                                transform_matrix * center_point.to_homogeneous();
+                            center_point = Point::new(
+                                center_homogeneous.x,
+                                center_homogeneous.y,
+                                center_homogeneous.z,
+                            );
+
                             // For radius, we need to consider scaling - use the maximum scale component
                             let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
                             let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
@@ -141,7 +148,7 @@ impl Renderer {
                             effective_radius *= max_scale;
                         }
                     }
-                    
+
                     let color = hex_to_color(&material.color)?;
                     let sphere = Box::new(Sphere {
                         center: center_point,
@@ -160,23 +167,34 @@ impl Renderer {
                 } => {
                     let mut plane_point = Point::new(point[0], point[1], point[2]);
                     let mut plane_normal = Vec3::new(normal[0], normal[1], normal[2]);
-                    
+
                     // Apply transforms if present
                     if let Some(transform_strings) = transform {
-                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                        if let Ok(transform_matrix) =
+                            crate::scene::parse_transforms(transform_strings)
+                        {
                             // Transform the point
                             let point_homogeneous = transform_matrix * plane_point.to_homogeneous();
-                            plane_point = Point::new(point_homogeneous.x, point_homogeneous.y, point_homogeneous.z);
-                            
+                            plane_point = Point::new(
+                                point_homogeneous.x,
+                                point_homogeneous.y,
+                                point_homogeneous.z,
+                            );
+
                             // Transform the normal (inverse transpose for normals)
                             if let Some(inverse_matrix) = transform_matrix.try_inverse() {
                                 let inverse_transpose = inverse_matrix.transpose();
-                                let normal_homogeneous = inverse_transpose * plane_normal.to_homogeneous();
-                                plane_normal = Vec3::new(normal_homogeneous.x, normal_homogeneous.y, normal_homogeneous.z);
+                                let normal_homogeneous =
+                                    inverse_transpose * plane_normal.to_homogeneous();
+                                plane_normal = Vec3::new(
+                                    normal_homogeneous.x,
+                                    normal_homogeneous.y,
+                                    normal_homogeneous.z,
+                                );
                             }
                         }
                     }
-                    
+
                     let normal_unit = nalgebra::Unit::new_normalize(plane_normal);
                     let color = hex_to_color(&material.color)?;
                     let plane = Box::new(Plane {
@@ -196,14 +214,21 @@ impl Renderer {
                 } => {
                     let mut center_point = Point::new(center[0], center[1], center[2]);
                     let mut cube_size = Vec3::new(size[0], size[1], size[2]);
-                    
+
                     // Apply transforms if present
                     if let Some(transform_strings) = transform {
-                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                        if let Ok(transform_matrix) =
+                            crate::scene::parse_transforms(transform_strings)
+                        {
                             // Transform the center point
-                            let center_homogeneous = transform_matrix * center_point.to_homogeneous();
-                            center_point = Point::new(center_homogeneous.x, center_homogeneous.y, center_homogeneous.z);
-                            
+                            let center_homogeneous =
+                                transform_matrix * center_point.to_homogeneous();
+                            center_point = Point::new(
+                                center_homogeneous.x,
+                                center_homogeneous.y,
+                                center_homogeneous.z,
+                            );
+
                             // For size, we need to consider scaling
                             let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
                             let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
@@ -213,7 +238,7 @@ impl Renderer {
                             cube_size.z *= scale_z;
                         }
                     }
-                    
+
                     let color = hex_to_color(&material.color)?;
                     let cube = Box::new(Cube::new(center_point, cube_size, color, index));
                     world.add(cube);
@@ -227,26 +252,33 @@ impl Renderer {
                 } => {
                     if let Some(mesh) = mesh_data {
                         let mut transformed_mesh = mesh.clone();
-                        
+
                         // Apply transforms if present
                         if let Some(transform_strings) = transform {
-                            if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                            if let Ok(transform_matrix) =
+                                crate::scene::parse_transforms(transform_strings)
+                            {
                                 // Transform all vertices in the mesh
                                 for triangle in &mut transformed_mesh.triangles {
                                     for vertex in &mut triangle.vertices {
-                                        let vertex_homogeneous = transform_matrix * vertex.to_homogeneous();
-                                        *vertex = Point::new(vertex_homogeneous.x, vertex_homogeneous.y, vertex_homogeneous.z);
+                                        let vertex_homogeneous =
+                                            transform_matrix * vertex.to_homogeneous();
+                                        *vertex = Point::new(
+                                            vertex_homogeneous.x,
+                                            vertex_homogeneous.y,
+                                            vertex_homogeneous.z,
+                                        );
                                     }
                                 }
-                                
+
                                 // Update the mesh bounds after transformation
                                 transformed_mesh.compute_bounds();
-                                
+
                                 // Rebuild the KD-tree with transformed vertices
                                 transformed_mesh.build_kdtree();
                             }
                         }
-                        
+
                         let color = hex_to_color(&material.color)?;
                         let mesh_object = if self.use_kdtree {
                             Box::new(MeshObject::new(transformed_mesh, color, index))
@@ -290,7 +322,10 @@ impl Renderer {
 
             let total_time = render_start_time.elapsed();
             let image = self.create_image_from_data(image_data);
-            println!("Total rendering time: {}", format_duration(total_time.as_secs_f64()));
+            println!(
+                "Total rendering time: {}",
+                format_duration(total_time.as_secs_f64())
+            );
             Ok(image)
         } else {
             // Use default parallel rendering with all available cores
@@ -307,7 +342,10 @@ impl Renderer {
 
             let total_time = render_start_time.elapsed();
             let image = self.create_image_from_data(image_data);
-            println!("Total rendering time: {}", format_duration(total_time.as_secs_f64()));
+            println!(
+                "Total rendering time: {}",
+                format_duration(total_time.as_secs_f64())
+            );
             Ok(image)
         }
     }
@@ -325,12 +363,26 @@ impl Renderer {
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> Vec<(u32, u32, Color)> {
         match self.anti_aliasing_mode {
-            AntiAliasingMode::Quincunx => {
-                self.render_quincunx(world, camera, lights, ambient, fog, camera_pos, background_color, materials)
-            }
-            _ => {
-                self.render_standard(world, camera, lights, ambient, fog, camera_pos, background_color, materials)
-            }
+            AntiAliasingMode::Quincunx => self.render_quincunx(
+                world,
+                camera,
+                lights,
+                ambient,
+                fog,
+                camera_pos,
+                background_color,
+                materials,
+            ),
+            _ => self.render_standard(
+                world,
+                camera,
+                lights,
+                ambient,
+                fog,
+                camera_pos,
+                background_color,
+                materials,
+            ),
         }
     }
 
@@ -372,9 +424,11 @@ impl Renderer {
 
                 // Collect samples for this pixel
                 let mut total_color = Color::new(0.0, 0.0, 0.0);
-                
+
                 // Create deterministic RNG seeded by pixel coordinates and global seed
-                let pixel_seed = self.seed.unwrap_or(0)
+                let pixel_seed = self
+                    .seed
+                    .unwrap_or(0)
                     .wrapping_mul(0x9E3779B97F4A7C15_u64)
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
                     .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
@@ -417,10 +471,11 @@ impl Renderer {
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
-                    
+
                     // Create sample-specific seed for ray tracing consistency
-                    let sample_seed = pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED));
-                    
+                    let sample_seed =
+                        pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED));
+
                     let sample_color = ray_color_with_camera(
                         &ray,
                         world,
@@ -443,19 +498,22 @@ impl Renderer {
 
                 // Update progress tracking
                 let current_completed = completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
-                
+
                 // Print progress periodically with thread-safe output
-                if current_completed % progress_step as usize == 0 || current_completed == total_pixels as usize {
+                if current_completed % progress_step as usize == 0
+                    || current_completed == total_pixels as usize
+                {
                     if let Ok(_guard) = progress_mutex.lock() {
                         let progress = (current_completed as f64 / total_pixels as f64) * 100.0;
                         let elapsed = start_time.elapsed();
-                        
+
                         if current_completed == total_pixels as usize {
                             // Final progress update
                             println!("Rendering: 100.0%");
                         } else if progress > 0.0 {
                             // Calculate estimated time remaining
-                            let estimated_total_time = elapsed.as_secs_f64() / (current_completed as f64 / total_pixels as f64);
+                            let estimated_total_time = elapsed.as_secs_f64()
+                                / (current_completed as f64 / total_pixels as f64);
                             let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
                             let eta_formatted = format_duration(estimated_remaining);
                             println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
@@ -482,23 +540,27 @@ impl Renderer {
         background_color: Color,
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> Vec<(u32, u32, Color)> {
-        use std::sync::{Arc, Mutex};
         use std::collections::HashMap as StdHashMap;
+        use std::sync::{Arc, Mutex};
 
         // Pre-compute corner samples that will be shared between pixels
         // Each corner is identified by its grid position
-        let corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>> = Arc::new(Mutex::new(StdHashMap::new()));
+        let corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>> =
+            Arc::new(Mutex::new(StdHashMap::new()));
 
         // Calculate pixel size in UV coordinates
         let pixel_width = 1.0 / self.width as f64;
         let pixel_height = 1.0 / self.height as f64;
 
         // Helper function to get corner sample color (with caching)
-        let get_corner_sample = |corner_x: u32, corner_y: u32, 
-                               corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>>,
-                               world: &World, camera: &Camera| -> Color {
+        let get_corner_sample = |corner_x: u32,
+                                 corner_y: u32,
+                                 corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>>,
+                                 world: &World,
+                                 camera: &Camera|
+         -> Color {
             let key = (corner_x, corner_y);
-            
+
             // Check cache first
             {
                 let cache = corner_cache.lock().unwrap();
@@ -506,19 +568,21 @@ impl Renderer {
                     return color;
                 }
             }
-            
+
             // Calculate corner UV coordinates (corners are at pixel boundaries)
             let corner_u = (corner_x as f64 * pixel_width).clamp(0.0, 1.0);
             let corner_v = (1.0 - corner_y as f64 * pixel_height).clamp(0.0, 1.0); // Flip Y coordinate
-            
+
             let ray = camera.get_ray(corner_u, corner_v);
-            
+
             // Create deterministic seed for corner based on corner coordinates
-            let corner_seed = self.seed.unwrap_or(0)
+            let corner_seed = self
+                .seed
+                .unwrap_or(0)
                 .wrapping_mul(0x9E3779B97F4A7C15_u64)
                 .wrapping_add(corner_x as u64)
                 .wrapping_add((corner_y as u64).wrapping_mul(0x85EBCA6B));
-            
+
             let color = ray_color(
                 &ray,
                 world,
@@ -531,13 +595,13 @@ impl Renderer {
                 self.max_depth,
                 corner_seed,
             );
-            
+
             // Cache the result
             {
                 let mut cache = corner_cache.lock().unwrap();
                 cache.insert(key, color);
             }
-            
+
             color
         };
 
@@ -561,14 +625,16 @@ impl Renderer {
 
                 // Center sample
                 let center_ray = camera.get_ray(pixel_center_u, pixel_center_v);
-                
+
                 // Create deterministic seed for center sample based on pixel coordinates
-                let center_seed = self.seed.unwrap_or(0)
+                let center_seed = self
+                    .seed
+                    .unwrap_or(0)
                     .wrapping_mul(0x9E3779B97F4A7C15_u64)
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
                     .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35))
                     .wrapping_add(0x12345678_u64); // Different constant for center vs corners
-                
+
                 let center_color = ray_color(
                     &center_ray,
                     world,
@@ -585,14 +651,18 @@ impl Renderer {
                 // Get corner samples (these are shared between neighboring pixels)
                 // Corner positions are at pixel grid intersections
                 let corner_colors = [
-                    get_corner_sample(x, y, corner_cache.clone(), world, camera),               // Top-left corner
-                    get_corner_sample(x + 1, y, corner_cache.clone(), world, camera),         // Top-right corner
-                    get_corner_sample(x, y + 1, corner_cache.clone(), world, camera),         // Bottom-left corner
-                    get_corner_sample(x + 1, y + 1, corner_cache.clone(), world, camera),     // Bottom-right corner
+                    get_corner_sample(x, y, corner_cache.clone(), world, camera), // Top-left corner
+                    get_corner_sample(x + 1, y, corner_cache.clone(), world, camera), // Top-right corner
+                    get_corner_sample(x, y + 1, corner_cache.clone(), world, camera), // Bottom-left corner
+                    get_corner_sample(x + 1, y + 1, corner_cache.clone(), world, camera), // Bottom-right corner
                 ];
 
                 // Average center + 4 corner samples (true quincunx pattern)
-                let total_color = center_color + corner_colors[0] + corner_colors[1] + corner_colors[2] + corner_colors[3];
+                let total_color = center_color
+                    + corner_colors[0]
+                    + corner_colors[1]
+                    + corner_colors[2]
+                    + corner_colors[3];
                 let color = total_color / 5.0;
 
                 // Print progress periodically (note: this might be out of order due to parallelism)
@@ -664,7 +734,8 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
         // Add a light
@@ -688,7 +759,8 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
         // Add a light
@@ -720,7 +792,8 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
         // Add a light
@@ -752,7 +825,8 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
         // Add a light
@@ -770,7 +844,7 @@ mod tests {
         let result = renderer.render(&scene);
         assert!(result.is_ok());
 
-        // Test quincunx mode with custom samples  
+        // Test quincunx mode with custom samples
         let mut renderer2 = Renderer::new(50, 50);
         renderer2.samples = 4;
         let result = renderer2.render(&scene);
@@ -780,15 +854,16 @@ mod tests {
     #[test]
     fn test_deterministic_rendering() {
         let mut scene = Scene::default();
-        
+
         // Add a simple sphere
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
-        // Add a diffuse light for area light sampling 
+        // Add a diffuse light for area light sampling
         scene.lights.push(Light {
             position: [2.0, 2.0, 2.0],
             color: "#FFFFFF".to_string(),
@@ -801,35 +876,39 @@ mod tests {
         renderer.anti_aliasing_mode = AntiAliasingMode::Stochastic;
         renderer.samples = 4;
         renderer.seed = Some(42); // Fixed seed
-        
+
         // Render the same scene multiple times
         let result1 = renderer.render(&scene).expect("First render failed");
         let result2 = renderer.render(&scene).expect("Second render failed");
-        
+
         // Extract pixel data for comparison
         let pixels1: Vec<_> = result1.pixels().collect();
         let pixels2: Vec<_> = result2.pixels().collect();
-        
+
         // Results should be byte-for-byte identical
         assert_eq!(pixels1.len(), pixels2.len());
         for (i, (&pixel1, &pixel2)) in pixels1.iter().zip(pixels2.iter()).enumerate() {
-            assert_eq!(pixel1, pixel2, 
-                "Pixel {} differs between renders: {:?} vs {:?}", i, pixel1, pixel2);
+            assert_eq!(
+                pixel1, pixel2,
+                "Pixel {} differs between renders: {:?} vs {:?}",
+                i, pixel1, pixel2
+            );
         }
     }
 
     #[test]
     fn test_deterministic_rendering_with_threading() {
         let mut scene = Scene::default();
-        
+
         // Add a simple sphere
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
-        // Add a diffuse light for area light sampling 
+        // Add a diffuse light for area light sampling
         scene.lights.push(Light {
             position: [2.0, 2.0, 2.0],
             color: "#FFFFFF".to_string(),
@@ -847,32 +926,40 @@ mod tests {
         renderer4.anti_aliasing_mode = AntiAliasingMode::Stochastic;
         renderer4.samples = 4;
         renderer4.seed = Some(42);
-        
+
         // Render with different thread counts
-        let result1 = renderer1.render(&scene).expect("Single-threaded render failed");
-        let result4 = renderer4.render(&scene).expect("Multi-threaded render failed");
-        
+        let result1 = renderer1
+            .render(&scene)
+            .expect("Single-threaded render failed");
+        let result4 = renderer4
+            .render(&scene)
+            .expect("Multi-threaded render failed");
+
         // Extract pixel data for comparison
         let pixels1: Vec<_> = result1.pixels().collect();
         let pixels4: Vec<_> = result4.pixels().collect();
-        
+
         // Results should be identical regardless of thread count
         assert_eq!(pixels1.len(), pixels4.len());
         for (i, (&pixel1, &pixel4)) in pixels1.iter().zip(pixels4.iter()).enumerate() {
-            assert_eq!(pixel1, pixel4, 
-                "Pixel {} differs between thread counts: {:?} vs {:?}", i, pixel1, pixel4);
+            assert_eq!(
+                pixel1, pixel4,
+                "Pixel {} differs between thread counts: {:?} vs {:?}",
+                i, pixel1, pixel4
+            );
         }
     }
 
     #[test]
     fn test_quincunx_deterministic() {
         let mut scene = Scene::default();
-        
+
         // Add a simple sphere
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
         // Add a diffuse light
@@ -887,19 +974,26 @@ mod tests {
         let mut renderer = Renderer::new(50, 50);
         assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
         renderer.seed = Some(123);
-        
-        let result1 = renderer.render(&scene).expect("First quincunx render failed");
-        let result2 = renderer.render(&scene).expect("Second quincunx render failed");
-        
+
+        let result1 = renderer
+            .render(&scene)
+            .expect("First quincunx render failed");
+        let result2 = renderer
+            .render(&scene)
+            .expect("Second quincunx render failed");
+
         // Extract pixel data for comparison
         let pixels1: Vec<_> = result1.pixels().collect();
         let pixels2: Vec<_> = result2.pixels().collect();
-        
+
         // Results should be identical
         assert_eq!(pixels1.len(), pixels2.len());
         for (i, (&pixel1, &pixel2)) in pixels1.iter().zip(pixels2.iter()).enumerate() {
-            assert_eq!(pixel1, pixel2, 
-                "Quincunx pixel {} differs between renders: {:?} vs {:?}", i, pixel1, pixel2);
+            assert_eq!(
+                pixel1, pixel2,
+                "Quincunx pixel {} differs between renders: {:?} vs {:?}",
+                i, pixel1, pixel2
+            );
         }
     }
 
@@ -911,7 +1005,8 @@ mod tests {
         scene.objects.push(Object::Sphere {
             center: [0.0, 0.0, 0.0],
             radius: 1.0,
-            material: Material::default(), transform: None,
+            material: Material::default(),
+            transform: None,
         });
 
         let mut renderer = Renderer::new(10, 10);
@@ -943,9 +1038,9 @@ mod tests {
     fn test_mesh_scale_transform_bounds_fix() {
         // This test verifies that the mesh bounds bug has been fixed
         use crate::mesh::Mesh;
-        use crate::ray::{MeshObject, Ray, Intersectable};
-        use crate::scene::{Color, Point, Vec3, parse_transforms};
-        
+        use crate::ray::{Intersectable, MeshObject, Ray};
+        use crate::scene::{parse_transforms, Color, Point, Vec3};
+
         // Create a simple ASCII STL with one triangle
         let ascii_stl = b"solid test
 facet normal 0 0 1
@@ -956,57 +1051,76 @@ facet normal 0 0 1
   endloop
 endfacet
 endsolid test";
-        
+
         let original_mesh = Mesh::from_stl_bytes(ascii_stl).unwrap();
         println!("Original mesh bounds: {:?}", original_mesh.bounds());
-        
+
         // Apply 8x scale transform
         let mut scaled_mesh = original_mesh.clone();
         let transform_strings = vec!["scale(8, 8, 8)".to_string()];
         let transform_matrix = parse_transforms(&transform_strings).unwrap();
-        
-        // Transform all vertices (simulating the fixed renderer.rs behavior)  
+
+        // Transform all vertices (simulating the fixed renderer.rs behavior)
         for triangle in &mut scaled_mesh.triangles {
             for vertex in &mut triangle.vertices {
                 let vertex_homogeneous = transform_matrix * vertex.to_homogeneous();
-                *vertex = Point::new(vertex_homogeneous.x, vertex_homogeneous.y, vertex_homogeneous.z);
+                *vertex = Point::new(
+                    vertex_homogeneous.x,
+                    vertex_homogeneous.y,
+                    vertex_homogeneous.z,
+                );
             }
         }
-        
-        // Apply the fix: compute bounds after transformation 
+
+        // Apply the fix: compute bounds after transformation
         scaled_mesh.compute_bounds();
         scaled_mesh.build_kdtree();
-        
+
         let (min_bounds, max_bounds) = scaled_mesh.bounds();
-        println!("Scaled mesh bounds (after fix): {:?}", (min_bounds, max_bounds));
-        
+        println!(
+            "Scaled mesh bounds (after fix): {:?}",
+            (min_bounds, max_bounds)
+        );
+
         // Verify bounds are correctly updated to 8x scale
         assert!((min_bounds.x - (-8.0)).abs() < 1e-10);
         assert!((min_bounds.y - (-8.0)).abs() < 1e-10);
         assert!((max_bounds.x - 8.0).abs() < 1e-10);
         assert!((max_bounds.y - 8.0).abs() < 1e-10);
-        
+
         // Create mesh object and test ray intersection
         let material_color = Color::new(1.0, 0.0, 0.0);
         let mesh_object = MeshObject::new(scaled_mesh, material_color, 0);
-        
+
         // Create a ray that should hit the scaled mesh
         // After 8x scaling, triangle vertices are at (-8,-8,0), (8,-8,0), (0,8,0)
         // A ray at (4,0) going downward should intersect the triangle
         let ray = Ray::new(Point::new(4.0, 0.0, 1.0), Vec3::new(0.0, 0.0, -1.0));
-        
+
         let hit_result = mesh_object.hit(&ray, 0.001, 1000.0);
-        
+
         // With the fix, this ray should now intersect successfully
-        assert!(hit_result.is_some(), "Ray should intersect scaled mesh after bounds fix");
-        
+        assert!(
+            hit_result.is_some(),
+            "Ray should intersect scaled mesh after bounds fix"
+        );
+
         let hit = hit_result.unwrap();
         println!("Ray intersection succeeded at point: {:?}", hit.point);
-        
+
         // Verify the intersection point is approximately correct
-        assert!((hit.point.z - 0.0).abs() < 1e-10, "Intersection should be at z=0");
-        assert!(hit.point.x >= -8.0 && hit.point.x <= 8.0, "Intersection x should be in scaled bounds");
-        assert!(hit.point.y >= -8.0 && hit.point.y <= 8.0, "Intersection y should be in scaled bounds");
+        assert!(
+            (hit.point.z - 0.0).abs() < 1e-10,
+            "Intersection should be at z=0"
+        );
+        assert!(
+            hit.point.x >= -8.0 && hit.point.x <= 8.0,
+            "Intersection x should be in scaled bounds"
+        );
+        assert!(
+            hit.point.y >= -8.0 && hit.point.y <= 8.0,
+            "Intersection y should be in scaled bounds"
+        );
     }
 }
 
@@ -1015,17 +1129,17 @@ fn format_duration(seconds: f64) -> String {
     if seconds < 0.0 {
         return "0s".to_string();
     }
-    
+
     let total_seconds = seconds.round() as u64;
-    
+
     if total_seconds == 0 {
         return "0s".to_string();
     }
-    
+
     let hours = total_seconds / 3600;
     let minutes = (total_seconds % 3600) / 60;
     let secs = total_seconds % 60;
-    
+
     if hours > 0 {
         if minutes > 0 {
             format!("{}h{}m", hours, minutes)
