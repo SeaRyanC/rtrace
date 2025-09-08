@@ -1014,7 +1014,7 @@ impl Mesh {
     }
 
     /// Compute bounding box for the mesh
-    fn compute_bounds(&mut self) {
+    pub fn compute_bounds(&mut self) {
         if self.triangles.is_empty() {
             self.bounds_min = Point::origin();
             self.bounds_max = Point::origin();

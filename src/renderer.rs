@@ -239,6 +239,9 @@ impl Renderer {
                                     }
                                 }
                                 
+                                // Update the mesh bounds after transformation
+                                transformed_mesh.compute_bounds();
+                                
                                 // Rebuild the KD-tree with transformed vertices
                                 transformed_mesh.build_kdtree();
                             }
@@ -934,6 +937,76 @@ mod tests {
         assert_eq!(format_duration(3665.0), "1h1m");
         assert_eq!(format_duration(7200.0), "2h");
         assert_eq!(format_duration(7325.0), "2h2m");
+    }
+
+    #[test]
+    fn test_mesh_scale_transform_bounds_fix() {
+        // This test verifies that the mesh bounds bug has been fixed
+        use crate::mesh::Mesh;
+        use crate::ray::{MeshObject, Ray, Intersectable};
+        use crate::scene::{Color, Point, Vec3, parse_transforms};
+        
+        // Create a simple ASCII STL with one triangle
+        let ascii_stl = b"solid test
+facet normal 0 0 1
+  outer loop
+    vertex -1 -1 0
+    vertex 1 -1 0
+    vertex 0 1 0
+  endloop
+endfacet
+endsolid test";
+        
+        let original_mesh = Mesh::from_stl_bytes(ascii_stl).unwrap();
+        println!("Original mesh bounds: {:?}", original_mesh.bounds());
+        
+        // Apply 8x scale transform
+        let mut scaled_mesh = original_mesh.clone();
+        let transform_strings = vec!["scale(8, 8, 8)".to_string()];
+        let transform_matrix = parse_transforms(&transform_strings).unwrap();
+        
+        // Transform all vertices (simulating the fixed renderer.rs behavior)  
+        for triangle in &mut scaled_mesh.triangles {
+            for vertex in &mut triangle.vertices {
+                let vertex_homogeneous = transform_matrix * vertex.to_homogeneous();
+                *vertex = Point::new(vertex_homogeneous.x, vertex_homogeneous.y, vertex_homogeneous.z);
+            }
+        }
+        
+        // Apply the fix: compute bounds after transformation 
+        scaled_mesh.compute_bounds();
+        scaled_mesh.build_kdtree();
+        
+        let (min_bounds, max_bounds) = scaled_mesh.bounds();
+        println!("Scaled mesh bounds (after fix): {:?}", (min_bounds, max_bounds));
+        
+        // Verify bounds are correctly updated to 8x scale
+        assert!((min_bounds.x - (-8.0)).abs() < 1e-10);
+        assert!((min_bounds.y - (-8.0)).abs() < 1e-10);
+        assert!((max_bounds.x - 8.0).abs() < 1e-10);
+        assert!((max_bounds.y - 8.0).abs() < 1e-10);
+        
+        // Create mesh object and test ray intersection
+        let material_color = Color::new(1.0, 0.0, 0.0);
+        let mesh_object = MeshObject::new(scaled_mesh, material_color, 0);
+        
+        // Create a ray that should hit the scaled mesh
+        // After 8x scaling, triangle vertices are at (-8,-8,0), (8,-8,0), (0,8,0)
+        // A ray at (4,0) going downward should intersect the triangle
+        let ray = Ray::new(Point::new(4.0, 0.0, 1.0), Vec3::new(0.0, 0.0, -1.0));
+        
+        let hit_result = mesh_object.hit(&ray, 0.001, 1000.0);
+        
+        // With the fix, this ray should now intersect successfully
+        assert!(hit_result.is_some(), "Ray should intersect scaled mesh after bounds fix");
+        
+        let hit = hit_result.unwrap();
+        println!("Ray intersection succeeded at point: {:?}", hit.point);
+        
+        // Verify the intersection point is approximately correct
+        assert!((hit.point.z - 0.0).abs() < 1e-10, "Intersection should be at z=0");
+        assert!(hit.point.x >= -8.0 && hit.point.x <= 8.0, "Intersection x should be in scaled bounds");
+        assert!(hit.point.y >= -8.0 && hit.point.y <= 8.0, "Intersection y should be in scaled bounds");
     }
 }
 
