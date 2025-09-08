@@ -97,6 +97,11 @@ pub enum Texture {
         line_width: f64,
         cell_size: f64,
     },
+    #[serde(rename = "checkerboard")]
+    Checkerboard {
+        material_a: Box<Material>, // first material (independent properties)
+        material_b: Box<Material>, // second material (independent properties)
+    },
 }
 
 /// Transform operation

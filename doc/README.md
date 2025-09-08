@@ -450,7 +450,11 @@ Add mirror-like reflections to create realistic shiny surfaces:
 
 ### Textures
 
-Add patterns to surfaces. Currently supports grid patterns for planes:
+Add patterns to surfaces. rtrace supports grid patterns and checkerboard patterns for planes:
+
+#### Grid Texture
+
+Creates grid lines on a surface:
 
 ```jsonc
 {
@@ -470,6 +474,44 @@ Add patterns to surfaces. Currently supports grid patterns for planes:
 }
 ```
 
+#### Checkerboard Texture
+
+Creates alternating squares with independent material properties. Each square is exactly 1x1 world units, and you can use object transforms to scale as needed:
+
+```jsonc
+{
+  "material": {
+    "color": "#FFFFFF",        // Base color (not used with checkerboard)
+    "ambient": 0.2,
+    "diffuse": 0.8,
+    "specular": 0.1,
+    "shininess": 10,
+    "texture": {
+      "type": "checkerboard",
+      "material_a": {           // First checkerboard material
+        "color": "#FF6B6B",     // Independent color
+        "ambient": 0.15,        // Independent lighting properties
+        "diffuse": 0.9,
+        "specular": 0.8,
+        "shininess": 64.0
+      },
+      "material_b": {           // Second checkerboard material
+        "color": "#4ECDC4",     // Independent color  
+        "ambient": 0.3,         // Independent lighting properties
+        "diffuse": 0.6,
+        "specular": 0.2,
+        "shininess": 16.0
+      }
+    }
+  }
+}
+```
+
+**Key Features:**
+- Each checkerboard square uses completely independent material properties (color, shininess, reflectivity, etc.)
+- Pattern uses 1x1 world units - use object transforms to scale the pattern
+- Works on planes, cubes, and STL meshes that have texture coordinates
+
 **Example:** Different material configurations
 
 ![Material Properties](images/material-properties.png)
@@ -481,6 +523,14 @@ Add patterns to surfaces. Currently supports grid patterns for planes:
 **Example:** Grid texture patterns
 
 ![Grid Textures](images/texture-grid-variations.png)
+
+**Example:** Checkerboard texture with different materials
+
+![Checkerboard Basic](images/checkerboard-basic.png)
+
+**Example:** Advanced checkerboard with reflective sphere
+
+![Checkerboard Advanced](images/checkerboard-advanced.png)
 
 ---
 

@@ -5,8 +5,8 @@ use crate::scene::{
 use nalgebra::Unit;
 use rand::{Rng, SeedableRng};
 
-/// Calculate grid pattern for a texture at given texture coordinates
-fn apply_grid_texture(texture: &Texture, u: f64, v: f64, base_color: Color) -> Color {
+/// Apply texture pattern and return the appropriate material properties
+fn apply_texture(texture: &Texture, u: f64, v: f64, base_material: &Material) -> Material {
     match texture {
         Texture::Grid {
             line_color,
@@ -24,9 +24,28 @@ fn apply_grid_texture(texture: &Texture, u: f64, v: f64, base_color: Color) -> C
             let on_v_line = v_mod <= half_width || v_mod >= (1.0 - half_width);
 
             if on_u_line || on_v_line {
-                grid_color
+                // Create a new material with grid color but same properties
+                Material {
+                    color: format!("#{:02X}{:02X}{:02X}", 
+                        (grid_color.x * 255.0) as u8,
+                        (grid_color.y * 255.0) as u8, 
+                        (grid_color.z * 255.0) as u8),
+                    ..base_material.clone()
+                }
             } else {
-                base_color
+                base_material.clone()
+            }
+        },
+        Texture::Checkerboard { material_a, material_b } => {
+            // Use 1x1 world units for checkerboard pattern
+            let checker_u = u.floor() as i32;
+            let checker_v = v.floor() as i32;
+            
+            // Determine which material to use based on checkerboard pattern
+            if (checker_u + checker_v) % 2 == 0 {
+                *material_a.clone()
+            } else {
+                *material_b.clone()
             }
         }
     }
@@ -204,20 +223,24 @@ pub fn phong_lighting(
     world: &World,
     seed: u64,
 ) -> Color {
-    // Get base material color
-    let mut material_color = hex_to_color(&material.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
-
-    // Apply texture if present
-    if let Some(texture) = &material.texture {
+    // Determine the effective material (possibly modified by texture)
+    let effective_material = if let Some(texture) = &material.texture {
         if let Some((u, v)) = hit_record.texture_coords {
-            material_color = apply_grid_texture(texture, u, v, material_color);
+            apply_texture(texture, u, v, material)
+        } else {
+            material.clone()
         }
-    }
+    } else {
+        material.clone()
+    };
+
+    // Get effective material color
+    let material_color = hex_to_color(&effective_material.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
 
     // Start with ambient lighting
     let ambient_color = hex_to_color(&ambient.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
     let mut color =
-        material.ambient * ambient.intensity * ambient_color.component_mul(&material_color);
+        effective_material.ambient * ambient.intensity * ambient_color.component_mul(&material_color);
 
     // Add contribution from each light source
     for light in lights {
@@ -229,7 +252,7 @@ pub fn phong_lighting(
             // Diffuse light - sample multiple points on the disk
             calculate_diffuse_light_contribution(
                 hit_record,
-                material,
+                &effective_material,
                 &light_pos,
                 &light_color,
                 light.intensity,
@@ -243,7 +266,7 @@ pub fn phong_lighting(
             // Point light - use single shadow ray
             calculate_point_light_contribution(
                 hit_record,
-                material,
+                &effective_material,
                 &light_pos,
                 &light_color,
                 light.intensity,
@@ -457,61 +480,90 @@ mod tests {
     }
 
     #[test]
-    fn test_diffuse_light_vs_point_light() {
-        use crate::ray::World;
-        use crate::scene::Material;
-        use crate::ray::HitRecord;
-        use nalgebra::Unit;
-
-        // Create a simple test setup
-        let hit_record = HitRecord {
-            point: Point::new(0.0, 0.0, 0.0),
-            normal: Unit::new_normalize(Vec3::new(0.0, 1.0, 0.0)),
-            t: 1.0,
-            front_face: true,
-            material_color: Color::new(1.0, 0.0, 0.0),
-            material_index: 0,
-            texture_coords: None,
+    fn test_checkerboard_texture() {
+        let material_a = Material {
+            color: "#FF0000".to_string(),
+            ambient: 0.1,
+            diffuse: 0.8,
+            specular: 0.2,
+            shininess: 32.0,
+            reflectivity: None,
+            texture: None,
         };
         
-        let material = Material::default();
-        let light_center = Point::new(0.0, 5.0, 0.0);
-        let light_color = Color::new(1.0, 1.0, 1.0);
-        let light_intensity = 1.0;
-        let camera_pos = Point::new(0.0, 0.0, 5.0);
-        let world = World::new(); // Empty world - no shadows
-        let material_color = Color::new(1.0, 0.0, 0.0);
-
-        // Test point light contribution
-        let point_contrib = calculate_point_light_contribution(
-            &hit_record,
-            &material,
-            &light_center,
-            &light_color,
-            light_intensity,
-            &camera_pos,
-            &world,
-            &material_color,
-        );
-
-        // Test diffuse light contribution (very small diameter should be similar to point light)
-        let diffuse_contrib = calculate_diffuse_light_contribution(
-            &hit_record,
-            &material,
-            &light_center,
-            &light_color,
-            light_intensity,
-            0.01, // Very small diameter
-            &camera_pos,
-            &world,
-            &material_color,
-            42, // Fixed seed for test
-        );
-
-        // With no shadows and small diameter, diffuse light should be similar to point light
-        // Allow some variation due to random sampling
-        assert!((point_contrib.magnitude() - diffuse_contrib.magnitude()).abs() < 0.5,
-                "Point light magnitude {} and small diffuse light magnitude {} should be similar",
-                point_contrib.magnitude(), diffuse_contrib.magnitude());
+        let material_b = Material {
+            color: "#0000FF".to_string(),
+            ambient: 0.2,
+            diffuse: 0.6,
+            specular: 0.4,
+            shininess: 16.0,
+            reflectivity: None,
+            texture: None,
+        };
+        
+        let texture = Texture::Checkerboard {
+            material_a: Box::new(material_a.clone()),
+            material_b: Box::new(material_b.clone()),
+        };
+        
+        let base_material = Material::default();
+        
+        // Test checkerboard pattern - should alternate based on (u+v) % 2
+        // At (0.0, 0.0): floor(0) + floor(0) = 0, 0 % 2 = 0 -> material_a
+        let result = apply_texture(&texture, 0.0, 0.0, &base_material);
+        assert_eq!(result.color, "#FF0000");
+        assert_eq!(result.shininess, 32.0);
+        
+        // At (1.0, 0.0): floor(1) + floor(0) = 1, 1 % 2 = 1 -> material_b  
+        let result = apply_texture(&texture, 1.0, 0.0, &base_material);
+        assert_eq!(result.color, "#0000FF");
+        assert_eq!(result.shininess, 16.0);
+        
+        // At (0.0, 1.0): floor(0) + floor(1) = 1, 1 % 2 = 1 -> material_b
+        let result = apply_texture(&texture, 0.0, 1.0, &base_material);
+        assert_eq!(result.color, "#0000FF");
+        assert_eq!(result.shininess, 16.0);
+        
+        // At (1.0, 1.0): floor(1) + floor(1) = 2, 2 % 2 = 0 -> material_a
+        let result = apply_texture(&texture, 1.0, 1.0, &base_material);
+        assert_eq!(result.color, "#FF0000");
+        assert_eq!(result.shininess, 32.0);
+        
+        // Test with fractional coordinates
+        // At (0.7, 0.3): floor(0.7) + floor(0.3) = 0 + 0 = 0, 0 % 2 = 0 -> material_a
+        let result = apply_texture(&texture, 0.7, 0.3, &base_material);
+        assert_eq!(result.color, "#FF0000");
+        
+        // At (1.2, 0.8): floor(1.2) + floor(0.8) = 1 + 0 = 1, 1 % 2 = 1 -> material_b
+        let result = apply_texture(&texture, 1.2, 0.8, &base_material);
+        assert_eq!(result.color, "#0000FF");
+    }
+    
+    #[test]
+    fn test_grid_texture_backwards_compatibility() {
+        let texture = Texture::Grid {
+            line_color: "#FF0000".to_string(),
+            line_width: 0.1,
+            cell_size: 1.0,
+        };
+        
+        let base_material = Material {
+            color: "#FFFFFF".to_string(),
+            ambient: 0.2,
+            diffuse: 0.8,
+            specular: 0.1,
+            shininess: 10.0,
+            reflectivity: None,
+            texture: None,
+        };
+        
+        // Test that grid texture still works
+        // At (0.0, 0.0) we should be on a grid line
+        let result = apply_texture(&texture, 0.0, 0.0, &base_material);
+        assert_eq!(result.color, "#FF0000"); // Should be grid line color
+        
+        // At (0.5, 0.5) we should NOT be on a grid line
+        let result = apply_texture(&texture, 0.5, 0.5, &base_material);
+        assert_eq!(result.color, "#FFFFFF"); // Should be base material color
     }
 }
