@@ -9,6 +9,18 @@ rtrace is a minimal Rust library that demonstrates modern Rust development pract
 - Command-line interface
 - Node.js native bindings (via napi-rs)
 
+## Coordinate System Convention
+
+rtrace uses a **Z-up coordinate system** optimized for 3D printing and CAD workflows:
+- **+X axis**: Points right (positive X direction)
+- **+Y axis**: Points forward/away from viewer (positive Y direction)
+- **+Z axis**: Points up (positive Z direction is "up")
+
+This Z-up convention is standard in 3D printing, CAD software, and many engineering applications. When creating cameras, examples, or documentation:
+- Use `up: [0, 0, 1]` for typical camera orientations
+- Position cameras looking toward the origin from negative Y for front views
+- Position lights and objects with Z coordinates representing height/elevation
+
 ## Architecture Principles
 
 ### 1. Cargo Workspace Structure

@@ -48,9 +48,9 @@ impl Default for Camera {
     fn default() -> Self {
         Self {
             kind: "ortho".to_string(),
-            position: [0.0, 0.0, 5.0],
+            position: [0.0, -5.0, 2.0], // Z-up: camera at negative Y looking toward positive Y
             target: [0.0, 0.0, 0.0],
-            up: [0.0, 1.0, 0.0],
+            up: [0.0, 0.0, 1.0], // Z-up
             width: 10.0,
             height: 10.0,
             fov: None,
