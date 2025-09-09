@@ -377,12 +377,40 @@ mod tests {
         assert_eq!(min, Point::new(-1.0, -1.0, -1.0));
         assert_eq!(max, Point::new(1.0, 1.0, 1.0));
     }
+
+    #[test]
+    fn test_cube_positioning() {
+        // Test that cubes are positioned correctly at non-origin locations
+        let cube = Cube::new(
+            Point::new(5.0, 3.0, 2.0), // Cube center at (5, 3, 2)
+            Vec3::new(2.0, 2.0, 2.0),  // 2x2x2 size
+            Color::new(1.0, 0.0, 0.0),
+            0,
+        );
+
+        // Test ray intersection from above the cube
+        let ray = Ray::new(Point::new(5.0, 3.0, 5.0), Vec3::new(0.0, 0.0, -1.0));
+        let hit = cube.hit(&ray, 0.001, 1000.0);
+        
+        assert!(hit.is_some(), "Ray should intersect cube at correct position");
+        
+        let hit_record = hit.unwrap();
+        // Should hit the top face at z = center.z + half_size.z = 2 + 1 = 3
+        assert!((hit_record.point.z - 3.0).abs() < 1e-10, "Hit should be at z=3 (top face of cube at center z=2)");
+        assert!((hit_record.point.x - 5.0).abs() < 1e-10, "Hit x should be at cube center x=5");
+        assert!((hit_record.point.y - 3.0).abs() < 1e-10, "Hit y should be at cube center y=3");
+        
+        // Test bounds - should be centered around (5, 3, 2)
+        let (min, max) = cube.bounds();
+        assert_eq!(min, Point::new(4.0, 2.0, 1.0)); // center - half_size
+        assert_eq!(max, Point::new(6.0, 4.0, 3.0)); // center + half_size
+    }
 }
 
 impl Intersectable for Cube {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         // Transform ray to cube's local coordinate space
-        let local_origin = self.center + (self.transform * (ray.origin - self.center).to_homogeneous()).xyz();
+        let local_origin = Point::from((self.transform * (ray.origin - self.center).to_homogeneous()).xyz());
         let local_direction = (self.transform * ray.direction.to_homogeneous()).xyz();
         
         // Handle degenerate direction (shouldn't happen with normalized rays, but be safe)
