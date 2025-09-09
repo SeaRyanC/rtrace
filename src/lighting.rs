@@ -26,10 +26,12 @@ fn apply_texture(texture: &Texture, u: f64, v: f64, base_material: &Material) ->
             if on_u_line || on_v_line {
                 // Create a new material with grid color but same properties
                 Material {
-                    color: format!("#{:02X}{:02X}{:02X}", 
+                    color: format!(
+                        "#{:02X}{:02X}{:02X}",
                         (grid_color.x * 255.0) as u8,
-                        (grid_color.y * 255.0) as u8, 
-                        (grid_color.z * 255.0) as u8),
+                        (grid_color.y * 255.0) as u8,
+                        (grid_color.z * 255.0) as u8
+                    ),
                     ..base_material.clone()
                 }
             } else {
@@ -71,10 +73,10 @@ fn sample_disk_light_point<R: Rng>(
     diameter: f64,
 ) -> Point {
     let radius = diameter / 2.0;
-    
+
     // Direction from hit point to light center
     let light_dir = Unit::new_normalize(*light_center - *hit_point);
-    
+
     // Create an orthogonal basis for the disk
     // Find a vector not parallel to light_dir
     let up = if light_dir.x.abs() < 0.9 {
@@ -82,14 +84,14 @@ fn sample_disk_light_point<R: Rng>(
     } else {
         Vec3::new(0.0, 1.0, 0.0)
     };
-    
+
     // Create orthogonal vectors for the disk plane
     let u = Unit::new_normalize(up.cross(light_dir.as_ref()));
     let v = Unit::new_normalize(light_dir.cross(u.as_ref()));
-    
+
     // Sample random point on disk
     let (disk_u, disk_v) = sample_disk_point(rng, radius);
-    
+
     // Convert to world coordinates
     light_center + disk_u * u.as_ref() + disk_v * v.as_ref()
 }
@@ -154,7 +156,7 @@ fn calculate_diffuse_light_contribution(
 ) -> Color {
     // Number of samples to take on the light disk
     const SAMPLES: u32 = 16;
-    
+
     // Create deterministic RNG seeded by hit point coordinates and global seed
     let light_seed = seed
         .wrapping_mul(0x9E3779B97F4A7C15_u64)
@@ -167,8 +169,9 @@ fn calculate_diffuse_light_contribution(
 
     for _ in 0..SAMPLES {
         // Sample a random point on the light disk
-        let sample_point = sample_disk_light_point(&mut rng, light_center, &hit_record.point, diameter);
-        
+        let sample_point =
+            sample_disk_light_point(&mut rng, light_center, &hit_record.point, diameter);
+
         let light_dir = Unit::new_normalize(sample_point - hit_record.point);
         let light_distance = (sample_point - hit_record.point).magnitude();
 
@@ -235,12 +238,14 @@ pub fn phong_lighting(
     };
 
     // Get effective material color
-    let material_color = hex_to_color(&effective_material.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
+    let material_color =
+        hex_to_color(&effective_material.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
 
     // Start with ambient lighting
     let ambient_color = hex_to_color(&ambient.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
-    let mut color =
-        effective_material.ambient * ambient.intensity * ambient_color.component_mul(&material_color);
+    let mut color = effective_material.ambient
+        * ambient.intensity
+        * ambient_color.component_mul(&material_color);
 
     // Add contribution from each light source
     for light in lights {
@@ -275,7 +280,7 @@ pub fn phong_lighting(
                 &material_color,
             )
         };
-        
+
         color += light_contribution;
     }
 
@@ -449,12 +454,18 @@ mod tests {
     fn test_sample_disk_point() {
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let radius = 2.0;
-        
+
         // Sample multiple points and verify they're within the disk
         for _ in 0..100 {
             let (x, y) = sample_disk_point(&mut rng, radius);
             let distance_from_center = (x * x + y * y).sqrt();
-            assert!(distance_from_center <= radius, "Point ({}, {}) is outside disk of radius {}", x, y, radius);
+            assert!(
+                distance_from_center <= radius,
+                "Point ({}, {}) is outside disk of radius {}",
+                x,
+                y,
+                radius
+            );
         }
     }
 
@@ -467,15 +478,21 @@ mod tests {
 
         // Sample multiple points on the light disk
         for _ in 0..100 {
-            let sample_point = sample_disk_light_point(&mut rng, &light_center, &hit_point, diameter);
-            
+            let sample_point =
+                sample_disk_light_point(&mut rng, &light_center, &hit_point, diameter);
+
             // The sampled point should be roughly the same distance from hit point as the light center
             let center_distance = (light_center - hit_point).magnitude();
             let sample_distance = (sample_point - hit_point).magnitude();
-            
+
             // Allow for some variation due to the disk sampling, but it shouldn't be too far off
             let distance_diff = (sample_distance - center_distance).abs();
-            assert!(distance_diff <= diameter / 2.0, "Sample point distance {} varies too much from center distance {}", sample_distance, center_distance);
+            assert!(
+                distance_diff <= diameter / 2.0,
+                "Sample point distance {} varies too much from center distance {}",
+                sample_distance,
+                center_distance
+            );
         }
     }
 
@@ -491,7 +508,7 @@ mod tests {
             reflectivity: None,
             texture: None,
         };
-        
+
         let texture = Texture::Checkerboard {
             material_b: Box::new(material_b.clone()),
         };
@@ -530,17 +547,17 @@ mod tests {
         let result = apply_texture(&texture, 1.0, 1.0, &base_material);
         assert_eq!(result.color, "#FF0000");
         assert_eq!(result.shininess, 32.0);
-        
+
         // Test with fractional coordinates
         // At (0.7, 0.3): floor(0.7) + floor(0.3) = 0 + 0 = 0, 0 % 2 = 0 -> base_material
         let result = apply_texture(&texture, 0.7, 0.3, &base_material);
         assert_eq!(result.color, "#FF0000");
-        
+
         // At (1.2, 0.8): floor(1.2) + floor(0.8) = 1 + 0 = 1, 1 % 2 = 1 -> material_b
         let result = apply_texture(&texture, 1.2, 0.8, &base_material);
         assert_eq!(result.color, "#0000FF");
     }
-    
+
     #[test]
     fn test_grid_texture_backwards_compatibility() {
         let texture = Texture::Grid {
@@ -548,7 +565,7 @@ mod tests {
             line_width: 0.1,
             cell_size: 1.0,
         };
-        
+
         let base_material = Material {
             color: "#FFFFFF".to_string(),
             ambient: 0.2,
@@ -558,12 +575,12 @@ mod tests {
             reflectivity: None,
             texture: None,
         };
-        
+
         // Test that grid texture still works
         // At (0.0, 0.0) we should be on a grid line
         let result = apply_texture(&texture, 0.0, 0.0, &base_material);
         assert_eq!(result.color, "#FF0000"); // Should be grid line color
-        
+
         // At (0.5, 0.5) we should NOT be on a grid line
         let result = apply_texture(&texture, 0.5, 0.5, &base_material);
         assert_eq!(result.color, "#FFFFFF"); // Should be base material color

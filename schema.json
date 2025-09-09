@@ -215,15 +215,15 @@
             "density": {
               "type": "number",
               "minimum": 0,
-              "description": "Fog density factor"
+              "description": "Fog density factor (higher values create thicker fog)"
             },
             "start": {
               "type": "number",
-              "description": "Distance where fog begins"
+              "description": "Distance where fog begins (near distance - objects closer are unaffected)"
             },
             "end": {
               "type": "number",
-              "description": "Distance where fog reaches maximum density"
+              "description": "Distance where fog calculation reaches maximum intensity (far distance)"
             }
           }
         },

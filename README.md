@@ -11,7 +11,7 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
   - Phong lighting model with ambient, diffuse, and specular components
   - Point and area light sources with soft shadows
   - Anti-aliasing with multiple sampling modes (quincunx, stochastic, no-jitter)
-  - Atmospheric fog with configurable density and falloff
+  - Atmospheric fog with distance-based linear-to-exponential density calculation
   - Surface reflections
   - Grid texture patterns for planes
   - **Deterministic rendering** for reproducible results

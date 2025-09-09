@@ -39,12 +39,26 @@ impl Camera {
         };
 
         match config.kind.as_str() {
-            "ortho" => {
-                Self::create_orthographic(origin, u, v, w, view_direction, config, aspect_ratio, grid_color)
-            }
-            "perspective" => {
-                Self::create_perspective(origin, u, v, w, view_direction, config, aspect_ratio, grid_color)
-            }
+            "ortho" => Self::create_orthographic(
+                origin,
+                u,
+                v,
+                w,
+                view_direction,
+                config,
+                aspect_ratio,
+                grid_color,
+            ),
+            "perspective" => Self::create_perspective(
+                origin,
+                u,
+                v,
+                w,
+                view_direction,
+                config,
+                aspect_ratio,
+                grid_color,
+            ),
             _ => Err(format!("Unsupported camera type: {}", config.kind)),
         }
     }
@@ -161,16 +175,13 @@ impl Camera {
         }
 
         // Check if grid is configured
-        let (grid_pitch, grid_color, grid_thickness) = match (
-            self.grid_pitch,
-            &self.grid_color,
-            self.grid_thickness,
-        ) {
-            (Some(pitch), Some(color), Some(thickness)) if pitch > 0.0 && thickness > 0.0 => {
-                (pitch, color, thickness)
-            }
-            _ => return None,
-        };
+        let (grid_pitch, grid_color, grid_thickness) =
+            match (self.grid_pitch, &self.grid_color, self.grid_thickness) {
+                (Some(pitch), Some(color), Some(thickness)) if pitch > 0.0 && thickness > 0.0 => {
+                    (pitch, color, thickness)
+                }
+                _ => return None,
+            };
 
         let half_thickness = grid_thickness / 2.0;
 
@@ -343,40 +354,40 @@ mod tests {
         config.grid_pitch = Some(1.0);
         config.grid_color = Some("#FF0000".to_string()); // Red grid
         config.grid_thickness = Some(0.1);
-        
+
         let camera = Camera::from_config(&config, 1.0).unwrap();
-        
+
         // Test that grid fields are properly set
         assert_eq!(camera.grid_pitch, Some(1.0));
         assert!(camera.grid_color.is_some());
         assert_eq!(camera.grid_thickness, Some(0.1));
-        
+
         // Create a ray that should hit the grid (looking towards a grid line on XY plane)
         // Grid lines are at integer coordinates, so (0.0, 0.3) should hit the x=0 line
         let ray = crate::ray::Ray::new(
             crate::scene::Point::new(0.0, 0.3, 5.0), // Start above the XY plane, on x=0 line
             crate::scene::Vec3::new(0.0, 0.0, -1.0), // Look down towards XY plane
         );
-        
+
         // Check if the ray hits the grid
         let grid_color = camera.get_grid_color(&ray);
         assert!(grid_color.is_some(), "Ray should hit grid line at x=0");
-        
+
         // Create a ray that should also hit the grid (y=1 line)
         let ray_y_grid = crate::ray::Ray::new(
             crate::scene::Point::new(0.3, 1.0, 5.0), // Start above the XY plane, on y=1 line
-            crate::scene::Vec3::new(0.0, 0.0, -1.0), 
+            crate::scene::Vec3::new(0.0, 0.0, -1.0),
         );
-        
+
         let grid_color_y = camera.get_grid_color(&ray_y_grid);
         assert!(grid_color_y.is_some(), "Ray should hit grid line at y=1");
-        
+
         // Create a ray that should miss the grid (between lines)
         let ray_miss = crate::ray::Ray::new(
             crate::scene::Point::new(0.3, 0.3, 5.0), // Position away from grid lines
-            crate::scene::Vec3::new(0.0, 0.0, -1.0), 
+            crate::scene::Vec3::new(0.0, 0.0, -1.0),
         );
-        
+
         let grid_color_miss = camera.get_grid_color(&ray_miss);
         assert!(grid_color_miss.is_none(), "Ray should miss grid lines");
     }
@@ -389,17 +400,20 @@ mod tests {
         config.grid_pitch = Some(1.0); // Grid settings should be ignored for perspective
         config.grid_color = Some("#FF0000".to_string());
         config.grid_thickness = Some(0.1);
-        
+
         let camera = Camera::from_config(&config, 1.0).unwrap();
-        
+
         // Create any ray
         let ray = crate::ray::Ray::new(
             crate::scene::Point::new(0.0, 0.0, 5.0),
             crate::scene::Vec3::new(0.0, 0.0, -1.0),
         );
-        
+
         // Grid should not work for perspective cameras
         let grid_color = camera.get_grid_color(&ray);
-        assert!(grid_color.is_none(), "Perspective cameras should not support grid backgrounds");
+        assert!(
+            grid_color.is_none(),
+            "Perspective cameras should not support grid backgrounds"
+        );
     }
 }

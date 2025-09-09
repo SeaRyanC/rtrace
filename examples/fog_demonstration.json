@@ -1,0 +1,99 @@
+{
+  "camera": {
+    "kind": "perspective",
+    "position": [0, 2, 8],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 10,
+    "height": 6,
+    "fov": 60
+  },
+  "objects": [
+    {
+      "kind": "sphere",
+      "center": [0, 1, 2],
+      "radius": 0.8,
+      "material": {
+        "color": "#FF4444",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [-2, 1, -2],
+      "radius": 0.8,
+      "material": {
+        "color": "#44FF44",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [2, 1, -6],
+      "radius": 0.8,
+      "material": {
+        "color": "#4444FF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [0, 1, -12],
+      "radius": 1.0,
+      "material": {
+        "color": "#FFFF44",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "plane",
+      "point": [0, -1, 0],
+      "normal": [0, 1, 0],
+      "material": {
+        "color": "#FFFFFF",
+        "ambient": 0.2,
+        "diffuse": 0.8,
+        "specular": 0.1,
+        "shininess": 10,
+        "texture": {
+          "type": "grid",
+          "line_color": "#333333",
+          "line_width": 0.05,
+          "cell_size": 1.0
+        }
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [0, 5, 5],
+      "color": "#FFFFFF",
+      "intensity": 1.2
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.15
+    },
+    "background_color": "#223344",
+    "fog": {
+      "color": "#AABBCC",
+      "density": 0.2,
+      "start": 4.0,
+      "end": 10.0
+    }
+  }
+}
