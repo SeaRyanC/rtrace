@@ -285,7 +285,8 @@ mod tests {
         assert_eq!(ray.origin, Point::new(0.0, -5.0, 2.0));
         // Ray direction should be towards the center of the viewport (roughly +y direction for Z-up)
         let expected_direction = Vec3::new(0.0, 1.0, -0.4); // Approximately toward target from new position
-        assert!((ray.direction.as_ref() - expected_direction).magnitude() < 1e-1); // More lenient due to coordinate change
+        assert!((ray.direction.as_ref() - expected_direction).magnitude() < 1e-1);
+        // More lenient due to coordinate change
     }
 
     #[test]
