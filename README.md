@@ -117,10 +117,10 @@ cargo build --release -p rtrace-cli
 
 The auto camera tool generates 4 optimized camera configurations:
 
-1. **Left View**: Orthographic camera viewing from positive Y direction
-2. **Front View**: Orthographic camera viewing from positive X direction  
-3. **Top View**: Orthographic camera viewing from positive Z direction
-4. **Perspective View**: 50° FOV perspective camera at 35° down angle from positive X/Y/Z octant
+1. **Left View**: Orthographic camera viewing from negative Y direction (side view)
+2. **Front View**: Orthographic camera viewing from negative X direction (front view)  
+3. **Top View**: Orthographic camera viewing from positive Z direction (top-down view)
+4. **Perspective View**: 50° FOV perspective camera positioned in positive X/Y/Z octant looking toward origin
 
 All cameras automatically:
 - Target the scene center
@@ -140,9 +140,9 @@ Create JSON files following the schema in `schema.json`. Example:
 {
   "camera": {
     "kind": "ortho",
-    "position": [0, 0, 10],
+    "position": [0, -10, 5],
     "target": [0, 0, 0],
-    "up": [0, 1, 0],
+    "up": [0, 0, 1],
     "width": 6,
     "height": 6
   },
@@ -167,7 +167,7 @@ Create JSON files following the schema in `schema.json`. Example:
   ],
   "lights": [
     {
-      "position": [3, 3, 5],
+      "position": [3, -3, 5],
       "color": "#FFFFFF",
       "intensity": 1.0
     }
@@ -277,9 +277,9 @@ console.log(greetWithName("Alice")); // "hello world, Alice"
 const scene = {
     camera: {
         kind: "ortho",
-        position: [0, 0, 5],
+        position: [0, -5, 2],
         target: [0, 0, 0],
-        up: [0, 1, 0],
+        up: [0, 0, 1],
         width: 6,
         height: 6
     },
@@ -299,7 +299,7 @@ const scene = {
     ],
     lights: [
         {
-            position: [2, 2, 5],
+            position: [2, -2, 5],
             color: "#FFFFFF",
             intensity: 1.0
         }

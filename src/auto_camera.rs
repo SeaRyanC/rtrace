@@ -32,16 +32,16 @@ impl AutoCamera {
         })
     }
 
-    /// Generate left camera (viewing from positive Y direction onto origin)
+    /// Generate left camera (side view from negative Y direction, looking toward +Y)
     fn generate_left_camera(center: Point, viewport_width: f64, viewport_height: f64) -> Camera {
-        // Maximum extent in Y direction to position camera far enough
+        // Position camera in negative Y direction to position camera far enough
         let camera_distance = viewport_width * 2.0; // Far enough to avoid clipping
 
         Camera {
             kind: "ortho".to_string(),
-            position: [center.x, center.y + camera_distance, center.z],
+            position: [center.x, center.y - camera_distance, center.z],
             target: [center.x, center.y, center.z],
-            up: [0.0, 0.0, 1.0],
+            up: [0.0, 0.0, 1.0], // Z-up
             width: viewport_width,
             height: viewport_height,
             fov: None,
@@ -51,16 +51,16 @@ impl AutoCamera {
         }
     }
 
-    /// Generate front camera (viewing from positive X direction onto origin)
+    /// Generate front camera (front view from negative X direction, looking toward +X)
     fn generate_front_camera(center: Point, viewport_width: f64, viewport_height: f64) -> Camera {
-        // Maximum extent in X direction to position camera far enough
+        // Position camera in negative X direction to position camera far enough
         let camera_distance = viewport_width * 2.0; // Far enough to avoid clipping
 
         Camera {
             kind: "ortho".to_string(),
-            position: [center.x + camera_distance, center.y, center.z],
+            position: [center.x - camera_distance, center.y, center.z],
             target: [center.x, center.y, center.z],
-            up: [0.0, 0.0, 1.0],
+            up: [0.0, 0.0, 1.0], // Z-up
             width: viewport_width,
             height: viewport_height,
             fov: None,
@@ -70,7 +70,7 @@ impl AutoCamera {
         }
     }
 
-    /// Generate top camera (viewing from positive Z direction onto origin)
+    /// Generate top camera (top-down view from positive Z direction, looking toward -Z)
     fn generate_top_camera(center: Point, viewport_width: f64, viewport_height: f64) -> Camera {
         // Maximum extent in Z direction to position camera far enough
         let camera_distance = viewport_width * 2.0; // Far enough to avoid clipping
@@ -79,7 +79,7 @@ impl AutoCamera {
             kind: "ortho".to_string(),
             position: [center.x, center.y, center.z + camera_distance],
             target: [center.x, center.y, center.z],
-            up: [0.0, 1.0, 0.0],
+            up: [0.0, 1.0, 0.0], // Y-forward for top view
             width: viewport_width,
             height: viewport_height,
             fov: None,
@@ -185,10 +185,10 @@ mod tests {
         assert_eq!(result.top.target, [0.0, 0.0, 0.0]);
         assert_eq!(result.perspective.target, [0.0, 0.0, 0.0]);
 
-        // Test that orthographic cameras have proper orientations
-        assert!(result.left.position[1] > 0.0); // Positive Y
-        assert!(result.front.position[0] > 0.0); // Positive X
-        assert!(result.top.position[2] > 0.0); // Positive Z
+        // Test that orthographic cameras have proper orientations (Z-up system)
+        assert!(result.left.position[1] < 0.0); // Negative Y (side view)
+        assert!(result.front.position[0] < 0.0); // Negative X (front view)
+        assert!(result.top.position[2] > 0.0); // Positive Z (top-down view)
 
         // Test that perspective camera is in positive octant
         assert!(result.perspective.position[0] > 0.0);

@@ -131,7 +131,7 @@ Orthographic cameras provide parallel projection with no perspective distortion 
 | `kind` | string | Camera type, must be `"ortho"` |
 | `position` | [x, y, z] | Camera position in 3D space |
 | `target` | [x, y, z] | Point the camera looks at |
-| `up` | [x, y, z] | Camera up vector (typically [0, 1, 0]) |
+| `up` | [x, y, z] | Camera up vector (typically [0, 0, 1] for Z-up) |
 | `width` | number | Viewport width in world units |
 | `height` | number | Viewport height in world units |
 | `grid_pitch` | number (optional) | Distance between grid lines for background grid |
@@ -192,7 +192,7 @@ Perspective cameras provide realistic 3D viewing with depth perspective, similar
 | `kind` | string | Camera type, must be `"perspective"` |
 | `position` | [x, y, z] | Camera position in 3D space |
 | `target` | [x, y, z] | Point the camera looks at |
-| `up` | [x, y, z] | Camera up vector (typically [0, 1, 0]) |
+| `up` | [x, y, z] | Camera up vector (typically [0, 0, 1] for Z-up) |
 | `width` | number | Viewport width in world units |
 | `height` | number | Viewport height in world units |
 | `fov` | number | Field of view angle in degrees |
@@ -392,10 +392,10 @@ In Option 2, the object is moved 5 units, then doubled (so it ends up 10 units a
 
 **Performance:** Transforms are applied during scene setup, not during rendering, so they don't affect render performance.
 
-**Coordinate System:** rtrace uses a right-handed coordinate system:
+**Coordinate System:** rtrace uses a right-handed Z-up coordinate system optimized for 3D printing workflows:
 - +X points right
-- +Y points up  
-- +Z points toward the camera
+- +Y points forward (away from viewer)
+- +Z points up
 
 **Mesh Transforms:** For STL meshes, transforms are applied to all vertices, and spatial acceleration structures (like K-d trees) are rebuilt automatically.
 

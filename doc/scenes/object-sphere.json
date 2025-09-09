@@ -1,9 +1,9 @@
 {
   "camera": {
     "kind": "ortho",
-    "position": [0, 0, 10],
+    "position": [0, -10, 5],
     "target": [0, 0, 0],
-    "up": [0, 1, 0],
+    "up": [0, 0, 1],
     "width": 6,
     "height": 6
   },
@@ -23,7 +23,7 @@
   ],
   "lights": [
     {
-      "position": [3, 3, 5],
+      "position": [3, -3, 5],
       "color": "#FFFFFF",
       "intensity": 1.0
     }
