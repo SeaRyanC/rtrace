@@ -212,35 +212,29 @@ impl Renderer {
                     material,
                     transform,
                 } => {
-                    let mut center_point = Point::new(center[0], center[1], center[2]);
-                    let mut cube_size = Vec3::new(size[0], size[1], size[2]);
+                    let center_point = Point::new(center[0], center[1], center[2]);
+                    let cube_size = Vec3::new(size[0], size[1], size[2]);
+                    let color = hex_to_color(&material.color)?;
 
-                    // Apply transforms if present
-                    if let Some(transform_strings) = transform {
+                    // Create cube with transform if present
+                    let cube = if let Some(transform_strings) = transform {
                         if let Ok(transform_matrix) =
                             crate::scene::parse_transforms(transform_strings)
                         {
-                            // Transform the center point
-                            let center_homogeneous =
-                                transform_matrix * center_point.to_homogeneous();
-                            center_point = Point::new(
-                                center_homogeneous.x,
-                                center_homogeneous.y,
-                                center_homogeneous.z,
-                            );
-
-                            // For size, we need to consider scaling
-                            let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
-                            let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
-                            let scale_z = (transform_matrix.column(2).xyz().magnitude()) as f64;
-                            cube_size.x *= scale_x;
-                            cube_size.y *= scale_y;
-                            cube_size.z *= scale_z;
+                            Box::new(Cube::new_with_transform(
+                                center_point,
+                                cube_size,
+                                transform_matrix,
+                                color,
+                                index,
+                            ))
+                        } else {
+                            Box::new(Cube::new(center_point, cube_size, color, index))
                         }
-                    }
-
-                    let color = hex_to_color(&material.color)?;
-                    let cube = Box::new(Cube::new(center_point, cube_size, color, index));
+                    } else {
+                        Box::new(Cube::new(center_point, cube_size, color, index))
+                    };
+                    
                     world.add(cube);
                     materials.insert(index, material.clone());
                 }
