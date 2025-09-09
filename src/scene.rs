@@ -1,5 +1,6 @@
 use nalgebra::{Matrix4, Point3, Vector3};
 use serde::{Deserialize, Serialize};
+use crate::ray::Cube;
 
 /// Color representation as RGB values (0.0-1.0)
 pub type Color = Vector3<f64>;
@@ -516,33 +517,21 @@ impl Scene {
                     transform,
                     ..
                 } => {
-                    let mut center_point = Point::new(center[0], center[1], center[2]);
-                    let mut effective_size = Vec3::new(size[0], size[1], size[2]);
+                    let center_point = Point::new(center[0], center[1], center[2]);
+                    let cube_size = Vec3::new(size[0], size[1], size[2]);
 
-                    // Apply transforms if present
-                    if let Some(transform_strings) = transform {
+                    // Create a temporary cube to get bounds
+                    let temp_cube = if let Some(transform_strings) = transform {
                         if let Ok(transform_matrix) = parse_transforms(transform_strings) {
-                            // Transform the center point
-                            let center_homogeneous =
-                                transform_matrix * center_point.to_homogeneous();
-                            center_point = Point::new(
-                                center_homogeneous.x,
-                                center_homogeneous.y,
-                                center_homogeneous.z,
-                            );
-
-                            // For size, we need to consider scaling
-                            let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
-                            let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
-                            let scale_z = (transform_matrix.column(2).xyz().magnitude()) as f64;
-                            effective_size.x *= scale_x;
-                            effective_size.y *= scale_y;
-                            effective_size.z *= scale_z;
+                            Cube::new_with_transform(center_point, cube_size, transform_matrix, Color::new(0.0, 0.0, 0.0), 0)
+                        } else {
+                            Cube::new(center_point, cube_size, Color::new(0.0, 0.0, 0.0), 0)
                         }
-                    }
+                    } else {
+                        Cube::new(center_point, cube_size, Color::new(0.0, 0.0, 0.0), 0)
+                    };
 
-                    let half_size = effective_size / 2.0;
-                    Some((center_point - half_size, center_point + half_size))
+                    Some(temp_cube.bounds())
                 }
                 Object::Mesh {
                     mesh_data,
