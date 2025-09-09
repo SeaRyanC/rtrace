@@ -20,6 +20,22 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
 - **JSON Scene Format**: Flexible scene description with JSON schema validation
 - **PNG Output**: High-quality image generation
 
+## Gallery
+
+Experience the visual capabilities of rtrace through these stunning rendered scenes:
+
+| Crystal Garden | Architectural Study |
+|:---:|:---:|
+| ![Crystal Garden](crystal_garden.png) | ![Architectural Study](architectural_study.png) |
+| *Showcasing reflective materials, atmospheric fog,<br/>and multi-colored lighting effects* | *Demonstrating geometric precision, object transforms,<br/>and architectural composition* |
+
+| Dreamy Atmosphere | Technical Precision |
+|:---:|:---:|
+| ![Dreamy Atmosphere](dreamy_atmosphere.png) | ![Technical Precision](technical_precision.png) |
+| *Featuring warm atmospheric fog, soft lighting,<br/>and dreamy color palettes* | *Highlighting anti-aliasing, fine detail rendering,<br/>and geometric accuracy* |
+
+All images rendered at 800×600 resolution using the default quincunx anti-aliasing for optimal quality.
+
 ## Project Structure
 
 ```

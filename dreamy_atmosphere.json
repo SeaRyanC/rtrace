@@ -1,0 +1,135 @@
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [6, 4, 10],
+    "target": [0, 0, 0],
+    "up": [0, 1, 0],
+    "width": 12,
+    "height": 9
+  },
+  "objects": [
+    {
+      "kind": "plane",
+      "point": [0, -3, 0],
+      "normal": [0, 1, 0],
+      "material": {
+        "color": "#F5DEB3",
+        "ambient": 0.4,
+        "diffuse": 0.6,
+        "specular": 0.1,
+        "shininess": 10,
+        "reflectivity": 0.2
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [0, 0, 0],
+      "radius": 1.5,
+      "material": {
+        "color": "#FFE4B5",
+        "ambient": 0.2,
+        "diffuse": 0.5,
+        "specular": 0.7,
+        "shininess": 80,
+        "reflectivity": 0.4
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [-3, -0.5, 2],
+      "radius": 1.0,
+      "material": {
+        "color": "#FFDAB9",
+        "ambient": 0.2,
+        "diffuse": 0.4,
+        "specular": 0.6,
+        "shininess": 60,
+        "reflectivity": 0.3
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [3.5, 0.8, -1.5],
+      "radius": 0.8,
+      "material": {
+        "color": "#FFB6C1",
+        "ambient": 0.2,
+        "diffuse": 0.4,
+        "specular": 0.5,
+        "shininess": 50,
+        "reflectivity": 0.25
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [1, 2, 3],
+      "radius": 0.6,
+      "material": {
+        "color": "#FFA07A",
+        "ambient": 0.3,
+        "diffuse": 0.5,
+        "specular": 0.4,
+        "shininess": 40,
+        "reflectivity": 0.2
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [-2, 1.2, -2.5],
+      "radius": 0.5,
+      "material": {
+        "color": "#F0E68C",
+        "ambient": 0.3,
+        "diffuse": 0.6,
+        "specular": 0.3,
+        "shininess": 30
+      }
+    },
+    {
+      "kind": "cube",
+      "center": [0, 4, 0],
+      "size": [0.6, 0.6, 0.6],
+      "material": {
+        "color": "#DDA0DD",
+        "ambient": 0.2,
+        "diffuse": 0.4,
+        "specular": 0.6,
+        "shininess": 70,
+        "reflectivity": 0.3
+      },
+      "transform": [
+        "rotate(30, 45, 60)"
+      ]
+    }
+  ],
+  "lights": [
+    {
+      "position": [4, 6, 5],
+      "color": "#FFA500",
+      "intensity": 1.0
+    },
+    {
+      "position": [-3, 5, 6],
+      "color": "#FF69B4",
+      "intensity": 0.8
+    },
+    {
+      "position": [0, 8, -3],
+      "color": "#DDA0DD",
+      "intensity": 0.6
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFEFD5",
+      "intensity": 0.3
+    },
+    "fog": {
+      "color": "#F5DEB3",
+      "density": 0.15,
+      "start": 6.0,
+      "end": 18.0
+    },
+    "background_color": "#8B4513"
+  }
+}

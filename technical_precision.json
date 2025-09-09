@@ -1,0 +1,239 @@
+{
+  "camera": {
+    "kind": "perspective", 
+    "position": [10, 7, 14],
+    "target": [0, 1, 0],
+    "up": [0, 1, 0],
+    "width": 12,
+    "height": 9,
+    "fov": 42
+  },
+  "objects": [
+    {
+      "kind": "plane",
+      "point": [0, -1, 0],
+      "normal": [0, 1, 0],
+      "material": {
+        "color": "#FFFFFF",
+        "ambient": 0.3,
+        "diffuse": 0.7,
+        "specular": 0.2,
+        "shininess": 20,
+        "texture": {
+          "type": "grid",
+          "line_color": "#000000",
+          "line_width": 0.015,
+          "cell_size": 0.5
+        }
+      }
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [1, 1, 1],
+      "material": {
+        "color": "#FF0000",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.3,
+        "shininess": 50
+      }
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [0.8, 0.8, 0.8],
+      "material": {
+        "color": "#00FF00",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.3,
+        "shininess": 50
+      },
+      "transform": [
+        "rotate(45, 0, 0)",
+        "translate(2.5, 0, 0)"
+      ]
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [0.6, 0.6, 0.6],
+      "material": {
+        "color": "#0000FF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.3,
+        "shininess": 50
+      },
+      "transform": [
+        "rotate(0, 45, 0)",
+        "translate(-2.5, 0, 0)"
+      ]
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [0.4, 0.4, 0.4],
+      "material": {
+        "color": "#FFFF00",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.3,
+        "shininess": 50
+      },
+      "transform": [
+        "rotate(0, 0, 45)",
+        "translate(0, 0, 2.5)"
+      ]
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [0.3, 0.3, 0.3],
+      "material": {
+        "color": "#FF00FF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.3,
+        "shininess": 50
+      },
+      "transform": [
+        "rotate(30, 30, 30)",
+        "translate(0, 0, -2.5)"
+      ]
+    },
+    {
+      "kind": "sphere",
+      "center": [0, 0, 0],
+      "radius": 0.15,
+      "material": {
+        "color": "#FFFFFF",
+        "ambient": 0.1,
+        "diffuse": 0.3,
+        "specular": 0.9,
+        "shininess": 200,
+        "reflectivity": 0.8
+      },
+      "transform": [
+        "translate(1.2, 1.5, 1.2)"
+      ]
+    },
+    {
+      "kind": "sphere",
+      "center": [0, 0, 0],
+      "radius": 0.12,
+      "material": {
+        "color": "#CCCCCC",
+        "ambient": 0.1,
+        "diffuse": 0.3,
+        "specular": 0.8,
+        "shininess": 150,
+        "reflectivity": 0.6
+      },
+      "transform": [
+        "translate(-1.8, 1.2, -0.8)"
+      ]
+    },
+    {
+      "kind": "sphere",
+      "center": [0, 0, 0],
+      "radius": 0.1,
+      "material": {
+        "color": "#888888",
+        "ambient": 0.1,
+        "diffuse": 0.4,
+        "specular": 0.7,
+        "shininess": 120,
+        "reflectivity": 0.4
+      },
+      "transform": [
+        "translate(0.8, 2, -1.5)"
+      ]
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [0.1, 2, 0.1],
+      "material": {
+        "color": "#808080",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.2,
+        "shininess": 30
+      },
+      "transform": [
+        "translate(4, 1, 0)"
+      ]
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [0.1, 1.5, 0.1],
+      "material": {
+        "color": "#606060",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.2,
+        "shininess": 30
+      },
+      "transform": [
+        "translate(-4, 0.75, 0)"
+      ]
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [2, 0.1, 0.1],
+      "material": {
+        "color": "#404040",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.2,
+        "shininess": 30
+      },
+      "transform": [
+        "translate(0, 1, 4)"
+      ]
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 0],
+      "size": [1.5, 0.1, 0.1],
+      "material": {
+        "color": "#202020",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.2,
+        "shininess": 30
+      },
+      "transform": [
+        "translate(0, 0.75, -4)"
+      ]
+    }
+  ],
+  "lights": [
+    {
+      "position": [6, 10, 8],
+      "color": "#FFFFFF",
+      "intensity": 1.5
+    },
+    {
+      "position": [-4, 6, 6],
+      "color": "#F8F8F8",
+      "intensity": 0.8
+    },
+    {
+      "position": [2, 4, -6],
+      "color": "#EEEEEE",
+      "intensity": 0.6
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.25
+    },
+    "background_color": "#F5F5F5"
+  }
+}
