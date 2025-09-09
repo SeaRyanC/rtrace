@@ -141,17 +141,17 @@ const sceneJson = JSON.stringify(scene, null, 2);
 console.log('Scene JSON created, rendering image...\n');
 
 // Define output path in examples directory
-const outputPath = path.join(__dirname, 'examples', 'radial_spheres_800x600.png');
+const outputPath = path.join(__dirname, '..', 'examples', 'radial_spheres_1000.png');
 
 try {
     // Render the scene using the Node.js binding
-    const result = rtrace.renderScene(sceneJson, outputPath, 800, 600);
+    const result = rtrace.renderScene(sceneJson, outputPath, 1000);
     console.log('✅ Render successful!');
     console.log(result);
     console.log(`\nOutput saved to: ${outputPath}`);
     
     // Also save the scene JSON for reference
-    const jsonPath = path.join(__dirname, 'examples', 'radial_spheres.json');
+    const jsonPath = path.join(__dirname, '..', 'examples', 'radial_spheres.json');
     require('fs').writeFileSync(jsonPath, sceneJson);
     console.log(`Scene JSON saved to: ${jsonPath}`);
     

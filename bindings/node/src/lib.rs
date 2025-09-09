@@ -18,11 +18,9 @@ pub fn greet_with_name(name: String) -> String {
 pub fn render_scene(
     scene_json: String,
     output_path: String,
-    width: Option<u32>,
-    height: Option<u32>,
+    size: Option<u32>,
 ) -> Result<String> {
-    let width = width.unwrap_or(800);
-    let height = height.unwrap_or(600);
+    let diagonal_size = size.unwrap_or(1000);
 
     // Parse the JSON scene
     let scene = rtrace::Scene::from_json_str(&scene_json).map_err(|e| {
@@ -31,6 +29,19 @@ pub fn render_scene(
             format!("Failed to parse scene JSON: {}", e),
         )
     })?;
+
+    // Compute pixel dimensions from diagonal size and camera aspect ratio
+    let camera_aspect_ratio = scene.camera.width / scene.camera.height;
+    let diagonal = diagonal_size as f64;
+    
+    // Using diagonal D and aspect ratio R = W/H:
+    // H = D / sqrt(R² + 1)  
+    // W = R * H
+    let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
+    let width_f64 = camera_aspect_ratio * height_f64;
+    
+    let width = width_f64.round() as u32;
+    let height = height_f64.round() as u32;
 
     // Create renderer with k-d tree enabled and multi-threading
     let renderer = rtrace::Renderer::new(width, height);
@@ -44,8 +55,8 @@ pub fn render_scene(
     })?;
 
     Ok(format!(
-        "Successfully rendered {}x{} image to '{}' (multi-threaded)",
-        width, height, output_path
+        "Successfully rendered {}×{} image (diagonal {}) to '{}' (multi-threaded)",
+        width, height, diagonal_size, output_path
     ))
 }
 
@@ -54,12 +65,10 @@ pub fn render_scene(
 pub fn render_scene_threaded(
     scene_json: String,
     output_path: String,
-    width: Option<u32>,
-    height: Option<u32>,
+    size: Option<u32>,
     thread_count: Option<u32>,
 ) -> Result<String> {
-    let width = width.unwrap_or(800);
-    let height = height.unwrap_or(600);
+    let diagonal_size = size.unwrap_or(1000);
 
     // Parse the JSON scene
     let scene = rtrace::Scene::from_json_str(&scene_json).map_err(|e| {
@@ -68,6 +77,19 @@ pub fn render_scene_threaded(
             format!("Failed to parse scene JSON: {}", e),
         )
     })?;
+
+    // Compute pixel dimensions from diagonal size and camera aspect ratio
+    let camera_aspect_ratio = scene.camera.width / scene.camera.height;
+    let diagonal = diagonal_size as f64;
+    
+    // Using diagonal D and aspect ratio R = W/H:
+    // H = D / sqrt(R² + 1)  
+    // W = R * H
+    let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
+    let width_f64 = camera_aspect_ratio * height_f64;
+    
+    let width = width_f64.round() as u32;
+    let height = height_f64.round() as u32;
 
     // Create renderer with specific thread count
     let renderer = if let Some(threads) = thread_count {
@@ -91,8 +113,8 @@ pub fn render_scene_threaded(
     };
 
     Ok(format!(
-        "Successfully rendered {}x{} image to '{}'{}",
-        width, height, output_path, thread_info
+        "Successfully rendered {}×{} image (diagonal {}) to '{}'{}",
+        width, height, diagonal_size, output_path, thread_info
     ))
 }
 
@@ -101,11 +123,9 @@ pub fn render_scene_threaded(
 pub fn render_scene_brute_force(
     scene_json: String,
     output_path: String,
-    width: Option<u32>,
-    height: Option<u32>,
+    size: Option<u32>,
 ) -> Result<String> {
-    let width = width.unwrap_or(800);
-    let height = height.unwrap_or(600);
+    let diagonal_size = size.unwrap_or(1000);
 
     // Parse the JSON scene
     let scene = rtrace::Scene::from_json_str(&scene_json).map_err(|e| {
@@ -114,6 +134,19 @@ pub fn render_scene_brute_force(
             format!("Failed to parse scene JSON: {}", e),
         )
     })?;
+
+    // Compute pixel dimensions from diagonal size and camera aspect ratio
+    let camera_aspect_ratio = scene.camera.width / scene.camera.height;
+    let diagonal = diagonal_size as f64;
+    
+    // Using diagonal D and aspect ratio R = W/H:
+    // H = D / sqrt(R² + 1)  
+    // W = R * H
+    let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
+    let width_f64 = camera_aspect_ratio * height_f64;
+    
+    let width = width_f64.round() as u32;
+    let height = height_f64.round() as u32;
 
     // Create renderer with k-d tree disabled (brute force)
     let renderer = rtrace::Renderer::new_brute_force(width, height);
@@ -127,8 +160,8 @@ pub fn render_scene_brute_force(
     })?;
 
     Ok(format!(
-        "Successfully rendered {}x{} image to '{}' (brute force)",
-        width, height, output_path
+        "Successfully rendered {}×{} image (diagonal {}) to '{}' (brute force)",
+        width, height, diagonal_size, output_path
     ))
 }
 
@@ -137,11 +170,9 @@ pub fn render_scene_brute_force(
 pub fn render_scene_from_file(
     scene_file_path: String,
     output_path: String,
-    width: Option<u32>,
-    height: Option<u32>,
+    size: Option<u32>,
 ) -> Result<String> {
-    let width = width.unwrap_or(800);
-    let height = height.unwrap_or(600);
+    let diagonal_size = size.unwrap_or(1000);
 
     // Load scene from file (handles relative paths)
     let scene = rtrace::Scene::from_json_file(&scene_file_path).map_err(|e| {
@@ -150,6 +181,19 @@ pub fn render_scene_from_file(
             format!("Failed to load scene file: {}", e),
         )
     })?;
+
+    // Compute pixel dimensions from diagonal size and camera aspect ratio
+    let camera_aspect_ratio = scene.camera.width / scene.camera.height;
+    let diagonal = diagonal_size as f64;
+    
+    // Using diagonal D and aspect ratio R = W/H:
+    // H = D / sqrt(R² + 1)  
+    // W = R * H
+    let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
+    let width_f64 = camera_aspect_ratio * height_f64;
+    
+    let width = width_f64.round() as u32;
+    let height = height_f64.round() as u32;
 
     // Create renderer with k-d tree enabled and multi-threading
     let renderer = rtrace::Renderer::new(width, height);
@@ -163,8 +207,8 @@ pub fn render_scene_from_file(
     })?;
 
     Ok(format!(
-        "Successfully rendered {}x{} image to '{}' (multi-threaded)",
-        width, height, output_path
+        "Successfully rendered {}×{} image (diagonal {}) to '{}' (multi-threaded)",
+        width, height, diagonal_size, output_path
     ))
 }
 
@@ -173,12 +217,10 @@ pub fn render_scene_from_file(
 pub fn render_scene_from_file_threaded(
     scene_file_path: String,
     output_path: String,
-    width: Option<u32>,
-    height: Option<u32>,
+    size: Option<u32>,
     thread_count: Option<u32>,
 ) -> Result<String> {
-    let width = width.unwrap_or(800);
-    let height = height.unwrap_or(600);
+    let diagonal_size = size.unwrap_or(1000);
 
     // Load scene from file (handles relative paths)
     let scene = rtrace::Scene::from_json_file(&scene_file_path).map_err(|e| {
@@ -187,6 +229,19 @@ pub fn render_scene_from_file_threaded(
             format!("Failed to load scene file: {}", e),
         )
     })?;
+
+    // Compute pixel dimensions from diagonal size and camera aspect ratio
+    let camera_aspect_ratio = scene.camera.width / scene.camera.height;
+    let diagonal = diagonal_size as f64;
+    
+    // Using diagonal D and aspect ratio R = W/H:
+    // H = D / sqrt(R² + 1)  
+    // W = R * H
+    let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
+    let width_f64 = camera_aspect_ratio * height_f64;
+    
+    let width = width_f64.round() as u32;
+    let height = height_f64.round() as u32;
 
     // Create renderer with specific thread count
     let renderer = if let Some(threads) = thread_count {
@@ -210,8 +265,8 @@ pub fn render_scene_from_file_threaded(
     };
 
     Ok(format!(
-        "Successfully rendered {}x{} image to '{}'{}",
-        width, height, output_path, thread_info
+        "Successfully rendered {}×{} image (diagonal {}) to '{}'{}",
+        width, height, diagonal_size, output_path, thread_info
     ))
 }
 
@@ -220,11 +275,9 @@ pub fn render_scene_from_file_threaded(
 pub fn render_scene_from_file_brute_force(
     scene_file_path: String,
     output_path: String,
-    width: Option<u32>,
-    height: Option<u32>,
+    size: Option<u32>,
 ) -> Result<String> {
-    let width = width.unwrap_or(800);
-    let height = height.unwrap_or(600);
+    let diagonal_size = size.unwrap_or(1000);
 
     // Load scene from file (handles relative paths)
     let scene = rtrace::Scene::from_json_file(&scene_file_path).map_err(|e| {
@@ -233,6 +286,19 @@ pub fn render_scene_from_file_brute_force(
             format!("Failed to load scene file: {}", e),
         )
     })?;
+
+    // Compute pixel dimensions from diagonal size and camera aspect ratio
+    let camera_aspect_ratio = scene.camera.width / scene.camera.height;
+    let diagonal = diagonal_size as f64;
+    
+    // Using diagonal D and aspect ratio R = W/H:
+    // H = D / sqrt(R² + 1)  
+    // W = R * H
+    let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
+    let width_f64 = camera_aspect_ratio * height_f64;
+    
+    let width = width_f64.round() as u32;
+    let height = height_f64.round() as u32;
 
     // Create renderer with k-d tree disabled (brute force)
     let renderer = rtrace::Renderer::new_brute_force(width, height);
@@ -246,7 +312,7 @@ pub fn render_scene_from_file_brute_force(
     })?;
 
     Ok(format!(
-        "Successfully rendered {}x{} image to '{}' (brute force)",
-        width, height, output_path
+        "Successfully rendered {}×{} image (diagonal {}) to '{}' (brute force)",
+        width, height, diagonal_size, output_path
     ))
 }

@@ -84,12 +84,12 @@ To render any JSON scene file:
 
 ```bash
 # From the root directory
-../target/release/rtrace --input examples/SCENE_FILE.json --output OUTPUT.png --width 800 --height 600
+../target/release/rtrace --input examples/SCENE_FILE.json --output OUTPUT.png --size 1000
 ```
 
 For example:
 ```bash
-../target/release/rtrace --input examples/simple_sphere.json --output my_render.png --width 800 --height 600
+../target/release/rtrace --input examples/simple_sphere.json --output my_render.png --size 1000
 ```
 
 ### JavaScript/Node.js API
@@ -109,8 +109,8 @@ const scene = {
 
 // Convert to JSON and render
 const sceneJson = JSON.stringify(scene);
-const result = rtrace.renderScene(sceneJson, 'output.png', 800, 600);
-console.log(result); // "Successfully rendered 800x600 image to 'output.png'"
+const result = rtrace.renderScene(sceneJson, 'output.png', 1000);
+console.log(result); // "Successfully rendered 800×600 image (diagonal 1000) to 'output.png' (multi-threaded)"
 ```
 
 #### Running the Programmatic Example
@@ -145,12 +145,12 @@ This will create both `examples/radial_spheres.json` and `examples/radial_sphere
 
 ```bash
 # From the root directory
-./target/release/rtrace --input examples/SCENE_FILE.json --output OUTPUT.png --width 800 --height 600
+./target/release/rtrace --input examples/SCENE_FILE.json --output OUTPUT.png --size 1000
 ```
 
 For example:
 ```bash
-./target/release/rtrace --input examples/simple_sphere.json --output my_render.png --width 800 --height 600
+./target/release/rtrace --input examples/simple_sphere.json --output my_render.png --size 1000
 ```
 
 ## Scene Format

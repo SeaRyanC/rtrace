@@ -1,21 +1,21 @@
 const rtrace = require('../rtrace.node');
 const fs = require('fs');
 
-async function renderScene(sceneFile, outputPrefix, width = 800, height = 600) {
+async function renderScene(sceneFile, outputPrefix, size = 1000) {
   console.log(`\n=== Rendering ${sceneFile} ===`);
   
   const sceneJson = fs.readFileSync(sceneFile, 'utf8');
   
   // K-d tree version
   console.log("Rendering WITH k-d tree...");
-  const kdtreeOutput = `../examples/${outputPrefix}_kdtree_${width}x${height}.png`;
-  const kdtreeResult = rtrace.renderScene(sceneJson, kdtreeOutput, width, height);
+  const kdtreeOutput = `../examples/${outputPrefix}_kdtree_${size}.png`;
+  const kdtreeResult = rtrace.renderScene(sceneJson, kdtreeOutput, size);
   console.log("✓", kdtreeResult);
   
   // Brute force version  
   console.log("Rendering WITHOUT k-d tree (brute force)...");
-  const bruteOutput = `../examples/${outputPrefix}_brute_force_${width}x${height}.png`;
-  const bruteResult = rtrace.renderSceneBruteForce(sceneJson, bruteOutput, width, height);
+  const bruteOutput = `../examples/${outputPrefix}_brute_force_${size}.png`;
+  const bruteResult = rtrace.renderSceneBruteForce(sceneJson, bruteOutput, size);
   console.log("✓", bruteResult);
 }
 
@@ -25,9 +25,9 @@ async function main() {
     console.log("Comparing k-d tree vs brute force triangle intersection");
     
     // Render all three views
-    await renderScene('.../examples/plus_front.json', 'plus_front', 800, 600);
-    await renderScene('.../examples/plus_side.json', 'plus_side', 800, 600);
-    await renderScene('.../examples/plus_perspective.json', 'plus_perspective', 800, 600);
+    await renderScene('.../examples/plus_front.json', 'plus_front', 1000);
+    await renderScene('.../examples/plus_side.json', 'plus_side', 1000);
+    await renderScene('.../examples/plus_perspective.json', 'plus_perspective', 1000);
     
     console.log("\n🎉 All renders completed!");
     console.log("\nGenerated images for comparison:");

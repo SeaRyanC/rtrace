@@ -14,13 +14,9 @@ struct Args {
     #[arg(short, long)]
     output: String,
 
-    /// Image width in pixels
-    #[arg(short, long, default_value_t = 800)]
-    width: u32,
-
-    /// Image height in pixels  
-    #[arg(short = 'H', long, default_value_t = 600)]
-    height: u32,
+    /// Image diagonal size in pixels (aspect ratio computed from camera settings)
+    #[arg(short, long, default_value_t = 1000)]
+    size: u32,
 
     /// Maximum ray bounces for reflections
     #[arg(long, default_value_t = 10)]
@@ -79,16 +75,34 @@ fn main() {
         scene.lights.len()
     );
 
+    // Compute pixel dimensions from diagonal size and camera aspect ratio
+    let camera_aspect_ratio = scene.camera.width / scene.camera.height;
+    let diagonal = args.size as f64;
+    
+    // Using diagonal D and aspect ratio R = W/H:
+    // H = D / sqrt(R² + 1)
+    // W = R * H
+    let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
+    let width_f64 = camera_aspect_ratio * height_f64;
+    
+    let width = width_f64.round() as u32;
+    let height = height_f64.round() as u32;
+
+    println!(
+        "Using camera aspect ratio {:.3} to compute {}×{} pixels from diagonal {}",
+        camera_aspect_ratio, width, height, args.size
+    );
+
     // Create renderer
-    let mut renderer = Renderer::new(args.width, args.height);
+    let mut renderer = Renderer::new(width, height);
     renderer.max_depth = args.max_depth;
     renderer.samples = samples;
     renderer.anti_aliasing_mode = anti_aliasing_mode;
     renderer.seed = Some(0); // Always use deterministic seed 0
 
     println!(
-        "Rendering {}x{} image with {} anti-aliasing ({} samples)...",
-        args.width, args.height, args.anti_aliasing, samples
+        "Rendering {}×{} image (diagonal {}) with {} anti-aliasing ({} samples)...",
+        width, height, args.size, args.anti_aliasing, samples
     );
 
     // Render and save
