@@ -8,14 +8,14 @@ export declare function helloWorld(): string
 /** Advanced function that takes parameters (demonstration) */
 export declare function greetWithName(name: string): string
 /** Render a scene from JSON string directly */
-export declare function renderScene(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
+export declare function renderScene(sceneJson: string, outputPath: string, size?: number | undefined | null): string
 /** Render a scene from JSON string with specific thread count */
-export declare function renderSceneThreaded(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null, threadCount?: number | undefined | null): string
+export declare function renderSceneThreaded(sceneJson: string, outputPath: string, size?: number | undefined | null, threadCount?: number | undefined | null): string
 /** Render a scene from JSON string with brute force (no k-d tree) */
-export declare function renderSceneBruteForce(sceneJson: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
+export declare function renderSceneBruteForce(sceneJson: string, outputPath: string, size?: number | undefined | null): string
 /** Render a scene from JSON file directly (handles relative paths correctly) */
-export declare function renderSceneFromFile(sceneFilePath: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
+export declare function renderSceneFromFile(sceneFilePath: string, outputPath: string, size?: number | undefined | null): string
 /** Render a scene from JSON file with specific thread count */
-export declare function renderSceneFromFileThreaded(sceneFilePath: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null, threadCount?: number | undefined | null): string
+export declare function renderSceneFromFileThreaded(sceneFilePath: string, outputPath: string, size?: number | undefined | null, threadCount?: number | undefined | null): string
 /** Render a scene from JSON file with brute force (no k-d tree) */
-export declare function renderSceneFromFileBruteForce(sceneFilePath: string, outputPath: string, width?: number | undefined | null, height?: number | undefined | null): string
+export declare function renderSceneFromFileBruteForce(sceneFilePath: string, outputPath: string, size?: number | undefined | null): string
