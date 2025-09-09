@@ -99,8 +99,7 @@ pub enum Texture {
     },
     #[serde(rename = "checkerboard")]
     Checkerboard {
-        material_a: Box<Material>, // first material (independent properties)
-        material_b: Box<Material>, // second material (independent properties)
+        material_b: Box<Material>, // secondary material for alternate squares
     },
 }
 

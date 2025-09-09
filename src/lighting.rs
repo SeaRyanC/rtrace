@@ -37,18 +37,15 @@ fn apply_texture(texture: &Texture, u: f64, v: f64, base_material: &Material) ->
             } else {
                 base_material.clone()
             }
-        }
-        Texture::Checkerboard {
-            material_a,
-            material_b,
-        } => {
+        },
+        Texture::Checkerboard { material_b } => {
             // Use 1x1 world units for checkerboard pattern
             let checker_u = u.floor() as i32;
             let checker_v = v.floor() as i32;
-
-            // Determine which material to use based on checkerboard pattern
+            
+            // Use base material for primary squares (even), material_b for alternate squares (odd)
             if (checker_u + checker_v) % 2 == 0 {
-                *material_a.clone()
+                base_material.clone()
             } else {
                 *material_b.clone()
             }
@@ -501,16 +498,7 @@ mod tests {
 
     #[test]
     fn test_checkerboard_texture() {
-        let material_a = Material {
-            color: "#FF0000".to_string(),
-            ambient: 0.1,
-            diffuse: 0.8,
-            specular: 0.2,
-            shininess: 32.0,
-            reflectivity: None,
-            texture: None,
-        };
-
+        // Create a secondary material with different properties
         let material_b = Material {
             color: "#0000FF".to_string(),
             ambient: 0.2,
@@ -522,35 +510,46 @@ mod tests {
         };
 
         let texture = Texture::Checkerboard {
-            material_a: Box::new(material_a.clone()),
             material_b: Box::new(material_b.clone()),
         };
-
-        let base_material = Material::default();
-
-        // Test checkerboard pattern - should alternate based on (u+v) % 2
-        // At (0.0, 0.0): floor(0) + floor(0) = 0, 0 % 2 = 0 -> material_a
+        
+        let base_material = Material {
+            color: "#FF0000".to_string(),
+            ambient: 0.1,
+            diffuse: 0.8,
+            specular: 0.2,
+            shininess: 32.0,
+            reflectivity: None,
+            texture: None,
+        };
+        
+        // Test checkerboard pattern - should alternate between base_material and material_b
+        // At (0.0, 0.0): floor(0) + floor(0) = 0, 0 % 2 = 0 -> base_material (red)
         let result = apply_texture(&texture, 0.0, 0.0, &base_material);
         assert_eq!(result.color, "#FF0000");
-        assert_eq!(result.shininess, 32.0);
-
-        // At (1.0, 0.0): floor(1) + floor(0) = 1, 1 % 2 = 1 -> material_b
+        assert_eq!(result.shininess, 32.0); // Should use base material properties
+        assert_eq!(result.ambient, 0.1);
+        assert_eq!(result.diffuse, 0.8);
+        
+        // At (1.0, 0.0): floor(1) + floor(0) = 1, 1 % 2 = 1 -> material_b (blue)  
         let result = apply_texture(&texture, 1.0, 0.0, &base_material);
         assert_eq!(result.color, "#0000FF");
-        assert_eq!(result.shininess, 16.0);
-
-        // At (0.0, 1.0): floor(0) + floor(1) = 1, 1 % 2 = 1 -> material_b
+        assert_eq!(result.shininess, 16.0); // Should use material_b properties
+        assert_eq!(result.ambient, 0.2);
+        assert_eq!(result.diffuse, 0.6);
+        
+        // At (0.0, 1.0): floor(0) + floor(1) = 1, 1 % 2 = 1 -> material_b (blue)
         let result = apply_texture(&texture, 0.0, 1.0, &base_material);
         assert_eq!(result.color, "#0000FF");
         assert_eq!(result.shininess, 16.0);
-
-        // At (1.0, 1.0): floor(1) + floor(1) = 2, 2 % 2 = 0 -> material_a
+        
+        // At (1.0, 1.0): floor(1) + floor(1) = 2, 2 % 2 = 0 -> base_material (red)
         let result = apply_texture(&texture, 1.0, 1.0, &base_material);
         assert_eq!(result.color, "#FF0000");
         assert_eq!(result.shininess, 32.0);
 
         // Test with fractional coordinates
-        // At (0.7, 0.3): floor(0.7) + floor(0.3) = 0 + 0 = 0, 0 % 2 = 0 -> material_a
+        // At (0.7, 0.3): floor(0.7) + floor(0.3) = 0 + 0 = 0, 0 % 2 = 0 -> base_material
         let result = apply_texture(&texture, 0.7, 0.3, &base_material);
         assert_eq!(result.color, "#FF0000");
 

@@ -13,20 +13,13 @@
       "point": [0, 0, 0],
       "normal": [0, 1, 0],
       "material": {
-        "color": "#FFFFFF",
+        "color": "#FF6B6B",
         "ambient": 0.2,
         "diffuse": 0.8,
         "specular": 0.1,
         "shininess": 10,
         "texture": {
           "type": "checkerboard",
-          "material_a": {
-            "color": "#FF6B6B",
-            "ambient": 0.15,
-            "diffuse": 0.9,
-            "specular": 0.8,
-            "shininess": 64.0
-          },
           "material_b": {
             "color": "#4ECDC4",
             "ambient": 0.3,
