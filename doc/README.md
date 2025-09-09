@@ -833,6 +833,100 @@ This example demonstrates:
 
 ---
 
+## JavaScript API Examples
+
+The rtrace Node.js bindings allow you to programmatically generate complex scenes using JavaScript. These examples demonstrate advanced procedural generation techniques and mathematical patterns.
+
+### Rainbow Spiral Scene
+
+A stunning demonstration of programmatic scene generation using arcs of cubes arranged in rainbow colors. Each cube is precisely positioned and rotated to be tangent to its arc path, with spiral effects creating dynamic height and radius variations.
+
+**Features Demonstrated:**
+- Programmatic generation of complex geometric patterns
+- Mathematical arc and spiral calculations using trigonometry
+- Object transformations (rotation and translation) for precise positioning
+- Rainbow color progression (ROYGBIV: Red, Orange, Yellow, Green, Blue, Indigo, Violet)
+- Tangent rotation alignment - cubes oriented along arc curves
+- Spiral effects with height and radius variations
+- Advanced lighting with area lights and soft shadows
+- Atmospheric fog effects for enhanced depth perception
+- Reflective materials and surfaces
+- Perspective camera with optimal 3D framing
+
+**JavaScript Implementation:**
+```javascript
+const rtrace = require('../rtrace.node');
+
+// Rainbow colors (ROYGBIV)
+const rainbowColors = [
+    { name: 'Red',    color: '#FF0000' },
+    { name: 'Orange', color: '#FF8000' },
+    { name: 'Yellow', color: '#FFFF00' },
+    { name: 'Green',  color: '#00FF00' },
+    { name: 'Blue',   color: '#0080FF' },
+    { name: 'Indigo', color: '#4000FF' },
+    { name: 'Violet', color: '#8000FF' }
+];
+
+// Calculate position along an arc with spiral effect
+function calculateArcPosition(baseRadius, arcAngle, spiralHeight, spiralRadius) {
+    const x = Math.cos(arcAngle) * (baseRadius + spiralRadius);
+    const y = Math.sin(arcAngle) * (baseRadius + spiralRadius);
+    const z = spiralHeight;
+    return [x, y, z];
+}
+
+// Calculate tangent rotation for cube to align with arc direction
+function calculateTangentRotation(arcAngle, tiltAngle = 0) {
+    const zRotation = (arcAngle * 180 / Math.PI) + 90; // +90 to be tangent
+    return [tiltAngle, 0, zRotation];
+}
+
+// Create cubes with transforms
+rainbowColors.forEach((colorInfo, colorIndex) => {
+    const arcStartAngle = (colorIndex / rainbowColors.length) * Math.PI * 2;
+    
+    for (let i = 0; i < numCubesPerArc; i++) {
+        const arcProgress = i / (numCubesPerArc - 1);
+        const currentAngle = arcStartAngle + (arcProgress * arcSpanAngle);
+        
+        // Add spiral effects
+        const spiralPhase = (colorIndex * 0.5) + (arcProgress * 4);
+        const heightVariation = Math.sin(spiralPhase) * spiralHeight;
+        const radiusVariation = Math.cos(spiralPhase * 1.3) * spiralRadius;
+        
+        const position = calculateArcPosition(baseRadius, currentAngle, 
+            3 + heightVariation, radiusVariation);
+        const rotation = calculateTangentRotation(currentAngle, 
+            Math.sin(spiralPhase) * 30);
+        
+        scene.objects.push({
+            kind: "cube",
+            center: [0, 0, 0],
+            size: [0.3, 0.3, 0.3],
+            material: { color: colorInfo.color, /* ... */ },
+            transform: [
+                `rotate(${rotation[0]}, ${rotation[1]}, ${rotation[2]})`,
+                `translate(${position[0]}, ${position[1]}, ${position[2]})`
+            ]
+        });
+    }
+});
+
+// Render the scene
+const result = rtrace.renderScene(JSON.stringify(scene), 'output.png', 1200, 900);
+```
+
+**Complete Example:** [`doc/rainbow-spiral-scene.js`](rainbow-spiral-scene.js)
+
+**Result:** Mathematical spiral arcs of rainbow-colored cubes with tangent alignment
+
+![Rainbow Spiral Scene](images/rainbow-spiral-scene.png)
+
+This example creates 112 cubes across 7 rainbow arcs, each precisely positioned using trigonometric calculations. The cubes are rotated to be tangent to their arc paths and arranged in a spiral pattern with varying heights and radii, creating a mesmerizing 3D visualization that demonstrates the power of programmatic scene generation.
+
+---
+
 ## Deterministic Rendering
 
 rtrace produces **consistent, reproducible results** - the same scene will always generate identical images, making it perfect for version control, collaboration, and reliable output.
