@@ -160,28 +160,28 @@ export const renderExampleSimple = task({
     name: "render:simple",
     description: "Render simple sphere example",
     dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i examples/simple_sphere.json -o simple_sphere_rendered.png -w 800 -H 600")
+    run: exec("./target/release/rtrace -i examples/simple_sphere.json -o simple_sphere_rendered.png -s 1000")
 });
 
 export const renderExampleRadial = task({
     name: "render:radial", 
     description: "Render radial spheres example",
     dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i examples/radial_spheres.json -o radial_spheres_rendered.png -w 800 -H 600")
+    run: exec("./target/release/rtrace -i examples/radial_spheres.json -o radial_spheres_rendered.png -s 1000")
 });
 
 export const renderExamplePlus = task({
     name: "render:plus",
     description: "Render plus perspective example", 
     dependencies: [buildCli],
-    run: exec("./target/release/rtrace -i examples/plus_perspective.json -o plus_perspective_rendered.png -w 800 -H 600")
+    run: exec("./target/release/rtrace -i examples/plus_perspective.json -o plus_perspective_rendered.png -s 1000")
 });
 
 export const renderExampleEspresso = task({
     name: "render:espresso",
     description: "Render espresso tray example",
     dependencies: [buildCli], 
-    run: exec("./target/release/rtrace -i examples/espresso_tray_top.json -o espresso_tray_rendered.png -w 800 -H 600")
+    run: exec("./target/release/rtrace -i examples/espresso_tray_top.json -o espresso_tray_rendered.png -s 1000")
 });
 
 export const renderAll = task({
@@ -263,7 +263,7 @@ for (const file of docSceneFiles) {
     ).join('')}`;
     
     // Build command with base parameters
-    let command = `./target/release/rtrace -i doc/scenes/${file} -o doc/images/${baseName}.png -w 400 -H 300`;
+    let command = `./target/release/rtrace -i doc/scenes/${file} -o doc/images/${baseName}.png -s 500`;
     
     // Add metadata-based parameters if available
     const metadata = docSceneMetadata[file];
@@ -288,7 +288,7 @@ for (const special of docSpecialScenes) {
         word.charAt(0).toUpperCase() + word.slice(1)
     ).join('')}`;
     
-    const command = `./target/release/rtrace -i doc/scenes/${special.scene} -o doc/images/${special.name}.png -w 400 -H 300 ${special.params}`;
+    const command = `./target/release/rtrace -i doc/scenes/${special.scene} -o doc/images/${special.name}.png -s 500 ${special.params}`;
     
     docRenderTasks[taskName] = task({
         name: `render:doc:${special.name}`,
@@ -307,7 +307,7 @@ for (const scene of docMultiFileScenes) {
     
     const commands = scene.files.map(file => {
         const outputName = basename(file, '.json');
-        return `./target/release/rtrace -i doc/scenes/${file} -o doc/images/${outputName}.png -w 400 -H 300`;
+        return `./target/release/rtrace -i doc/scenes/${file} -o doc/images/${outputName}.png -s 500`;
     }).join(' && ');
 
     docRenderTasks[taskName] = task({

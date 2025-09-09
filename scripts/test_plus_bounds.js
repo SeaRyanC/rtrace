@@ -7,18 +7,18 @@ try {
   
   // Render with k-d tree
   console.log("\nRendering plus.stl WITH k-d tree acceleration...");
-  const resultKdTree = rtrace.renderScene(sceneJson, '.../examples/plus_kdtree_400x300.png', 400, 300);
+  const resultKdTree = rtrace.renderScene(sceneJson, '.../examples/plus_kdtree_500.png', 500);
   console.log("K-d tree result:", resultKdTree);
   
   // Render without k-d tree (brute force)
   console.log("\nRendering plus.stl WITHOUT k-d tree (brute force)...");
-  const resultBruteForce = rtrace.renderSceneBruteForce(sceneJson, '.../examples/plus_brute_force_400x300.png', 400, 300);
+  const resultBruteForce = rtrace.renderSceneBruteForce(sceneJson, '.../examples/plus_brute_force_500.png', 500);
   console.log("Brute force result:", resultBruteForce);
   
   console.log("\n✅ Both renders completed successfully!");
   console.log("Compare these images:");
-  console.log("- K-d tree:     ../examples/plus_kdtree_400x300.png");
-  console.log("- Brute force:  ../examples/plus_brute_force_400x300.png");
+  console.log("- K-d tree:     ../examples/plus_kdtree_500.png");
+  console.log("- Brute force:  ../examples/plus_brute_force_500.png");
   
 } catch (error) {
   console.error("Error:", error);

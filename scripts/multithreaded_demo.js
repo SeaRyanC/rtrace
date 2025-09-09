@@ -34,10 +34,10 @@ async function demonstrateMultiThreading() {
             let result;
             if (test.threads === null) {
                 // Use default multi-threading (all cores)
-                result = rtrace.renderSceneFromFile(sceneFile, `./demo_${test.name.toLowerCase().replace(' ', '_')}.png`, 400, 300);
+                result = rtrace.renderSceneFromFile(sceneFile, `./demo_${test.name.toLowerCase().replace(' ', '_')}.png`, 500);
             } else {
                 // Use specific thread count
-                result = rtrace.renderSceneFromFileThreaded(sceneFile, `./demo_${test.name.toLowerCase().replace(' ', '_')}.png`, 400, 300, test.threads);
+                result = rtrace.renderSceneFromFileThreaded(sceneFile, `./demo_${test.name.toLowerCase().replace(' ', '_')}.png`, 500, test.threads);
             }
             console.timeEnd(test.name);
             console.log(`   ✓ ${result}\n`);
@@ -54,9 +54,9 @@ async function demonstrateMultiThreading() {
     console.log('   • Seamless integration with existing API');
     
     console.log('\n📝 API Usage:');
-    console.log('   rtrace.renderScene(json, output)              // Auto multi-threading');
-    console.log('   rtrace.renderSceneThreaded(json, output, w, h, threads) // Custom threads');
-    console.log('   rtrace.renderSceneFromFile(file, output)      // File-based rendering');
+    console.log('   rtrace.renderScene(json, output, size)              // Auto multi-threading');
+    console.log('   rtrace.renderSceneThreaded(json, output, size, threads) // Custom threads');
+    console.log('   rtrace.renderSceneFromFile(file, output, size)      // File-based rendering');
     
     // Clean up demo files
     setTimeout(() => {
