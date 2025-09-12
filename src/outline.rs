@@ -380,4 +380,50 @@ mod tests {
         let center_index = (1 * buffers.width + 1) as usize;
         assert!(edge_mask[center_index] > 0.0, "Center pixel should have an edge");
     }
+
+    #[test]
+    fn test_outline_detection_integration() {
+        use crate::scene::Color;
+        
+        let mut buffers = OutlineBuffers::new(3, 3);
+        let config = OutlineConfig {
+            depth_weight: 1.0,
+            normal_weight: 1.0,
+            threshold: 0.05,
+            edge_color: Color::new(1.0, 0.0, 0.0), // Red edges
+            use_8_neighbors: false,
+            line_thickness: 1.0,
+        };
+        
+        // Create test data with depth and normal discontinuities
+        for y in 0..3 {
+            for x in 0..3 {
+                let depth = if x == 1 { 5.0 } else { 1.0 };
+                let normal = if x == 1 { 
+                    Vec3::new(1.0, 0.0, 0.0) 
+                } else { 
+                    Vec3::new(0.0, 0.0, 1.0) 
+                };
+                buffers.set_depth(x, y, depth);
+                buffers.set_normal(x, y, normal);
+            }
+        }
+        
+        // Create initial image data
+        let mut image_data = Vec::new();
+        for y in 0..3 {
+            for x in 0..3 {
+                image_data.push((x, y, Color::new(0.5, 0.5, 0.5))); // Gray background
+            }
+        }
+        
+        // Apply outline detection
+        apply_outline_detection(&mut image_data, &buffers, &config);
+        
+        // Check that edges were applied
+        let center_pixel = image_data.iter().find(|(x, y, _)| *x == 1 && *y == 1).unwrap();
+        
+        // The center pixel should have some red component from edge detection
+        assert!(center_pixel.2.x > 0.5, "Center pixel should have red edge contribution");
+    }
 }
