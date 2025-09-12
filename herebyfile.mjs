@@ -219,7 +219,8 @@ const docSceneFiles = [
     "checkerboard-advanced.json",
     "lighting-multiple.json",
     "sampling-antialiasing.json",
-    "example-complete.json"
+    "example-complete.json",
+    "outline_complex.json"
 ];
 
 // Metadata for scenes that need special command line parameters

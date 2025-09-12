@@ -35,10 +35,14 @@ This comprehensive guide covers all features and options available in the rtrace
    - [Quincunx](#quincunx)
    - [Stochastic](#stochastic)
    - [No Jitter](#no-jitter)
+9. [Screen-Space Outline Detection](#screen-space-outline-detection)
+   - [Configuration](#configuration-1)
+   - [Basic Usage](#basic-usage-1)
+   - [Parameter Tuning Tips](#parameter-tuning-tips)
 
 ### Advanced Topics
-9. [Deterministic Rendering](#deterministic-rendering)
-10. [Examples](#examples)
+10. [Deterministic Rendering](#deterministic-rendering)
+11. [Examples](#examples)
 
 ---
 
@@ -723,6 +727,129 @@ The difference is most noticeable on edges and fine details - anti-aliasing prov
 | No Anti-Aliasing | With Anti-Aliasing |
 |:----------------:|:------------------:|
 | ![No Anti-Aliasing](images/sampling-antialiasing-nosamples.png) | ![Anti-Aliasing](images/sampling-antialiasing.png) |
+
+---
+
+## Screen-Space Outline Detection
+
+rtrace provides automatic outline detection using screen-space analysis of depth and normal discontinuities. This feature creates clean, customizable outlines that enhance technical illustrations, architectural visualizations, and stylized rendering workflows.
+
+### How Outline Detection Works
+
+The outline detection algorithm analyzes each pixel's depth and surface normals compared to neighboring pixels:
+
+1. **Capture depth and normal data** during raytracing for every pixel
+2. **Compute edge strength** using configurable weights for depth and normal differences
+3. **Apply threshold** to determine which pixels should have outlines
+4. **Composite outlines** over the final rendered image
+
+The edge detection formula combines depth and normal discontinuities:
+- Normal differences: `n_diff = 1 - dot(n_i, n_j)` (where n_i and n_j are neighboring normals)
+- Depth differences: `z_diff = abs(z_i - z_j)` (absolute difference in camera-space depth)
+- Combined edge strength: `E = w_d * z_diff + w_n * n_diff`
+- Edge detection: if `E > T`, mark pixel as outline edge
+
+### Configuration
+
+Outline detection is configured entirely through scene JSON files in the `scene_settings.outline` section:
+
+```jsonc
+{
+  "scene_settings": {
+    "outline": {
+      "enabled": true,            // Enable/disable outline detection
+      "depth_weight": 1.0,        // Weight for depth discontinuities (w_d)
+      "normal_weight": 1.5,       // Weight for normal discontinuities (w_n)
+      "threshold": 0.08,          // Edge detection threshold (T)
+      "color": "#000000",         // Outline color (hex format)
+      "thickness": 1.5,           // Line thickness factor (≥1.0)
+      "use_8_neighbors": false    // Use 8-neighbor vs 4-neighbor sampling
+    }
+  }
+}
+```
+
+**Parameter Guidelines:**
+
+| Parameter | Description | Typical Range | Effects |
+|-----------|-------------|---------------|---------|
+| `depth_weight` | Sensitivity to depth changes | 0.5 - 2.0 | Higher values detect depth edges more aggressively |
+| `normal_weight` | Sensitivity to surface angle changes | 1.0 - 3.0 | Higher values emphasize silhouettes and creases |
+| `threshold` | Edge detection sensitivity | 0.05 - 0.15 | Lower values = more outlines, higher = fewer outlines |
+| `thickness` | Line width multiplier | 1.0 - 3.0 | 1.0 = single pixel, 2.0 = roughly double width |
+| `use_8_neighbors` | Sampling pattern | true/false | 8-neighbor gives denser outlines, 4-neighbor is faster |
+
+### Basic Usage
+
+Create a scene with outline detection by adding the outline configuration to `scene_settings`:
+
+```jsonc
+{
+  "camera": { /* camera settings */ },
+  "objects": [ /* scene objects */ ],
+  "lights": [ /* lighting setup */ ],
+  "scene_settings": {
+    "ambient_illumination": { /* ambient settings */ },
+    "background_color": "#E8F4F8",
+    "outline": {
+      "enabled": true,
+      "depth_weight": 1.0,
+      "normal_weight": 1.5,
+      "threshold": 0.08,
+      "color": "#000000",
+      "thickness": 1.5,
+      "use_8_neighbors": false
+    }
+  }
+}
+```
+
+Then render normally with the CLI:
+
+```bash
+# Render scene with outline detection
+./target/release/rtrace -i scene_with_outlines.json -o output.png -s 800
+```
+
+### Visual Examples
+
+**Basic outline demonstration** with geometric objects:
+
+| Without Outlines | With Outlines |
+|:----------------:|:-------------:|
+| ![No Outlines](images/outline-demo-no-outline.png) | ![Basic Outlines](images/outline-demo-basic.png) |
+
+**Complex scene** with advanced outline parameters:
+
+![Complex Outlines](images/outline-demo-complex.png)
+
+### Parameter Tuning Tips
+
+**For technical illustrations:**
+- Use higher `normal_weight` (1.5-2.0) to emphasize object silhouettes
+- Set `depth_weight` to 0.8-1.2 for moderate depth edge detection
+- Use `threshold` around 0.06-0.08 for clean lines
+- Set `thickness` to 1.5-2.0 for visible but not overwhelming lines
+
+**For artistic effects:**
+- Increase `thickness` to 2.0+ for bold outlines
+- Lower `threshold` to 0.05 or below for more detailed edge detection
+- Experiment with colored outlines (non-black `color` values)
+- Use `use_8_neighbors: true` for denser outline coverage
+
+**Performance considerations:**
+- Outline detection adds approximately 10% rendering overhead
+- `use_8_neighbors: false` (4-neighbor) is faster than 8-neighbor sampling
+- Works with all anti-aliasing modes (quincunx, stochastic, no-jitter)
+
+### Example Scenes
+
+rtrace includes two example scenes demonstrating outline functionality:
+
+- **`examples/outline_demo.json`**: Basic outline demo with simple geometric objects
+- **`doc/scenes/outline_complex.json`**: Complex scene showcasing advanced outline parameters with multiple objects and lighting
+
+Both scenes include different outline parameter configurations to demonstrate the range of visual effects possible.
 
 ---
 
