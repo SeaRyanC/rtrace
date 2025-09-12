@@ -1,5 +1,6 @@
 use clap::Parser;
-use rtrace::{AntiAliasingMode, Renderer, Scene};
+use rtrace::{AntiAliasingMode, OutlineConfig, Renderer, Scene};
+use rtrace::scene::hex_to_color;
 use std::path::Path;
 
 /// Ray tracer CLI - renders 3D scenes from JSON descriptions
@@ -29,6 +30,34 @@ struct Args {
     /// Anti-aliasing mode: quincunx (default), stochastic, or no-jitter
     #[arg(long, default_value = "quincunx")]
     anti_aliasing: String,
+    
+    /// Enable outline detection
+    #[arg(long)]
+    outline: bool,
+    
+    /// Depth weight for outline detection (default: 1.0)
+    #[arg(long, default_value_t = 1.0)]
+    outline_depth_weight: f64,
+    
+    /// Normal weight for outline detection (default: 1.0)
+    #[arg(long, default_value_t = 1.0)]
+    outline_normal_weight: f64,
+    
+    /// Threshold for outline detection (default: 0.1)
+    #[arg(long, default_value_t = 0.1)]
+    outline_threshold: f64,
+    
+    /// Line thickness for outline detection (default: 1.0)
+    #[arg(long, default_value_t = 1.0)]
+    outline_thickness: f64,
+    
+    /// Edge color for outline detection (default: "#000000" - black)
+    #[arg(long, default_value = "#000000")]
+    outline_color: String,
+    
+    /// Use 8-neighbor sampling for outline detection instead of 4-neighbor
+    #[arg(long)]
+    outline_8_neighbors: bool,
 }
 
 fn main() {
@@ -99,6 +128,35 @@ fn main() {
     renderer.samples = samples;
     renderer.anti_aliasing_mode = anti_aliasing_mode;
     renderer.seed = Some(0); // Always use deterministic seed 0
+    
+    // Configure outline detection if enabled
+    if args.outline {
+        // Validate outline color
+        let edge_color = match hex_to_color(&args.outline_color) {
+            Ok(color) => color,
+            Err(e) => {
+                eprintln!("Error: Invalid outline color '{}': {}", args.outline_color, e);
+                std::process::exit(1);
+            }
+        };
+        
+        let outline_config = OutlineConfig {
+            depth_weight: args.outline_depth_weight,
+            normal_weight: args.outline_normal_weight,
+            threshold: args.outline_threshold,
+            edge_color,
+            use_8_neighbors: args.outline_8_neighbors,
+            line_thickness: args.outline_thickness,
+        };
+        
+        renderer = renderer.with_outline_detection(outline_config);
+        
+        println!(
+            "Outline detection enabled: depth_weight={}, normal_weight={}, threshold={}, thickness={}, color={}",
+            args.outline_depth_weight, args.outline_normal_weight, args.outline_threshold, 
+            args.outline_thickness, args.outline_color
+        );
+    }
 
     println!(
         "Rendering {}×{} image (diagonal {}) with {} anti-aliasing ({} samples)...",

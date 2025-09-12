@@ -347,6 +347,91 @@ pub fn ray_color(
     )
 }
 
+/// Ray color calculation that also captures depth and normal data for outline detection
+#[allow(clippy::too_many_arguments)]
+pub fn ray_color_with_data(
+    ray: &Ray,
+    world: &World,
+    lights: &[Light],
+    ambient: &AmbientIllumination,
+    fog: &Option<Fog>,
+    camera_pos: &Point,
+    background_color: Color,
+    materials: &std::collections::HashMap<usize, Material>,
+    max_depth: i32,
+    camera: Option<&crate::camera::Camera>,
+    seed: u64,
+) -> (Color, Option<f64>, Option<Vec3>) {
+    if max_depth <= 0 {
+        return (Color::new(0.0, 0.0, 0.0), None, None);
+    }
+
+    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
+        // Calculate camera-space depth
+        let camera_space_depth = (hit.point - *camera_pos).magnitude();
+        
+        // Get the surface normal in world space
+        let world_normal = *hit.normal.as_ref();
+        
+        // Get material for this object using the material index from the hit record
+        let material = materials
+            .get(&hit.material_index)
+            .cloned()
+            .unwrap_or_else(Material::default);
+
+        // Calculate lighting (reuse existing lighting logic)
+        let mut color = phong_lighting(&hit, &material, lights, ambient, camera_pos, world, seed);
+
+        // Apply fog based on distance from camera
+        let distance = (hit.point - *camera_pos).magnitude();
+        color = apply_fog(color, fog, distance);
+
+        // Handle reflections if material has reflectivity
+        if let Some(reflectivity) = material.reflectivity {
+            if reflectivity > 0.0 && max_depth > 1 {
+                let view_dir = Unit::new_normalize(*camera_pos - hit.point);
+                let reflect_dir = reflect(&(-view_dir.as_ref()), &hit.normal);
+                let reflect_ray = Ray::new(
+                    hit.point + 0.001 * hit.normal.as_ref(),
+                    *reflect_dir.as_ref(),
+                );
+
+                // For reflected rays, we only care about color, not depth/normal data
+                let (reflected_color, _, _) = ray_color_with_data(
+                    &reflect_ray,
+                    world,
+                    lights,
+                    ambient,
+                    fog,
+                    camera_pos,
+                    background_color,
+                    materials,
+                    max_depth - 1,
+                    camera,
+                    seed,
+                );
+
+                color = color * (1.0 - reflectivity) + reflected_color * reflectivity;
+            }
+        }
+
+        (color, Some(camera_space_depth), Some(world_normal))
+    } else {
+        // Background pixel - check for grid background
+        let background = if let Some(camera) = camera {
+            if let Some(grid_color) = camera.get_grid_color(ray) {
+                grid_color
+            } else {
+                background_color
+            }
+        } else {
+            background_color
+        };
+        
+        (background, None, None)
+    }
+}
+
 /// Main ray color calculation with optional camera for grid background
 #[allow(clippy::too_many_arguments)]
 pub fn ray_color_with_camera(
