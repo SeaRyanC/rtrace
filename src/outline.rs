@@ -84,7 +84,7 @@ impl OutlineBuffers {
 
 /// Apply outline detection to a color image using depth and normal buffers
 pub fn apply_outline_detection(
-    image_data: &mut Vec<(u32, u32, Color)>,
+    image_data: &mut [(u32, u32, Color)],
     buffers: &OutlineBuffers,
     config: &OutlineConfig,
 ) {

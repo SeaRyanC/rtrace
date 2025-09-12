@@ -23,6 +23,17 @@ pub enum AntiAliasingMode {
     Stochastic,
 }
 
+/// Context for rendering operations
+struct RenderContext<'a> {
+    ambient: &'a crate::scene::AmbientIllumination,
+    fog: &'a Option<crate::scene::Fog>,
+    camera_pos: &'a Point,
+    background_color: Color,
+}
+
+/// Type alias for pixel rendering results with outline data
+type PixelRenderResult = (u32, u32, Color, Option<f64>, Option<Vec3>);
+
 pub struct Renderer {
     pub width: u32,
     pub height: u32,
@@ -400,14 +411,17 @@ impl Renderer {
             },
             _ => {
                 if self.outline_config.is_some() {
-                    self.render_standard_with_outline(
-                        world,
-                        camera,
-                        lights,
+                    let render_context = RenderContext {
                         ambient,
                         fog,
                         camera_pos,
                         background_color,
+                    };
+                    self.render_standard_with_outline(
+                        world,
+                        camera,
+                        lights,
+                        &render_context,
                         materials,
                     )
                 } else {
@@ -569,16 +583,12 @@ impl Renderer {
         results
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_standard_with_outline(
         &self,
         world: &World,
         camera: &Camera,
         lights: &[crate::scene::Light],
-        ambient: &crate::scene::AmbientIllumination,
-        fog: &Option<crate::scene::Fog>,
-        camera_pos: &Point,
-        background_color: Color,
+        render_context: &RenderContext,
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
         use crate::lighting::ray_color_with_data;
@@ -596,7 +606,7 @@ impl Renderer {
         let start_time = Instant::now();
 
         // Render pixels in parallel and collect outline data
-        let results: Vec<(u32, u32, Color, Option<f64>, Option<Vec3>)> = pixels
+        let results: Vec<PixelRenderResult> = pixels
             .par_iter()
             .map(|&(x, y)| {
                 // Calculate base pixel coordinates
@@ -667,10 +677,10 @@ impl Renderer {
                         &ray,
                         world,
                         lights,
-                        ambient,
-                        fog,
-                        camera_pos,
-                        background_color,
+                        render_context.ambient,
+                        render_context.fog,
+                        render_context.camera_pos,
+                        render_context.background_color,
                         materials,
                         self.max_depth,
                         Some(camera),

@@ -1,0 +1,105 @@
+{
+  "camera": {
+    "kind": "ortho", 
+    "position": [8, 6, 12],
+    "target": [0, 0, 1],
+    "up": [0, 0, 1],
+    "width": 10,
+    "height": 10
+  },
+  "objects": [
+    {
+      "kind": "sphere",
+      "center": [-2, -1, 2],
+      "radius": 1.2,
+      "material": {
+        "color": "#FF6B6B",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.5,
+        "shininess": 64
+      }
+    },
+    {
+      "kind": "cube",
+      "center": [2, -1, 1.5],
+      "size": [2.0, 2.0, 3.0],
+      "material": {
+        "color": "#4ECDC4",
+        "ambient": 0.1,
+        "diffuse": 0.7,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [0, 2, 0.8],
+      "radius": 0.8,
+      "material": {
+        "color": "#FFE66D",
+        "ambient": 0.1,
+        "diffuse": 0.9,
+        "specular": 0.6,
+        "shininess": 128
+      }
+    },
+    {
+      "kind": "cube",
+      "center": [-1.5, 2, 2.2],
+      "size": [1.0, 1.0, 1.0],
+      "material": {
+        "color": "#A8E6CF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.3,
+        "shininess": 16
+      }
+    },
+    {
+      "kind": "plane",
+      "point": [0, 0, -0.5],
+      "normal": [0, 0, 1],
+      "material": {
+        "color": "#F8F8F8",
+        "ambient": 0.2,
+        "diffuse": 0.6,
+        "specular": 0.1,
+        "shininess": 8
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [5, 5, 8],
+      "color": "#FFFFFF", 
+      "intensity": 1.5
+    },
+    {
+      "position": [-4, 2, 6],
+      "color": "#FFD700",
+      "intensity": 0.7
+    },
+    {
+      "position": [2, -4, 4],
+      "color": "#87CEEB",
+      "intensity": 0.5
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.12
+    },
+    "background_color": "#F0F8FF",
+    "outline": {
+      "enabled": true,
+      "depth_weight": 0.8,
+      "normal_weight": 2.0,
+      "threshold": 0.06,
+      "color": "#2C3E50",
+      "thickness": 2.0,
+      "use_8_neighbors": true
+    }
+  }
+}
