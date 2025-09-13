@@ -26,8 +26,8 @@ struct Args {
     #[arg(long)]
     samples: Option<u32>,
 
-    /// Anti-aliasing mode: quincunx (default), stochastic, or no-jitter
-    #[arg(long, default_value = "quincunx")]
+    /// Anti-aliasing mode: quincunx, stochastic, or none
+    #[arg(long, default_value = "none")]
     anti_aliasing: String,
 }
 
@@ -44,9 +44,9 @@ fn main() {
     let anti_aliasing_mode = match args.anti_aliasing.as_str() {
         "quincunx" => AntiAliasingMode::Quincunx,
         "stochastic" => AntiAliasingMode::Stochastic,
-        "no-jitter" => AntiAliasingMode::NoJitter,
+        "none" => AntiAliasingMode::None,
         _ => {
-            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, no-jitter", args.anti_aliasing);
+            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, none", args.anti_aliasing);
             std::process::exit(1);
         }
     };
@@ -107,8 +107,8 @@ fn main() {
             
             // Check if current anti-aliasing mode is compatible with outline detection
             if anti_aliasing_mode == AntiAliasingMode::Quincunx {
-                println!("Warning: Quincunx anti-aliasing is not compatible with outline detection. Switching to no-jitter mode.");
-                renderer.anti_aliasing_mode = AntiAliasingMode::NoJitter;
+                println!("Warning: Quincunx anti-aliasing is not compatible with outline detection. Switching to none mode.");
+                renderer.anti_aliasing_mode = AntiAliasingMode::None;
             } else {
                 renderer.anti_aliasing_mode = anti_aliasing_mode;
             }
@@ -126,7 +126,7 @@ fn main() {
     let final_anti_aliasing_name = match renderer.anti_aliasing_mode {
         AntiAliasingMode::Quincunx => "quincunx",
         AntiAliasingMode::Stochastic => "stochastic",
-        AntiAliasingMode::NoJitter => "no-jitter",
+        AntiAliasingMode::None => "none",
     };
 
     println!(
