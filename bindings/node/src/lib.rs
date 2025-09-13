@@ -270,20 +270,32 @@ pub fn render_scene_from_file_threaded(
     ))
 }
 
-/// Render a scene from JSON file with brute force (no k-d tree)
+/// Image buffer result with metadata
+#[napi(object)]
+pub struct ImageBuffer {
+    /// Width in pixels
+    pub width: u32,
+    /// Height in pixels  
+    pub height: u32,
+    /// Number of bytes per row (width * 4 for RGBA)
+    pub stride: u32,
+    /// Raw RGBA image data (4 bytes per pixel: R, G, B, A)
+    pub data: Vec<u8>,
+}
+
+/// Render a scene from JSON string and return the image buffer with metadata
 #[napi]
-pub fn render_scene_from_file_brute_force(
-    scene_file_path: String,
-    output_path: String,
+pub fn render_scene_to_buffer(
+    scene_json: String,
     size: Option<u32>,
-) -> Result<String> {
+) -> Result<ImageBuffer> {
     let diagonal_size = size.unwrap_or(1000);
 
-    // Load scene from file (handles relative paths)
-    let scene = rtrace::Scene::from_json_file(&scene_file_path).map_err(|e| {
+    // Parse the JSON scene
+    let scene = rtrace::Scene::from_json_str(&scene_json).map_err(|e| {
         Error::new(
             Status::InvalidArg,
-            format!("Failed to load scene file: {}", e),
+            format!("Failed to parse scene JSON: {}", e),
         )
     })?;
 
@@ -299,20 +311,33 @@ pub fn render_scene_from_file_brute_force(
     
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
+    let stride = width * 4; // 4 bytes per pixel (RGBA)
 
-    // Create renderer with k-d tree disabled (brute force)
-    let renderer = rtrace::Renderer::new_brute_force(width, height);
+    // Create renderer with k-d tree enabled and multi-threading
+    let renderer = rtrace::Renderer::new(width, height);
 
-    // Render and save
-    renderer.render_to_file(&scene, &output_path).map_err(|e| {
+    // Render to image buffer
+    let image = renderer.render(&scene).map_err(|e| {
         Error::new(
             Status::GenericFailure,
             format!("Failed to render scene: {}", e),
         )
     })?;
 
-    Ok(format!(
-        "Successfully rendered {}×{} image (diagonal {}) to '{}' (brute force)",
-        width, height, diagonal_size, output_path
-    ))
+    // Convert image to RGBA buffer for easy JavaScript manipulation
+    let mut rgba_buffer = Vec::with_capacity((width * height * 4) as usize);
+    
+    for (_, _, pixel) in image.enumerate_pixels() {
+        rgba_buffer.push(pixel[0]); // Red
+        rgba_buffer.push(pixel[1]); // Green  
+        rgba_buffer.push(pixel[2]); // Blue
+        rgba_buffer.push(255);      // Alpha (always opaque)
+    }
+
+    Ok(ImageBuffer {
+        width,
+        height,
+        stride,
+        data: rgba_buffer,
+    })
 }
