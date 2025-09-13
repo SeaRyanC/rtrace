@@ -214,17 +214,35 @@ console.log(`   Modified ${halfWidth * height} pixels (left half of image)\n`);
 console.log('Converting buffer to PNG and saving...');
 const saveStart = Date.now();
 
+// Validate buffer size before creating PNG
+const expectedBufferSize = width * height * 4;
+if (buffer.length !== expectedBufferSize) {
+    throw new Error(`Buffer size mismatch: expected ${expectedBufferSize}, got ${buffer.length}`);
+}
+
+// Create PNG with explicit configuration for RGBA
 const png = new PNG({
     width: width,
     height: height,
-    inputColorType: 6, // RGBA
-    colorType: 6,      // RGBA output
-    inputHasAlpha: true
+    colorType: 6,      // RGBA (required for 4-channel data)
+    bitDepth: 8,       // 8 bits per channel
+    inputHasAlpha: true,
+    deflateLevel: 6,   // Compression level (0-9)
+    deflateStrategy: 3 // PNG-specific compression strategy
 });
 
-// Copy RGBA buffer directly to PNG data
+// Ensure PNG data buffer is properly sized
+if (png.data.length !== buffer.length) {
+    throw new Error(`PNG data buffer size mismatch: PNG has ${png.data.length}, buffer has ${buffer.length}`);
+}
+
+// Copy RGBA buffer data with validation
 for (let i = 0; i < buffer.length; i++) {
-    png.data[i] = buffer[i];
+    const value = buffer[i];
+    if (value < 0 || value > 255 || !Number.isInteger(value)) {
+        throw new Error(`Invalid pixel value at index ${i}: ${value} (must be 0-255 integer)`);
+    }
+    png.data[i] = value;
 }
 
 const outputPath = path.join(__dirname, 'images', 'js-buffer-manipulation-demo.png');
