@@ -15,8 +15,8 @@ use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 /// Anti-aliasing sampling modes
 #[derive(Debug, Clone, PartialEq)]
 pub enum AntiAliasingMode {
-    /// No jittering - deterministic center-pixel sampling
-    NoJitter,
+    /// No anti-aliasing - deterministic center-pixel sampling
+    None,
     /// Quincunx pattern - 5 samples (center + 4 corners) per pixel
     Quincunx,
     /// Stochastic sampling - random jittered sampling
@@ -133,7 +133,7 @@ impl SamplingHelper {
         rng: &mut rand::rngs::StdRng,
     ) -> (f64, f64) {
         match anti_aliasing_mode {
-            AntiAliasingMode::NoJitter => {
+            AntiAliasingMode::None => {
                 // No jittering: sample at exact pixel center
                 (pixel_u, pixel_v)
             }
@@ -215,7 +215,7 @@ impl Renderer {
             use_kdtree,
             thread_count,
             samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            anti_aliasing_mode: AntiAliasingMode::None, // Default to no anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
         }
@@ -930,15 +930,15 @@ mod tests {
         assert_eq!(renderer.width, 800);
         assert_eq!(renderer.height, 600);
         assert_eq!(renderer.thread_count, None);
-        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
-        assert_eq!(renderer.samples, 1); // Default for quincunx with shared samples
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::None);
+        assert_eq!(renderer.samples, 1); // Default for all modes
 
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
         assert_eq!(renderer_threaded.thread_count, Some(4));
         assert_eq!(
             renderer_threaded.anti_aliasing_mode,
-            AntiAliasingMode::Quincunx
+            AntiAliasingMode::None
         );
     }
 
@@ -1001,7 +1001,7 @@ mod tests {
     }
 
     #[test]
-    fn test_no_jitter_sampling() {
+    fn test_none_sampling() {
         let mut scene = Scene::default();
 
         // Add a simple sphere
@@ -1020,14 +1020,14 @@ mod tests {
             diameter: None,
         });
 
-        // Test no-jitter mode with single sample
+        // Test none mode with single sample
         let mut renderer = Renderer::new(50, 50);
-        renderer.anti_aliasing_mode = AntiAliasingMode::NoJitter;
+        renderer.anti_aliasing_mode = AntiAliasingMode::None;
         renderer.samples = 1;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
 
-        // Test no-jitter mode with multiple samples (should still work)
+        // Test none mode with multiple samples (should still work)
         renderer.samples = 4;
         let result = renderer.render(&scene);
         assert!(result.is_ok());
@@ -1054,7 +1054,8 @@ mod tests {
         });
 
         // Test quincunx mode with default samples
-        let renderer = Renderer::new(50, 50);
+        let mut renderer = Renderer::new(50, 50);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Quincunx; // Explicitly set to quincunx for this test
         assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
         assert_eq!(renderer.samples, 1);
         let result = renderer.render(&scene);
@@ -1062,6 +1063,7 @@ mod tests {
 
         // Test quincunx mode with custom samples
         let mut renderer2 = Renderer::new(50, 50);
+        renderer2.anti_aliasing_mode = AntiAliasingMode::Quincunx; // Explicitly set to quincunx for this test
         renderer2.samples = 4;
         let result = renderer2.render(&scene);
         assert!(result.is_ok());
@@ -1188,6 +1190,7 @@ mod tests {
 
         // Test quincunx mode (which should also be deterministic)
         let mut renderer = Renderer::new(50, 50);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Quincunx; // Explicitly set to quincunx for this test
         assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
         renderer.seed = Some(123);
 
