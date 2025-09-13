@@ -566,12 +566,25 @@ impl Renderer {
                             // Final progress update
                             println!("Rendering: 100.0%");
                         } else if progress > 0.0 {
-                            // Calculate estimated time remaining
-                            let estimated_total_time = elapsed.as_secs_f64()
-                                / (current_completed as f64 / total_pixels as f64);
-                            let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
-                            let eta_formatted = format_duration(estimated_remaining);
-                            println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
+                            // Only show ETA if we have enough elapsed time for a reliable estimate
+                            if elapsed.as_secs_f64() >= 1.0 {
+                                // Calculate estimated time remaining
+                                let estimated_total_time = elapsed.as_secs_f64()
+                                    / (current_completed as f64 / total_pixels as f64);
+                                let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
+                                
+                                // Only show ETA if it's at least 1 second to avoid showing "0s"
+                                if estimated_remaining >= 1.0 {
+                                    let eta_formatted = format_duration(estimated_remaining);
+                                    println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
+                                } else {
+                                    // Show progress without ETA for estimates less than 1 second
+                                    println!("Rendering: {:.1}%", progress);
+                                }
+                            } else {
+                                // Show progress without ETA for early estimates
+                                println!("Rendering: {:.1}%", progress);
+                            }
                         }
                     }
                 }
@@ -716,12 +729,25 @@ impl Renderer {
                             // Final progress update
                             println!("Rendering: 100.0%");
                         } else if progress > 0.0 {
-                            // Calculate estimated time remaining
-                            let estimated_total_time = elapsed.as_secs_f64()
-                                / (current_completed as f64 / total_pixels as f64);
-                            let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
-                            let eta_formatted = format_duration(estimated_remaining);
-                            println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
+                            // Only show ETA if we have enough elapsed time for a reliable estimate
+                            if elapsed.as_secs_f64() >= 1.0 {
+                                // Calculate estimated time remaining
+                                let estimated_total_time = elapsed.as_secs_f64()
+                                    / (current_completed as f64 / total_pixels as f64);
+                                let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
+                                
+                                // Only show ETA if it's at least 1 second to avoid showing "0s"
+                                if estimated_remaining >= 1.0 {
+                                    let eta_formatted = format_duration(estimated_remaining);
+                                    println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
+                                } else {
+                                    // Show progress without ETA for estimates less than 1 second
+                                    println!("Rendering: {:.1}%", progress);
+                                }
+                            } else {
+                                // Show progress without ETA for early estimates
+                                println!("Rendering: {:.1}%", progress);
+                            }
                         }
                     }
                 }
