@@ -118,11 +118,10 @@ fn detect_edges(buffers: &OutlineBuffers, config: &OutlineConfig) -> Vec<f64> {
         for x in 0..buffers.width {
             let edge_strength = compute_edge_strength(buffers, x, y, config);
             let index = (y * buffers.width + x) as usize;
-            edge_mask[index] = if edge_strength > config.threshold {
-                (edge_strength - config.threshold) / (1.0 - config.threshold)
-            } else {
-                0.0
-            };
+            
+            if edge_strength > config.threshold {
+                edge_mask[index] = (edge_strength - config.threshold) / (1.0 - config.threshold).max(0.001);
+            }
         }
     }
 
@@ -139,45 +138,47 @@ fn compute_edge_strength(
     let current_depth = buffers.get_depth(x, y);
     let current_normal = buffers.get_normal(x, y);
 
-    // Skip background pixels
-    if current_depth.is_none() || current_normal.is_none() {
-        return 0.0;
-    }
-
-    let current_depth = current_depth.unwrap();
-    let current_normal = current_normal.unwrap();
-
     let neighbors = if config.use_8_neighbors {
         get_8_neighbors(x, y)
     } else {
         get_4_neighbors(x, y)
     };
 
-    let mut max_depth_diff: f64 = 0.0;
-    let mut max_normal_diff: f64 = 0.0;
+    let mut max_edge_strength: f64 = 0.0;
 
     for (nx, ny) in neighbors {
-        if let (Some(neighbor_depth), Some(neighbor_normal)) = 
-            (buffers.get_depth(nx, ny), buffers.get_normal(nx, ny)) {
-            
-            // Compute depth difference
-            let depth_diff = (current_depth - neighbor_depth).abs();
-            max_depth_diff = max_depth_diff.max(depth_diff);
+        let neighbor_depth = buffers.get_depth(nx, ny);
+        let neighbor_normal = buffers.get_normal(nx, ny);
 
-            // Compute normal difference: n_diff = 1 - dot(n_i, n_j)
-            let dot_product = current_normal.dot(&neighbor_normal).clamp(-1.0, 1.0);
-            let normal_diff = 1.0 - dot_product;
-            max_normal_diff = max_normal_diff.max(normal_diff);
-        }
+        let edge_strength = match (current_depth, current_normal, neighbor_depth, neighbor_normal) {
+            (Some(curr_d), Some(curr_n), Some(neigh_d), Some(neigh_n)) => {
+                // Both pixels are foreground - compute gradual differences
+                let depth_diff = (curr_d - neigh_d).abs();
+                let normalized_depth_diff = depth_diff / (curr_d * 0.1).max(0.1);
+                
+                let dot_product = curr_n.dot(&neigh_n).clamp(-1.0, 1.0);
+                let normal_diff = 1.0 - dot_product;
+                
+                config.depth_weight * normalized_depth_diff + config.normal_weight * normal_diff
+            }
+            (Some(_), Some(_), None, None) => {
+                // Current pixel is foreground, neighbor is background - strong edge
+                config.depth_weight * 2.0 + config.normal_weight * 2.0
+            }
+            (None, None, Some(_), Some(_)) => {
+                // Current pixel is background, neighbor is foreground - strong edge
+                config.depth_weight * 2.0 + config.normal_weight * 2.0
+            }
+            _ => {
+                // Inconsistent or both background - no edge
+                0.0
+            }
+        };
+
+        max_edge_strength = max_edge_strength.max(edge_strength);
     }
 
-    // Normalize depth differences by a reasonable scale
-    // Use a heuristic depth scale based on the current depth
-    let depth_scale = (current_depth * 0.1).max(0.1);
-    let normalized_depth_diff = max_depth_diff / depth_scale;
-
-    // Combine using weights: E = w_d * z_diff + w_n * n_diff
-    config.depth_weight * normalized_depth_diff + config.normal_weight * max_normal_diff
+    max_edge_strength
 }
 
 /// Get 4-connected neighbors (up, down, left, right)
