@@ -170,26 +170,23 @@ console.log('Rendering scene to buffer...');
 const diagonalSize = 800;
 const sceneJson = JSON.stringify(scene);
 
-let buffer;
+let imageBuffer;
 let renderTimeStart = Date.now();
 
 try {
-    buffer = rtrace.renderSceneToBuffer(sceneJson, diagonalSize);
+    imageBuffer = rtrace.renderSceneToBuffer(sceneJson, diagonalSize);
     const renderTime = Date.now() - renderTimeStart;
     console.log(`✅ Rendered to buffer in ${renderTime}ms`);
-    console.log(`   Buffer size: ${buffer.length} bytes (${buffer.length / 4} pixels)`);
+    console.log(`   Buffer size: ${imageBuffer.data.length} bytes (${imageBuffer.data.length / 4} pixels)`);
+    console.log(`   Image dimensions: ${imageBuffer.width}×${imageBuffer.height} pixels`);
+    console.log(`   Stride: ${imageBuffer.stride} bytes per row\n`);
 } catch (error) {
     console.error('❌ Render failed:', error);
     process.exit(1);
 }
 
-// Calculate image dimensions (same logic as in Rust code)
-const camera_aspect_ratio = scene.camera.width / scene.camera.height;
-const diagonal = diagonalSize;
-const height = Math.round(diagonal / Math.sqrt(camera_aspect_ratio * camera_aspect_ratio + 1.0));
-const width = Math.round(camera_aspect_ratio * height);
-
-console.log(`   Image dimensions: ${width}×${height} pixels\n`);
+// Extract dimensions from the image buffer object
+const { width, height, stride, data: buffer } = imageBuffer;
 
 // Now let's manipulate the buffer - negate colors on the left half
 console.log('Applying image manipulation: negating colors on left half...');

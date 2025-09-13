@@ -17,5 +17,16 @@ export declare function renderSceneBruteForce(sceneJson: string, outputPath: str
 export declare function renderSceneFromFile(sceneFilePath: string, outputPath: string, size?: number | undefined | null): string
 /** Render a scene from JSON file with specific thread count */
 export declare function renderSceneFromFileThreaded(sceneFilePath: string, outputPath: string, size?: number | undefined | null, threadCount?: number | undefined | null): string
-/** Render a scene from JSON string and return the image buffer */
-export declare function renderSceneToBuffer(sceneJson: string, size?: number | undefined | null): Array<number>
+/** Image buffer result with metadata */
+export interface ImageBuffer {
+  /** Width in pixels */
+  width: number
+  /** Height in pixels   */
+  height: number
+  /** Number of bytes per row (width * 4 for RGBA) */
+  stride: number
+  /** Raw RGBA image data (4 bytes per pixel: R, G, B, A) */
+  data: Array<number>
+}
+/** Render a scene from JSON string and return the image buffer with metadata */
+export declare function renderSceneToBuffer(sceneJson: string, size?: number | undefined | null): ImageBuffer

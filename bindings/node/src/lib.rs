@@ -270,12 +270,25 @@ pub fn render_scene_from_file_threaded(
     ))
 }
 
-/// Render a scene from JSON string and return the image buffer
+/// Image buffer result with metadata
+#[napi(object)]
+pub struct ImageBuffer {
+    /// Width in pixels
+    pub width: u32,
+    /// Height in pixels  
+    pub height: u32,
+    /// Number of bytes per row (width * 4 for RGBA)
+    pub stride: u32,
+    /// Raw RGBA image data (4 bytes per pixel: R, G, B, A)
+    pub data: Vec<u8>,
+}
+
+/// Render a scene from JSON string and return the image buffer with metadata
 #[napi]
 pub fn render_scene_to_buffer(
     scene_json: String,
     size: Option<u32>,
-) -> Result<Vec<u8>> {
+) -> Result<ImageBuffer> {
     let diagonal_size = size.unwrap_or(1000);
 
     // Parse the JSON scene
@@ -298,6 +311,7 @@ pub fn render_scene_to_buffer(
     
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
+    let stride = width * 4; // 4 bytes per pixel (RGBA)
 
     // Create renderer with k-d tree enabled and multi-threading
     let renderer = rtrace::Renderer::new(width, height);
@@ -320,5 +334,10 @@ pub fn render_scene_to_buffer(
         rgba_buffer.push(255);      // Alpha (always opaque)
     }
 
-    Ok(rgba_buffer)
+    Ok(ImageBuffer {
+        width,
+        height,
+        stride,
+        data: rgba_buffer,
+    })
 }

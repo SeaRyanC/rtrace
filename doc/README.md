@@ -997,14 +997,14 @@ rtrace provides powerful Node.js bindings that allow you to render scenes direct
 
 ### Direct Buffer Manipulation Example
 
-The JavaScript API includes a special `renderSceneToBuffer()` function that returns the raw image data as a buffer, allowing for direct pixel manipulation before saving to disk.
+The JavaScript API includes a special `renderSceneToBuffer()` function that returns an `ImageBuffer` object with explicit width, height, stride, and pixel data, enabling safe and efficient direct pixel manipulation before saving to disk.
 
 **Example:** [`doc/js-buffer-example.js`](js-buffer-example.js)
 
 This comprehensive example demonstrates:
 
 1. **Direct API Usage**: Creating scenes programmatically without intermediate JSON files
-2. **Buffer Rendering**: Using `renderSceneToBuffer()` to get raw RGBA pixel data
+2. **Buffer Rendering**: Using `renderSceneToBuffer()` to get structured image buffer with metadata
 3. **Image Manipulation**: Processing the buffer in JavaScript (color negation on left half)
 4. **File Output**: Converting the manipulated buffer to PNG format
 
@@ -1035,10 +1035,21 @@ node doc/js-buffer-example.js
 | Function | Description | Return Type |
 |----------|-------------|-------------|
 | `renderScene(sceneJson, outputPath, size)` | Render scene to PNG file | `string` (status message) |
-| `renderSceneToBuffer(sceneJson, size)` | Render scene to RGBA buffer | `Array<number>` (RGBA bytes) |
+| `renderSceneToBuffer(sceneJson, size)` | Render scene to image buffer with metadata | `ImageBuffer` object |
 | `renderSceneThreaded(sceneJson, outputPath, size, threads)` | Multi-threaded file render | `string` (status message) |
 
-The `renderSceneToBuffer()` function returns an RGBA buffer where each pixel is represented by 4 consecutive bytes (Red, Green, Blue, Alpha). This allows for:
+The `renderSceneToBuffer()` function returns an `ImageBuffer` object with the following structure:
+
+```typescript
+interface ImageBuffer {
+  width: number;    // Image width in pixels
+  height: number;   // Image height in pixels  
+  stride: number;   // Bytes per row (width * 4 for RGBA)
+  data: number[];   // Raw RGBA pixel data (4 bytes per pixel: R, G, B, A)
+}
+```
+
+This explicit metadata structure eliminates stride calculation errors and allows for:
 - Real-time image processing and effects
 - Custom output formats beyond PNG
 - Integration with web-based image processing libraries
