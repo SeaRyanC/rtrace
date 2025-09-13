@@ -837,10 +837,6 @@ impl Renderer {
         image
     }
 
-    fn create_image_from_data(&self, image_data: Vec<(u32, u32, Color)>) -> RgbImage {
-        self.create_image_from_data_with_dimensions(image_data, self.width, self.height)
-    }
-
     pub fn render_to_file(
         &self,
         scene: &Scene,
