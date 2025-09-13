@@ -97,7 +97,6 @@ fn main() {
     let mut renderer = Renderer::new(width, height);
     renderer.max_depth = args.max_depth;
     renderer.samples = samples;
-    renderer.anti_aliasing_mode = anti_aliasing_mode;
     renderer.seed = Some(0); // Always use deterministic seed 0
     
     // Configure outline detection from scene settings
@@ -105,9 +104,18 @@ fn main() {
         Ok(Some(outline_config)) => {
             renderer = renderer.with_outline_detection(outline_config);
             println!("Outline detection enabled from scene configuration");
+            
+            // Check if current anti-aliasing mode is compatible with outline detection
+            if anti_aliasing_mode == AntiAliasingMode::Quincunx {
+                println!("Warning: Quincunx anti-aliasing is not compatible with outline detection. Switching to no-jitter mode.");
+                renderer.anti_aliasing_mode = AntiAliasingMode::NoJitter;
+            } else {
+                renderer.anti_aliasing_mode = anti_aliasing_mode;
+            }
         }
         Ok(None) => {
-            // No outline detection configured
+            // No outline detection configured - use original anti-aliasing mode
+            renderer.anti_aliasing_mode = anti_aliasing_mode;
         }
         Err(e) => {
             eprintln!("Error: Invalid outline color in scene: {}", e);
@@ -115,9 +123,15 @@ fn main() {
         }
     }
 
+    let final_anti_aliasing_name = match renderer.anti_aliasing_mode {
+        AntiAliasingMode::Quincunx => "quincunx",
+        AntiAliasingMode::Stochastic => "stochastic",
+        AntiAliasingMode::NoJitter => "no-jitter",
+    };
+
     println!(
         "Rendering {}×{} image (diagonal {}) with {} anti-aliasing ({} samples)...",
-        width, height, args.size, args.anti_aliasing, samples
+        width, height, args.size, final_anti_aliasing_name, samples
     );
 
     // Render and save

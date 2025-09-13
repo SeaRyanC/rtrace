@@ -840,7 +840,12 @@ Then render normally with the CLI:
 **Performance considerations:**
 - Outline detection adds approximately 10% rendering overhead
 - `use_8_neighbors: false` (4-neighbor) is faster than 8-neighbor sampling
-- Works with all anti-aliasing modes (quincunx, stochastic, no-jitter)
+- **Anti-aliasing compatibility**: Outline detection works with `stochastic` and `no-jitter` anti-aliasing modes. When using the default `quincunx` mode with outline detection enabled, the renderer automatically switches to `no-jitter` mode with a warning message.
+
+**Anti-aliasing mode behavior:**
+- `quincunx` (default): Automatically falls back to `no-jitter` when outlines are enabled
+- `stochastic`: Fully compatible with outline detection
+- `no-jitter`: Fully compatible with outline detection
 
 ### Example Scenes
 
