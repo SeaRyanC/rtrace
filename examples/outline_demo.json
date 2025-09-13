@@ -77,11 +77,11 @@
     "background_color": "#E8F4F8",
     "outline": {
       "enabled": true,
-      "depth_weight": 1.0,
-      "normal_weight": 1.5,
-      "threshold": 0.08,
+      "depth_weight": 1.2,
+      "normal_weight": 2.0,
+      "threshold": 0.05,
       "color": "#000000",
-      "thickness": 1.5,
+      "thickness": 2.0,
       "use_8_neighbors": false
     }
   }
