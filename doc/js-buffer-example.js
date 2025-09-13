@@ -217,20 +217,14 @@ const saveStart = Date.now();
 const png = new PNG({
     width: width,
     height: height,
-    inputColorType: 2, // RGB
-    colorType: 2,      // RGB output
-    inputHasAlpha: false
+    inputColorType: 6, // RGBA
+    colorType: 6,      // RGBA output
+    inputHasAlpha: true
 });
 
-// Convert RGBA buffer to RGB for PNG
-for (let i = 0; i < buffer.length / 4; i++) {
-    const srcIndex = i * 4;
-    const dstIndex = i * 3;
-    
-    png.data[dstIndex + 0] = buffer[srcIndex + 0]; // Red
-    png.data[dstIndex + 1] = buffer[srcIndex + 1]; // Green
-    png.data[dstIndex + 2] = buffer[srcIndex + 2]; // Blue
-    // Skip alpha channel for RGB PNG
+// Copy RGBA buffer directly to PNG data
+for (let i = 0; i < buffer.length; i++) {
+    png.data[i] = buffer[i];
 }
 
 const outputPath = path.join(__dirname, 'images', 'js-buffer-manipulation-demo.png');
