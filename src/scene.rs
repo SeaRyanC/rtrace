@@ -399,7 +399,7 @@ fn default_outline_depth_weight() -> f64 { 1.0 }
 fn default_outline_normal_weight() -> f64 { 1.0 }
 fn default_outline_threshold() -> f64 { 0.1 }
 fn default_outline_color() -> String { "#000000".to_string() }
-fn default_outline_thickness() -> f64 { 1.0 }
+fn default_outline_thickness() -> f64 { 2.0 }
 fn default_outline_use_8_neighbors() -> bool { false }
 
 impl Default for OutlineSettings {
@@ -410,7 +410,7 @@ impl Default for OutlineSettings {
             normal_weight: 1.0,
             threshold: 0.1,
             color: "#000000".to_string(),
-            thickness: 1.0,
+            thickness: 2.0,
             use_8_neighbors: false,
         }
     }

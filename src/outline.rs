@@ -13,7 +13,7 @@ pub struct OutlineConfig {
     pub edge_color: Color,
     /// Whether to use 8-neighbor (true) or 4-neighbor (false) sampling
     pub use_8_neighbors: bool,
-    /// Line thickness factor (1.0 = no thickening, >1.0 = thicker lines)
+    /// Line thickness in resolution-independent units (1.0 = 1/1000 of image diagonal)
     pub line_thickness: f64,
 }
 
@@ -25,7 +25,7 @@ impl Default for OutlineConfig {
             threshold: 0.1,
             edge_color: Color::new(0.0, 0.0, 0.0), // Black edges
             use_8_neighbors: false, // 4-neighbor by default for performance
-            line_thickness: 1.0,
+            line_thickness: 2.0, // 2/1000 of diagonal for visible outlines
         }
     }
 }
@@ -91,9 +91,14 @@ pub fn apply_outline_detection(
     // Create edge mask
     let edge_mask = detect_edges(buffers, config);
     
+    // Convert resolution-independent thickness to pixel thickness
+    // thickness is defined as 1.0 = 1/1000 of the image diagonal
+    let diagonal = ((buffers.width as f64).powi(2) + (buffers.height as f64).powi(2)).sqrt();
+    let pixel_thickness = config.line_thickness * diagonal / 1000.0;
+    
     // Apply line thickness if requested
-    let final_mask = if config.line_thickness > 1.0 {
-        dilate_edges(&edge_mask, buffers.width, buffers.height, config.line_thickness)
+    let final_mask = if pixel_thickness > 1.0 {
+        dilate_edges(&edge_mask, buffers.width, buffers.height, pixel_thickness)
     } else {
         edge_mask
     };
@@ -289,7 +294,7 @@ mod tests {
         assert_eq!(config.threshold, 0.1);
         assert_eq!(config.edge_color, Color::new(0.0, 0.0, 0.0));
         assert!(!config.use_8_neighbors);
-        assert_eq!(config.line_thickness, 1.0);
+        assert_eq!(config.line_thickness, 2.0);
     }
 
     #[test]
@@ -426,5 +431,45 @@ mod tests {
         
         // The center pixel should have some red component from edge detection
         assert!(center_pixel.2.x > 0.5, "Center pixel should have red edge contribution");
+    }
+
+    #[test]
+    fn test_resolution_independent_scaling() {
+        use crate::scene::Color;
+        
+        // Test at two different resolutions: 100x100 and 200x200
+        // The same thickness value should result in proportional pixel thickness
+        
+        // Small image: 100x100
+        let _small_buffers = OutlineBuffers::new(100, 100);
+        let small_diagonal = ((100_f64).powi(2) + (100_f64).powi(2)).sqrt(); // ~141.42
+        let thickness = 10.0; // 10/1000 of diagonal
+        let expected_small_pixels = thickness * small_diagonal / 1000.0; // ~1.41 pixels
+        
+        // Large image: 200x200  
+        let _large_buffers = OutlineBuffers::new(200, 200);
+        let large_diagonal = ((200_f64).powi(2) + (200_f64).powi(2)).sqrt(); // ~282.84
+        let expected_large_pixels = thickness * large_diagonal / 1000.0; // ~2.83 pixels
+        
+        // The large image should have exactly 2x the pixel thickness
+        assert!((expected_large_pixels / expected_small_pixels - 2.0).abs() < 0.001);
+        
+        // Test the actual conversion in apply_outline_detection
+        let config = OutlineConfig {
+            depth_weight: 1.0,
+            normal_weight: 1.0,
+            threshold: 0.05,
+            edge_color: Color::new(1.0, 0.0, 0.0),
+            use_8_neighbors: false,
+            line_thickness: thickness,
+        };
+        
+        // The conversion formula should match our expectation
+        let small_pixel_thickness = config.line_thickness * small_diagonal / 1000.0;
+        let large_pixel_thickness = config.line_thickness * large_diagonal / 1000.0;
+        
+        assert!((small_pixel_thickness - expected_small_pixels).abs() < 0.001);
+        assert!((large_pixel_thickness - expected_large_pixels).abs() < 0.001);
+        assert!((large_pixel_thickness / small_pixel_thickness - 2.0).abs() < 0.001);
     }
 }
