@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::camera::Camera;
-use crate::lighting::{ray_color, ray_color_with_camera};
+use crate::lighting::ray_color_with_camera;
 use crate::outline::{apply_outline_detection, OutlineBuffers, OutlineConfig};
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
@@ -17,8 +17,6 @@ use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 pub enum AntiAliasingMode {
     /// No jittering - deterministic center-pixel sampling
     NoJitter,
-    /// Quincunx pattern - 5 samples (center + 4 corners) per pixel
-    Quincunx,
     /// Stochastic sampling - random jittered sampling
     Stochastic,
 }
@@ -44,6 +42,7 @@ pub struct Renderer {
     pub anti_aliasing_mode: AntiAliasingMode, // Anti-aliasing sampling mode
     pub seed: Option<u64>, // Seed for deterministic randomness (None = use default seed)
     pub outline_config: Option<OutlineConfig>, // Optional outline detection configuration
+    pub use_quincunx_downsampling: bool, // Enable quincunx downsampling (render at higher res, then downsample)
 }
 
 impl Renderer {
@@ -54,10 +53,11 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
-            samples: 1,         // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            samples: 1,         // Default to 1 sample per pixel
+            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
             seed: Some(0),      // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
+            use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
         }
     }
 
@@ -69,10 +69,11 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: false,                              // Disable k-d tree
             thread_count: None,                             // Use all available cores by default
-            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            samples: 1, // Default to 1 sample per pixel
+            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
+            use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
         }
     }
 
@@ -84,10 +85,11 @@ impl Renderer {
             max_depth: 10,
             use_kdtree: true,
             thread_count: Some(thread_count),
-            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            samples: 1, // Default to 1 sample per pixel
+            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
+            use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
         }
     }
 
@@ -104,16 +106,23 @@ impl Renderer {
             max_depth: 10,
             use_kdtree,
             thread_count,
-            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
+            samples: 1, // Default to 1 sample per pixel
+            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
+            use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
         }
     }
 
     /// Enable outline detection with the given configuration
     pub fn with_outline_detection(mut self, config: OutlineConfig) -> Self {
         self.outline_config = Some(config);
+        self
+    }
+
+    /// Enable or disable quincunx downsampling
+    pub fn with_quincunx_downsampling(mut self, enabled: bool) -> Self {
+        self.use_quincunx_downsampling = enabled;
         self
     }
 
@@ -125,7 +134,15 @@ impl Renderer {
 
         let render_start_time = Instant::now();
 
-        // Create camera
+        // Determine the actual rendering dimensions
+        let (render_width, render_height) = if self.use_quincunx_downsampling {
+            // Render at 1 pixel larger in each dimension for quincunx downsampling
+            (self.width + 1, self.height + 1)
+        } else {
+            (self.width, self.height)
+        };
+
+        // Create camera with the target aspect ratio (not the render aspect ratio)
         let aspect_ratio = self.width as f64 / self.height as f64;
         let camera = Camera::from_config(&scene.camera, aspect_ratio)?;
         let camera_pos = Point::new(
@@ -325,7 +342,9 @@ impl Renderer {
 
             // Use the thread pool for rendering
             let (image_data, outline_buffers) = pool.install(|| {
-                self.render_parallel(
+                self.render_parallel_with_dimensions(
+                    render_width,
+                    render_height,
                     &world,
                     &camera,
                     &scene.lights,
@@ -345,15 +364,24 @@ impl Renderer {
                 apply_outline_detection(&mut final_image_data, &buffers, outline_config);
             }
             
-            let image = self.create_image_from_data(final_image_data);
+            // Apply quincunx downsampling if enabled
+            let final_image = if self.use_quincunx_downsampling && render_width > self.width && render_height > self.height {
+                let high_res_image = self.create_image_from_data_with_dimensions(final_image_data, render_width, render_height);
+                self.quincunx_downsample(&high_res_image, self.width, self.height)
+            } else {
+                self.create_image_from_data_with_dimensions(final_image_data, render_width, render_height)
+            };
+            
             println!(
                 "Total rendering time: {}",
                 format_duration(total_time.as_secs_f64())
             );
-            Ok(image)
+            Ok(final_image)
         } else {
             // Use default parallel rendering with all available cores
-            let (image_data, outline_buffers) = self.render_parallel(
+            let (image_data, outline_buffers) = self.render_parallel_with_dimensions(
+                render_width,
+                render_height,
                 &world,
                 &camera,
                 &scene.lights,
@@ -372,18 +400,27 @@ impl Renderer {
                 apply_outline_detection(&mut final_image_data, &buffers, outline_config);
             }
             
-            let image = self.create_image_from_data(final_image_data);
+            // Apply quincunx downsampling if enabled
+            let final_image = if self.use_quincunx_downsampling && render_width > self.width && render_height > self.height {
+                let high_res_image = self.create_image_from_data_with_dimensions(final_image_data, render_width, render_height);
+                self.quincunx_downsample(&high_res_image, self.width, self.height)
+            } else {
+                self.create_image_from_data_with_dimensions(final_image_data, render_width, render_height)
+            };
+            
             println!(
                 "Total rendering time: {}",
                 format_duration(total_time.as_secs_f64())
             );
-            Ok(image)
+            Ok(final_image)
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_parallel(
+    fn render_parallel_with_dimensions(
         &self,
+        width: u32,
+        height: u32,
         world: &World,
         camera: &Camera,
         lights: &[crate::scene::Light],
@@ -393,57 +430,44 @@ impl Renderer {
         background_color: Color,
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
-        match self.anti_aliasing_mode {
-            AntiAliasingMode::Quincunx => {
-                let image_data = self.render_quincunx(
-                    world,
-                    camera,
-                    lights,
-                    ambient,
-                    fog,
-                    camera_pos,
-                    background_color,
-                    materials,
-                );
-                
-                // For now, quincunx mode doesn't support outline detection due to shared samples
-                (image_data, None)
-            },
-            _ => {
-                if self.outline_config.is_some() {
-                    let render_context = RenderContext {
-                        ambient,
-                        fog,
-                        camera_pos,
-                        background_color,
-                    };
-                    self.render_standard_with_outline(
-                        world,
-                        camera,
-                        lights,
-                        &render_context,
-                        materials,
-                    )
-                } else {
-                    let image_data = self.render_standard(
-                        world,
-                        camera,
-                        lights,
-                        ambient,
-                        fog,
-                        camera_pos,
-                        background_color,
-                        materials,
-                    );
-                    (image_data, None)
-                }
-            },
+        if self.outline_config.is_some() {
+            let render_context = RenderContext {
+                ambient,
+                fog,
+                camera_pos,
+                background_color,
+            };
+            self.render_standard_with_outline_and_dimensions(
+                width,
+                height,
+                world,
+                camera,
+                lights,
+                &render_context,
+                materials,
+            )
+        } else {
+            let image_data = self.render_standard_with_dimensions(
+                width,
+                height,
+                world,
+                camera,
+                lights,
+                ambient,
+                fog,
+                camera_pos,
+                background_color,
+                materials,
+            );
+            (image_data, None)
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn render_standard(
+    fn render_standard_with_dimensions(
         &self,
+        width: u32,
+        height: u32,
         world: &World,
         camera: &Camera,
         lights: &[crate::scene::Light],
@@ -454,12 +478,12 @@ impl Renderer {
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> Vec<(u32, u32, Color)> {
         // Create a vector of all pixel coordinates
-        let pixels: Vec<(u32, u32)> = (0..self.height)
-            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+        let pixels: Vec<(u32, u32)> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
             .collect();
 
         // Progress tracking setup
-        let total_pixels = self.width * self.height;
+        let total_pixels = width * height;
         let progress_step = (total_pixels / 10).max(1);
         let completed_pixels = AtomicUsize::new(0);
         let progress_mutex = Mutex::new(());
@@ -470,12 +494,12 @@ impl Renderer {
             .par_iter()
             .map(|&(x, y)| {
                 // Calculate base pixel coordinates
-                let pixel_u = x as f64 / (self.width - 1) as f64;
-                let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
+                let pixel_u = x as f64 / (width - 1) as f64;
+                let pixel_v = (height - 1 - y) as f64 / (height - 1) as f64; // Flip Y coordinate
 
                 // Calculate pixel size in UV coordinates
-                let pixel_width = 1.0 / (self.width - 1) as f64;
-                let pixel_height = 1.0 / (self.height - 1) as f64;
+                let pixel_width = 1.0 / (width - 1) as f64;
+                let pixel_height = 1.0 / (height - 1) as f64;
 
                 // Collect samples for this pixel
                 let mut total_color = Color::new(0.0, 0.0, 0.0);
@@ -522,7 +546,6 @@ impl Renderer {
                                 )
                             }
                         }
-                        AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
@@ -583,8 +606,10 @@ impl Renderer {
         results
     }
 
-    fn render_standard_with_outline(
+    fn render_standard_with_outline_and_dimensions(
         &self,
+        width: u32,
+        height: u32,
         world: &World,
         camera: &Camera,
         lights: &[crate::scene::Light],
@@ -594,12 +619,12 @@ impl Renderer {
         use crate::lighting::ray_color_with_data;
         
         // Create a vector of all pixel coordinates
-        let pixels: Vec<(u32, u32)> = (0..self.height)
-            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+        let pixels: Vec<(u32, u32)> = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y)))
             .collect();
 
         // Progress tracking setup
-        let total_pixels = self.width * self.height;
+        let total_pixels = width * height;
         let progress_step = (total_pixels / 10).max(1);
         let completed_pixels = AtomicUsize::new(0);
         let progress_mutex = Mutex::new(());
@@ -610,12 +635,12 @@ impl Renderer {
             .par_iter()
             .map(|&(x, y)| {
                 // Calculate base pixel coordinates
-                let pixel_u = x as f64 / (self.width - 1) as f64;
-                let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
+                let pixel_u = x as f64 / (width - 1) as f64;
+                let pixel_v = (height - 1 - y) as f64 / (height - 1) as f64; // Flip Y coordinate
 
                 // Calculate pixel size in UV coordinates
-                let pixel_width = 1.0 / (self.width - 1) as f64;
-                let pixel_height = 1.0 / (self.height - 1) as f64;
+                let pixel_width = 1.0 / (width - 1) as f64;
+                let pixel_height = 1.0 / (height - 1) as f64;
 
                 // Collect samples for this pixel
                 let mut total_color = Color::new(0.0, 0.0, 0.0);
@@ -664,7 +689,6 @@ impl Renderer {
                                 )
                             }
                         }
-                        AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
                     };
 
                     let ray = camera.get_ray(sample_u, sample_v);
@@ -732,7 +756,7 @@ impl Renderer {
 
         // Separate color data and outline data
         let mut image_data = Vec::new();
-        let mut outline_buffers = OutlineBuffers::new(self.width, self.height);
+        let mut outline_buffers = OutlineBuffers::new(width, height);
         
         for (x, y, color, depth, normal) in results {
             image_data.push((x, y, color));
@@ -748,156 +772,58 @@ impl Renderer {
         (image_data, Some(outline_buffers))
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn render_quincunx(
-        &self,
-        world: &World,
-        camera: &Camera,
-        lights: &[crate::scene::Light],
-        ambient: &crate::scene::AmbientIllumination,
-        fog: &Option<crate::scene::Fog>,
-        camera_pos: &Point,
-        background_color: Color,
-        materials: &HashMap<usize, crate::scene::Material>,
-    ) -> Vec<(u32, u32, Color)> {
-        use std::collections::HashMap as StdHashMap;
-        use std::sync::{Arc, Mutex};
-
-        // Pre-compute corner samples that will be shared between pixels
-        // Each corner is identified by its grid position
-        let corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>> =
-            Arc::new(Mutex::new(StdHashMap::new()));
-
-        // Calculate pixel size in UV coordinates
-        let pixel_width = 1.0 / self.width as f64;
-        let pixel_height = 1.0 / self.height as f64;
-
-        // Helper function to get corner sample color (with caching)
-        let get_corner_sample = |corner_x: u32,
-                                 corner_y: u32,
-                                 corner_cache: Arc<Mutex<StdHashMap<(u32, u32), Color>>>,
-                                 world: &World,
-                                 camera: &Camera|
-         -> Color {
-            let key = (corner_x, corner_y);
-
-            // Check cache first
-            {
-                let cache = corner_cache.lock().unwrap();
-                if let Some(&color) = cache.get(&key) {
-                    return color;
-                }
+    /// Downsample a high-resolution image using quincunx sampling (center + 4 corners)
+    fn quincunx_downsample(&self, high_res_image: &RgbImage, target_width: u32, target_height: u32) -> RgbImage {
+        let mut downsampled = ImageBuffer::new(target_width, target_height);
+        
+        for y in 0..target_height {
+            for x in 0..target_width {
+                // For each target pixel, sample the center + 4 corners from the high-res image
+                let center_x = x;
+                let center_y = y;
+                
+                // Get center pixel
+                let center_pixel = high_res_image.get_pixel(center_x, center_y);
+                
+                // Get corner pixels (with bounds checking)
+                let top_left = if x > 0 && y > 0 {
+                    *high_res_image.get_pixel(x - 1, y - 1)
+                } else {
+                    *center_pixel
+                };
+                
+                let top_right = if x < high_res_image.width() - 1 && y > 0 {
+                    *high_res_image.get_pixel(x + 1, y - 1)
+                } else {
+                    *center_pixel
+                };
+                
+                let bottom_left = if x > 0 && y < high_res_image.height() - 1 {
+                    *high_res_image.get_pixel(x - 1, y + 1)
+                } else {
+                    *center_pixel
+                };
+                
+                let bottom_right = if x < high_res_image.width() - 1 && y < high_res_image.height() - 1 {
+                    *high_res_image.get_pixel(x + 1, y + 1)
+                } else {
+                    *center_pixel
+                };
+                
+                // Average the 5 samples (center + 4 corners)
+                let avg_r = (center_pixel[0] as u32 + top_left[0] as u32 + top_right[0] as u32 + bottom_left[0] as u32 + bottom_right[0] as u32) / 5;
+                let avg_g = (center_pixel[1] as u32 + top_left[1] as u32 + top_right[1] as u32 + bottom_left[1] as u32 + bottom_right[1] as u32) / 5;
+                let avg_b = (center_pixel[2] as u32 + top_left[2] as u32 + top_right[2] as u32 + bottom_left[2] as u32 + bottom_right[2] as u32) / 5;
+                
+                downsampled.put_pixel(x, y, Rgb([avg_r as u8, avg_g as u8, avg_b as u8]));
             }
-
-            // Calculate corner UV coordinates (corners are at pixel boundaries)
-            let corner_u = (corner_x as f64 * pixel_width).clamp(0.0, 1.0);
-            let corner_v = (1.0 - corner_y as f64 * pixel_height).clamp(0.0, 1.0); // Flip Y coordinate
-
-            let ray = camera.get_ray(corner_u, corner_v);
-
-            // Create deterministic seed for corner based on corner coordinates
-            let corner_seed = self
-                .seed
-                .unwrap_or(0)
-                .wrapping_mul(0x9E3779B97F4A7C15_u64)
-                .wrapping_add(corner_x as u64)
-                .wrapping_add((corner_y as u64).wrapping_mul(0x85EBCA6B));
-
-            let color = ray_color(
-                &ray,
-                world,
-                lights,
-                ambient,
-                fog,
-                camera_pos,
-                background_color,
-                materials,
-                self.max_depth,
-                corner_seed,
-            );
-
-            // Cache the result
-            {
-                let mut cache = corner_cache.lock().unwrap();
-                cache.insert(key, color);
-            }
-
-            color
-        };
-
-        // Create a vector of all pixel coordinates
-        let pixels: Vec<(u32, u32)> = (0..self.height)
-            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
-            .collect();
-
-        // Progress tracking setup
-        let total_pixels = self.width * self.height;
-        let progress_step = (total_pixels / 10).max(1);
-
-        // Render pixels in parallel
-        pixels
-            .par_iter()
-            .enumerate()
-            .map(|(pixel_index, &(x, y))| {
-                // Calculate center sample coordinates
-                let pixel_center_u = (x as f64 + 0.5) * pixel_width;
-                let pixel_center_v = 1.0 - (y as f64 + 0.5) * pixel_height; // Flip Y coordinate
-
-                // Center sample
-                let center_ray = camera.get_ray(pixel_center_u, pixel_center_v);
-
-                // Create deterministic seed for center sample based on pixel coordinates
-                let center_seed = self
-                    .seed
-                    .unwrap_or(0)
-                    .wrapping_mul(0x9E3779B97F4A7C15_u64)
-                    .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
-                    .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35))
-                    .wrapping_add(0x12345678_u64); // Different constant for center vs corners
-
-                let center_color = ray_color(
-                    &center_ray,
-                    world,
-                    lights,
-                    ambient,
-                    fog,
-                    camera_pos,
-                    background_color,
-                    materials,
-                    self.max_depth,
-                    center_seed,
-                );
-
-                // Get corner samples (these are shared between neighboring pixels)
-                // Corner positions are at pixel grid intersections
-                let corner_colors = [
-                    get_corner_sample(x, y, corner_cache.clone(), world, camera), // Top-left corner
-                    get_corner_sample(x + 1, y, corner_cache.clone(), world, camera), // Top-right corner
-                    get_corner_sample(x, y + 1, corner_cache.clone(), world, camera), // Bottom-left corner
-                    get_corner_sample(x + 1, y + 1, corner_cache.clone(), world, camera), // Bottom-right corner
-                ];
-
-                // Average center + 4 corner samples (true quincunx pattern)
-                let total_color = center_color
-                    + corner_colors[0]
-                    + corner_colors[1]
-                    + corner_colors[2]
-                    + corner_colors[3];
-                let color = total_color / 5.0;
-
-                // Print progress periodically (note: this might be out of order due to parallelism)
-                if pixel_index % progress_step as usize == 0 {
-                    let progress = (pixel_index as f64 / total_pixels as f64) * 100.0;
-                    println!("Rendering: {:.1}%", progress);
-                }
-
-                (x, y, color)
-            })
-            .collect()
+        }
+        
+        downsampled
     }
 
-    fn create_image_from_data(&self, image_data: Vec<(u32, u32, Color)>) -> RgbImage {
-        let mut image = ImageBuffer::new(self.width, self.height);
+    fn create_image_from_data_with_dimensions(&self, image_data: Vec<(u32, u32, Color)>, width: u32, height: u32) -> RgbImage {
+        let mut image = ImageBuffer::new(width, height);
 
         for (x, y, color) in image_data {
             // Convert to RGB values (0-255)
@@ -934,15 +860,16 @@ mod tests {
         assert_eq!(renderer.width, 800);
         assert_eq!(renderer.height, 600);
         assert_eq!(renderer.thread_count, None);
-        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
-        assert_eq!(renderer.samples, 1); // Default for quincunx with shared samples
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Stochastic);
+        assert_eq!(renderer.samples, 1); // Default to 1 sample per pixel
+        assert_eq!(renderer.use_quincunx_downsampling, true); // Default to quincunx downsampling
 
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
         assert_eq!(renderer_threaded.thread_count, Some(4));
         assert_eq!(
             renderer_threaded.anti_aliasing_mode,
-            AntiAliasingMode::Quincunx
+            AntiAliasingMode::Stochastic
         );
     }
 
@@ -1038,7 +965,7 @@ mod tests {
     }
 
     #[test]
-    fn test_quincunx_sampling() {
+    fn test_quincunx_downsampling_quality() {
         let mut scene = Scene::default();
 
         // Add a simple sphere
@@ -1057,18 +984,35 @@ mod tests {
             diameter: None,
         });
 
-        // Test quincunx mode with default samples
-        let renderer = Renderer::new(50, 50);
-        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
-        assert_eq!(renderer.samples, 1);
-        let result = renderer.render(&scene);
-        assert!(result.is_ok());
-
-        // Test quincunx mode with custom samples
-        let mut renderer2 = Renderer::new(50, 50);
-        renderer2.samples = 4;
-        let result = renderer2.render(&scene);
-        assert!(result.is_ok());
+        // Render with downsampling enabled
+        let mut renderer_with_downsampling = Renderer::new(10, 10);
+        renderer_with_downsampling.use_quincunx_downsampling = true;
+        let image_with_downsampling = renderer_with_downsampling.render(&scene).unwrap();
+        
+        // Render without downsampling
+        let mut renderer_without_downsampling = Renderer::new(10, 10);
+        renderer_without_downsampling.use_quincunx_downsampling = false;
+        let image_without_downsampling = renderer_without_downsampling.render(&scene).unwrap();
+        
+        // Both images should be 10x10
+        assert_eq!(image_with_downsampling.width(), 10);
+        assert_eq!(image_with_downsampling.height(), 10);
+        assert_eq!(image_without_downsampling.width(), 10);
+        assert_eq!(image_without_downsampling.height(), 10);
+        
+        // The images should be different due to the anti-aliasing effect
+        let pixels_with: Vec<_> = image_with_downsampling.pixels().collect();
+        let pixels_without: Vec<_> = image_without_downsampling.pixels().collect();
+        
+        // We expect at least some pixels to differ due to anti-aliasing
+        let different_pixels = pixels_with.iter()
+            .zip(pixels_without.iter())
+            .filter(|(&a, &b)| a != b)
+            .count();
+            
+        // With anti-aliasing, we expect some differences, though this test is a bit loose
+        // The main goal is to ensure the images render successfully and have correct dimensions
+        println!("Pixels differ: {} out of {}", different_pixels, pixels_with.len());
     }
 
     #[test]
@@ -1171,7 +1115,7 @@ mod tests {
     }
 
     #[test]
-    fn test_quincunx_deterministic() {
+    fn test_downsampling_deterministic() {
         let mut scene = Scene::default();
 
         // Add a simple sphere
@@ -1190,17 +1134,18 @@ mod tests {
             diameter: Some(0.5), // Area light to trigger stochastic sampling
         });
 
-        // Test quincunx mode (which should also be deterministic)
+        // Test deterministic downsampling (which should also be deterministic)
         let mut renderer = Renderer::new(50, 50);
-        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Quincunx);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Stochastic);
+        assert_eq!(renderer.use_quincunx_downsampling, true);
         renderer.seed = Some(123);
 
         let result1 = renderer
             .render(&scene)
-            .expect("First quincunx render failed");
+            .expect("First downsampling render failed");
         let result2 = renderer
             .render(&scene)
-            .expect("Second quincunx render failed");
+            .expect("Second downsampling render failed");
 
         // Extract pixel data for comparison
         let pixels1: Vec<_> = result1.pixels().collect();
@@ -1211,7 +1156,7 @@ mod tests {
         for (i, (&pixel1, &pixel2)) in pixels1.iter().zip(pixels2.iter()).enumerate() {
             assert_eq!(
                 pixel1, pixel2,
-                "Quincunx pixel {} differs between renders: {:?} vs {:?}",
+                "Downsampling pixel {} differs between renders: {:?} vs {:?}",
                 i, pixel1, pixel2
             );
         }

@@ -26,8 +26,8 @@ struct Args {
     #[arg(long)]
     samples: Option<u32>,
 
-    /// Anti-aliasing mode: quincunx (default), stochastic, or no-jitter
-    #[arg(long, default_value = "quincunx")]
+    /// Anti-aliasing mode: stochastic (default) or no-jitter
+    #[arg(long, default_value = "stochastic")]
     anti_aliasing: String,
 }
 
@@ -42,11 +42,10 @@ fn main() {
 
     // Parse anti-aliasing mode
     let anti_aliasing_mode = match args.anti_aliasing.as_str() {
-        "quincunx" => AntiAliasingMode::Quincunx,
         "stochastic" => AntiAliasingMode::Stochastic,
         "no-jitter" => AntiAliasingMode::NoJitter,
         _ => {
-            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, no-jitter", args.anti_aliasing);
+            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: stochastic, no-jitter", args.anti_aliasing);
             std::process::exit(1);
         }
     };
@@ -105,13 +104,8 @@ fn main() {
             renderer = renderer.with_outline_detection(outline_config);
             println!("Outline detection enabled from scene configuration");
             
-            // Check if current anti-aliasing mode is compatible with outline detection
-            if anti_aliasing_mode == AntiAliasingMode::Quincunx {
-                println!("Warning: Quincunx anti-aliasing is not compatible with outline detection. Switching to no-jitter mode.");
-                renderer.anti_aliasing_mode = AntiAliasingMode::NoJitter;
-            } else {
-                renderer.anti_aliasing_mode = anti_aliasing_mode;
-            }
+            // All anti-aliasing modes are compatible with outline detection now
+            renderer.anti_aliasing_mode = anti_aliasing_mode;
         }
         Ok(None) => {
             // No outline detection configured - use original anti-aliasing mode
@@ -124,13 +118,12 @@ fn main() {
     }
 
     let final_anti_aliasing_name = match renderer.anti_aliasing_mode {
-        AntiAliasingMode::Quincunx => "quincunx",
         AntiAliasingMode::Stochastic => "stochastic",
         AntiAliasingMode::NoJitter => "no-jitter",
     };
 
     println!(
-        "Rendering {}×{} image (diagonal {}) with {} anti-aliasing ({} samples)...",
+        "Rendering {}×{} image (diagonal {}) with {} anti-aliasing ({} samples) and quincunx downsampling...",
         width, height, args.size, final_anti_aliasing_name, samples
     );
 
