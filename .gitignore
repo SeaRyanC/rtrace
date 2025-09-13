@@ -12,6 +12,9 @@ yarn-debug.log*
 yarn-error.log*
 index.js
 
+# TypeScript compiled output
+dist/
+
 # WASM
 bindings/wasm/pkg/
 

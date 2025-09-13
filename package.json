@@ -15,7 +15,11 @@
     "example": "npm run build && node scripts/example.js",
     "hereby": "hereby",
     "task": "hereby",
-    "tasks": "hereby --list"
+    "tasks": "hereby --list",
+    "schema:compile": "tsc",
+    "schema:generate": "npm run schema:compile && node dist/validate-schema.js --generate-schema",
+    "schema:validate": "npm run schema:compile && node dist/validate-schema.js --validate",
+    "schema:all": "npm run schema:generate && npm run schema:validate"
   },
   "repository": {
     "type": "git",
@@ -40,7 +44,12 @@
   },
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4",
-    "hereby": "^1.11.0"
+    "@types/node": "^24.3.3",
+    "hereby": "^1.11.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
   },
   "dependencies": {
     "pngjs": "^7.0.0"

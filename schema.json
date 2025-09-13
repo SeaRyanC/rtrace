@@ -1,352 +1,647 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Ray Tracer Scene",
-  "description": "JSON schema for ray tracer scene definition files",
-  "type": "object",
-  "required": ["camera", "objects", "lights", "scene_settings"],
-  "properties": {
-    "camera": {
-      "type": "object",
-      "required": ["kind", "position", "target", "up", "width", "height"],
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": ["ortho"],
-          "description": "Camera type - only orthographic projection is currently supported"
-        },
-        "position": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 3,
-          "maxItems": 3,
-          "description": "Camera position as [x, y, z]"
-        },
-        "target": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 3,
-          "maxItems": 3,
-          "description": "Camera target point as [x, y, z]"
-        },
-        "up": {
-          "type": "array",
-          "items": { "type": "number" },
-          "minItems": 3,
-          "maxItems": 3,
-          "description": "Camera up vector as [x, y, z]"
-        },
-        "width": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Viewport width in world units"
-        },
-        "height": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Viewport height in world units"
-        }
-      }
-    },
-    "objects": {
-      "type": "array",
-      "items": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": ["kind", "center", "radius", "material"],
-            "properties": {
-              "kind": { "const": "sphere" },
-              "center": {
-                "type": "array",
-                "items": { "type": "number" },
-                "minItems": 3,
-                "maxItems": 3,
-                "description": "Sphere center as [x, y, z]"
-              },
-              "radius": {
-                "type": "number",
-                "minimum": 0,
-                "description": "Sphere radius"
-              },
-              "material": { "$ref": "#/definitions/material" },
-              "transform": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["kind", "point", "normal", "material"],
-            "properties": {
-              "kind": { "const": "plane" },
-              "point": {
-                "type": "array",
-                "items": { "type": "number" },
-                "minItems": 3,
-                "maxItems": 3,
-                "description": "Point on the plane as [x, y, z]"
-              },
-              "normal": {
-                "type": "array",
-                "items": { "type": "number" },
-                "minItems": 3,
-                "maxItems": 3,
-                "description": "Plane normal vector as [x, y, z]"
-              },
-              "material": { "$ref": "#/definitions/material" },
-              "transform": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["kind", "center", "size", "material"],
-            "properties": {
-              "kind": { "const": "cube" },
-              "center": {
-                "type": "array",
-                "items": { "type": "number" },
-                "minItems": 3,
-                "maxItems": 3,
-                "description": "Cube center as [x, y, z]"
-              },
-              "size": {
-                "type": "array",
-                "items": { "type": "number" },
-                "minItems": 3,
-                "maxItems": 3,
-                "description": "Cube dimensions as [width, height, depth]"
-              },
-              "material": { "$ref": "#/definitions/material" },
-              "transform": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
-              }
-            }
-          },
-          {
-            "type": "object",
-            "required": ["kind", "filename", "material"],
-            "properties": {
-              "kind": { "const": "mesh" },
-              "filename": {
-                "type": "string",
-                "description": "Path to STL file (binary or ASCII format)"
-              },
-              "material": { "$ref": "#/definitions/material" },
-              "transform": {
-                "type": "array",
-                "items": { "type": "string" },
-                "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
-              }
-            }
-          }
-        ]
-      },
-      "description": "Array of objects in the scene"
-    },
-    "lights": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["position", "color", "intensity"],
-        "properties": {
-          "position": {
-            "type": "array",
-            "items": { "type": "number" },
-            "minItems": 3,
-            "maxItems": 3,
-            "description": "Light position as [x, y, z]"
-          },
-          "color": {
-            "type": "string",
-            "pattern": "^#[0-9A-Fa-f]{6}$",
-            "description": "Light color as hex string (e.g., #FFFFFF)"
-          },
-          "intensity": {
-            "type": "number",
-            "minimum": 0,
-            "description": "Light intensity multiplier"
-          },
-          "diameter": {
-            "type": ["number", "null"],
-            "minimum": 0,
-            "description": "Optional diameter for diffuse (area) light sources. If null or omitted, the light behaves as a point light with sharp shadows. If specified, creates soft shadows."
-          }
-        }
-      },
-      "description": "Array of light sources (point lights and diffuse area lights)"
-    },
-    "scene_settings": {
-      "type": "object",
-      "required": ["ambient_illumination"],
-      "properties": {
-        "ambient_illumination": {
-          "type": "object",
-          "required": ["color", "intensity"],
-          "properties": {
-            "color": {
-              "type": "string",
-              "pattern": "^#[0-9A-Fa-f]{6}$",
-              "description": "Ambient light color as hex string"
-            },
-            "intensity": {
-              "type": "number",
-              "minimum": 0,
-              "description": "Ambient light intensity"
-            }
-          }
-        },
-        "fog": {
-          "type": "object",
-          "required": ["color", "density", "start", "end"],
-          "properties": {
-            "color": {
-              "type": "string",
-              "pattern": "^#[0-9A-Fa-f]{6}$",
-              "description": "Fog color as hex string"
-            },
-            "density": {
-              "type": "number",
-              "minimum": 0,
-              "description": "Fog density factor (higher values create thicker fog)"
-            },
-            "start": {
-              "type": "number",
-              "description": "Distance where fog begins (near distance - objects closer are unaffected)"
-            },
-            "end": {
-              "type": "number",
-              "description": "Distance where fog calculation reaches maximum intensity (far distance)"
-            }
-          }
-        },
-        "background_color": {
-          "type": "string",
-          "pattern": "^#[0-9A-Fa-f]{6}$",
-          "description": "Background color as hex string"
-        },
-        "outline": {
-          "type": "object",
-          "required": ["enabled"],
-          "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Enable outline detection for the scene"
-            },
-            "depth_weight": {
-              "type": "number",
-              "minimum": 0,
-              "default": 1.0,
-              "description": "Weight for depth differences in edge detection (default: 1.0)"
-            },
-            "normal_weight": {
-              "type": "number",
-              "minimum": 0,
-              "default": 1.0,
-              "description": "Weight for normal differences in edge detection (default: 1.0)"
-            },
-            "threshold": {
-              "type": "number",
-              "minimum": 0,
-              "maximum": 1,
-              "default": 0.1,
-              "description": "Threshold for edge detection (default: 0.1)"
-            },
-            "color": {
-              "type": "string",
-              "pattern": "^#[0-9A-Fa-f]{6}$",
-              "default": "#000000",
-              "description": "Outline color as hex string (default: #000000 - black)"
-            },
-            "thickness": {
-              "type": "number",
-              "minimum": 1.0,
-              "default": 1.0,
-              "description": "Line thickness factor (1.0 = no thickening, >1.0 = thicker lines, default: 1.0)"
-            },
-            "use_8_neighbors": {
-              "type": "boolean",
-              "default": false,
-              "description": "Use 8-neighbor sampling instead of 4-neighbor (default: false for performance)"
-            }
-          }
-        }
-      }
-    }
-  },
+  "$ref": "#/definitions/Scene",
   "definitions": {
-    "material": {
+    "Scene": {
       "type": "object",
-      "required": ["color", "ambient", "diffuse", "specular", "shininess"],
       "properties": {
-        "color": {
-          "type": "string",
-          "pattern": "^#[0-9A-Fa-f]{6}$",
-          "description": "Material base color as hex string"
-        },
-        "ambient": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Ambient reflection coefficient"
-        },
-        "diffuse": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Diffuse reflection coefficient"
-        },
-        "specular": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Specular reflection coefficient"
-        },
-        "shininess": {
-          "type": "number",
-          "minimum": 1,
-          "description": "Phong exponent for specular highlights"
-        },
-        "reflectivity": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1,
-          "description": "Optional reflectivity coefficient for mirror-like surfaces"
-        },
-        "texture": {
-          "oneOf": [
+        "camera": {
+          "anyOf": [
             {
               "type": "object",
-              "required": ["type", "line_color", "line_width", "cell_size"],
               "properties": {
-                "type": { "const": "grid" },
-                "line_color": {
+                "kind": {
                   "type": "string",
-                  "pattern": "^#[0-9A-Fa-f]{6}$",
-                  "description": "Grid line color as hex string"
+                  "const": "ortho"
                 },
-                "line_width": {
+                "position": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "description": "Camera position as [x, y, z]"
+                },
+                "target": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": [
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                    }
+                  ],
+                  "description": "Camera target point as [x, y, z]"
+                },
+                "up": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": [
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                    }
+                  ],
+                  "description": "Camera up vector as [x, y, z]"
+                },
+                "width": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Grid line width in world units"
+                  "description": "Viewport width in world units"
                 },
-                "cell_size": {
+                "height": {
                   "type": "number",
                   "minimum": 0,
-                  "description": "Grid cell size in world units"
+                  "description": "Viewport height in world units"
                 }
-              }
+              },
+              "required": [
+                "kind",
+                "position",
+                "target",
+                "up",
+                "width",
+                "height"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "perspective"
+                },
+                "position": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": [
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                    }
+                  ],
+                  "description": "Camera position as [x, y, z]"
+                },
+                "target": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": [
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                    }
+                  ],
+                  "description": "Camera target point as [x, y, z]"
+                },
+                "up": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "items": [
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                    },
+                    {
+                      "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                    }
+                  ],
+                  "description": "Camera up vector as [x, y, z]"
+                },
+                "width": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Viewport width in world units"
+                },
+                "height": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Viewport height in world units"
+                },
+                "fov": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 180,
+                  "description": "Field of view in degrees"
+                }
+              },
+              "required": [
+                "kind",
+                "position",
+                "target",
+                "up",
+                "width",
+                "height",
+                "fov"
+              ],
+              "additionalProperties": false
             }
           ]
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "sphere"
+                  },
+                  "center": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": [
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                      }
+                    ],
+                    "description": "Sphere center as [x, y, z]"
+                  },
+                  "radius": {
+                    "type": "number",
+                    "minimum": 0,
+                    "description": "Sphere radius"
+                  },
+                  "material": {
+                    "type": "object",
+                    "properties": {
+                      "color": {
+                        "type": "string",
+                        "pattern": "^#[0-9A-Fa-f]{6}$",
+                        "description": "Material base color as hex string"
+                      },
+                      "ambient": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Ambient reflection coefficient"
+                      },
+                      "diffuse": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Diffuse reflection coefficient"
+                      },
+                      "specular": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Specular reflection coefficient"
+                      },
+                      "shininess": {
+                        "type": "number",
+                        "minimum": 1,
+                        "description": "Phong exponent for specular highlights"
+                      },
+                      "reflectivity": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Optional reflectivity coefficient for mirror-like surfaces"
+                      },
+                      "texture": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "grid"
+                              },
+                              "line_color": {
+                                "type": "string",
+                                "pattern": "^#[0-9A-Fa-f]{6}$",
+                                "description": "Grid line color as hex string"
+                              },
+                              "line_width": {
+                                "type": "number",
+                                "minimum": 0,
+                                "description": "Grid line width in world units"
+                              },
+                              "cell_size": {
+                                "type": "number",
+                                "minimum": 0,
+                                "description": "Grid cell size in world units"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "line_color",
+                              "line_width",
+                              "cell_size"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "checkerboard"
+                              },
+                              "material_b": {
+                                "$ref": "#/definitions/Scene/properties/objects/items/anyOf/0/properties/material",
+                                "description": "Alternate material for checkerboard pattern"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "material_b"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ],
+                        "description": "Optional texture configuration"
+                      }
+                    },
+                    "required": [
+                      "color",
+                      "ambient",
+                      "diffuse",
+                      "specular",
+                      "shininess"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "transform": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Optional array of transform operations like 'rotate(x, y, z)', 'translate(x, y, z)', 'scale(x, y, z)'"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "center",
+                  "radius",
+                  "material"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "plane"
+                  },
+                  "point": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": [
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                      }
+                    ],
+                    "description": "Point on the plane as [x, y, z]"
+                  },
+                  "normal": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": [
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                      }
+                    ],
+                    "description": "Plane normal vector as [x, y, z]"
+                  },
+                  "material": {
+                    "$ref": "#/definitions/Scene/properties/objects/items/anyOf/0/properties/material"
+                  },
+                  "transform": {
+                    "$ref": "#/definitions/Scene/properties/objects/items/anyOf/0/properties/transform"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "point",
+                  "normal",
+                  "material"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "cube"
+                  },
+                  "center": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": [
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                      }
+                    ],
+                    "description": "Cube center as [x, y, z]"
+                  },
+                  "size": {
+                    "type": "array",
+                    "minItems": 3,
+                    "maxItems": 3,
+                    "items": [
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                      },
+                      {
+                        "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                      }
+                    ],
+                    "description": "Cube dimensions as [width, height, depth]"
+                  },
+                  "material": {
+                    "$ref": "#/definitions/Scene/properties/objects/items/anyOf/0/properties/material"
+                  },
+                  "transform": {
+                    "$ref": "#/definitions/Scene/properties/objects/items/anyOf/0/properties/transform"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "center",
+                  "size",
+                  "material"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "mesh"
+                  },
+                  "filename": {
+                    "type": "string",
+                    "description": "Path to STL file (binary or ASCII format)"
+                  },
+                  "material": {
+                    "$ref": "#/definitions/Scene/properties/objects/items/anyOf/0/properties/material"
+                  },
+                  "transform": {
+                    "$ref": "#/definitions/Scene/properties/objects/items/anyOf/0/properties/transform"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "filename",
+                  "material"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "description": "Array of objects in the scene"
+        },
+        "lights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "position": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": [
+                  {
+                    "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/0"
+                  },
+                  {
+                    "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/1"
+                  },
+                  {
+                    "$ref": "#/definitions/Scene/properties/camera/anyOf/0/properties/position/items/2"
+                  }
+                ],
+                "description": "Light position as [x, y, z]"
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "description": "Light color as hex string (e.g., #FFFFFF)"
+              },
+              "intensity": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Light intensity multiplier"
+              },
+              "diameter": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Optional diameter for diffuse (area) light sources. If null or omitted, the light behaves as a point light with sharp shadows. If specified, creates soft shadows."
+              }
+            },
+            "required": [
+              "position",
+              "color",
+              "intensity"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Array of light sources (point lights and diffuse area lights)"
+        },
+        "scene_settings": {
+          "type": "object",
+          "properties": {
+            "ambient_illumination": {
+              "type": "object",
+              "properties": {
+                "color": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$",
+                  "description": "Ambient light color as hex string"
+                },
+                "intensity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Ambient light intensity"
+                }
+              },
+              "required": [
+                "color",
+                "intensity"
+              ],
+              "additionalProperties": false
+            },
+            "fog": {
+              "type": "object",
+              "properties": {
+                "color": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$",
+                  "description": "Fog color as hex string"
+                },
+                "density": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Fog density factor (higher values create thicker fog)"
+                },
+                "start": {
+                  "type": "number",
+                  "description": "Distance where fog begins (near distance - objects closer are unaffected)"
+                },
+                "end": {
+                  "type": "number",
+                  "description": "Distance where fog calculation reaches maximum intensity (far distance)"
+                }
+              },
+              "required": [
+                "color",
+                "density",
+                "start",
+                "end"
+              ],
+              "additionalProperties": false,
+              "description": "Optional fog configuration"
+            },
+            "background_color": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "description": "Background color as hex string"
+            },
+            "outline": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable outline detection for the scene"
+                },
+                "depth_weight": {
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 1,
+                  "description": "Weight for depth differences in edge detection (default: 1.0)"
+                },
+                "normal_weight": {
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 1,
+                  "description": "Weight for normal differences in edge detection (default: 1.0)"
+                },
+                "threshold": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "default": 0.1,
+                  "description": "Threshold for edge detection (default: 0.1)"
+                },
+                "color": {
+                  "$ref": "#/definitions/Scene/properties/scene_settings/properties/background_color",
+                  "default": "#000000",
+                  "description": "Outline color as hex string (default: #000000 - black)"
+                },
+                "thickness": {
+                  "type": "number",
+                  "minimum": 1,
+                  "default": 1,
+                  "description": "Line thickness factor (1.0 = no thickening, >1.0 = thicker lines, default: 1.0)"
+                },
+                "use_8_neighbors": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Use 8-neighbor sampling instead of 4-neighbor (default: false for performance)"
+                }
+              },
+              "required": [
+                "enabled"
+              ],
+              "additionalProperties": false,
+              "description": "Optional outline detection configuration"
+            }
+          },
+          "required": [
+            "ambient_illumination"
+          ],
+          "additionalProperties": false
         }
-      }
+      },
+      "required": [
+        "camera",
+        "objects",
+        "lights",
+        "scene_settings"
+      ],
+      "additionalProperties": false,
+      "description": "Ray Tracer Scene - JSON schema for ray tracer scene definition files"
     }
-  }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
 }

@@ -448,13 +448,40 @@ export const formatCheck = task({
 export const clean = task({
     name: "clean",
     description: "Clean all build artifacts",
-    run: exec("cargo clean && rm -rf target/ rtrace.node *.png node_modules/.cache/")
+    run: exec("cargo clean && rm -rf target/ rtrace.node *.png node_modules/.cache/ dist/")
 });
 
 export const cleanRendered = task({
     name: "clean:rendered",
     description: "Clean rendered image files",
     run: exec("rm -f *_rendered.png *.png")
+});
+
+// Schema validation tasks
+export const schemaCompile = task({
+    name: "schema:compile",
+    description: "Compile TypeScript schema files",
+    run: exec("npx tsc")
+});
+
+export const schemaGenerate = task({
+    name: "schema:generate",
+    description: "Generate JSON schema from Zod schema",
+    dependencies: [schemaCompile],
+    run: exec("node dist/validate-schema.js --generate-schema")
+});
+
+export const schemaValidate = task({
+    name: "schema:validate",
+    description: "Validate all scene files using Zod schema",
+    dependencies: [schemaCompile],
+    run: exec("node dist/validate-schema.js --validate")
+});
+
+export const schemaAll = task({
+    name: "schema:all",
+    description: "Compile schema, generate JSON schema, and validate all files",
+    dependencies: [schemaGenerate, schemaValidate]
 });
 
 // Development workflow tasks
@@ -466,8 +493,8 @@ export const dev = task({
 
 export const ci = task({
     name: "ci", 
-    description: "CI pipeline: format check, lint, build all, and test all",
-    dependencies: [formatCheck, lint, buildAll, testAll]
+    description: "CI pipeline: format check, lint, build all, test all, and validate schema",
+    dependencies: [formatCheck, lint, buildAll, testAll, schemaValidate]
 });
 
 export const precommit = task({
