@@ -219,7 +219,8 @@ const docSceneFiles = [
     "checkerboard-advanced.json",
     "lighting-multiple.json",
     "sampling-antialiasing.json",
-    "example-complete.json"
+    "example-complete.json",
+    "outline_complex.json"
 ];
 
 // Metadata for scenes that need special command line parameters
@@ -237,6 +238,29 @@ const docSpecialScenes = [
         scene: "sampling-antialiasing.json",
         params: "--anti-aliasing no-jitter",
         description: "Demonstrates no sampling and no jitter (deterministic)"
+    }
+];
+
+// Outline demo scenes that need special handling
+const outlineDemoScenes = [
+    {
+        name: "outline-demo-no-outline",
+        scene: "outline_demo.json",
+        params: "--anti-aliasing no-jitter",
+        description: "Outline demo without outline detection",
+        modifyScene: true, // Need to remove outline config
+    },
+    {
+        name: "outline-demo-basic", 
+        scene: "outline_demo.json",
+        params: "--anti-aliasing no-jitter",
+        description: "Outline demo with basic outline detection"
+    },
+    {
+        name: "outline-demo-complex",
+        scene: "doc/scenes/outline_complex.json", 
+        params: "--anti-aliasing no-jitter",
+        description: "Complex outline demo with advanced parameters"
     }
 ];
 
@@ -299,6 +323,39 @@ for (const special of docSpecialScenes) {
     docDependencies.push(docRenderTasks[taskName]);
 }
 
+// Create tasks for outline demo scene variants
+for (const outlineDemo of outlineDemoScenes) {
+    const taskName = `renderDoc${outlineDemo.name.split('-').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join('')}`;
+    
+    let command;
+    if (outlineDemo.modifyScene) {
+        // For the no-outline variant, we need to use a scene without outline config
+        // We'll generate it on-the-fly by modifying the scene
+        const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
+        command = `node -e "
+            const fs = require('fs');
+            const scene = JSON.parse(fs.readFileSync('${sceneBasePath}', 'utf8'));
+            if (scene.scene_settings && scene.scene_settings.outline) {
+                delete scene.scene_settings.outline;
+            }
+            fs.writeFileSync('/tmp/${outlineDemo.name}.json', JSON.stringify(scene, null, 2));
+        " && ./target/release/rtrace -i /tmp/${outlineDemo.name}.json -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+    } else {
+        const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
+        command = `./target/release/rtrace -i ${sceneBasePath} -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+    }
+    
+    docRenderTasks[taskName] = task({
+        name: `render:doc:${outlineDemo.name}`,
+        description: outlineDemo.description,
+        dependencies: [buildCli],
+        run: exec(command)
+    });
+    docDependencies.push(docRenderTasks[taskName]);
+}
+
 // Create tasks for multi-file scenes
 for (const scene of docMultiFileScenes) {
     const taskName = `renderDoc${scene.name.split('-').map(word => 
@@ -335,8 +392,12 @@ export const renderDocLightingMultiple = docRenderTasks.renderDocLightingMultipl
 export const renderDocSamplingAntialiasing = docRenderTasks.renderDocSamplingAntialiasing;
 export const renderDocSamplingAntialiasingNosamples = docRenderTasks.renderDocSamplingAntialiasingNosamples;
 export const renderDocExampleComplete = docRenderTasks.renderDocExampleComplete;
+export const renderDocOutlineComplex = docRenderTasks.renderDocOutlineComplex;
 export const renderDocSceneBackgrounds = docRenderTasks.renderDocSceneBackgrounds;
 export const renderDocSceneFog = docRenderTasks.renderDocSceneFog;
+export const renderDocOutlineDemoNoOutline = docRenderTasks.renderDocOutlineDemoNoOutline;
+export const renderDocOutlineDemoBasic = docRenderTasks.renderDocOutlineDemoBasic;
+export const renderDocOutlineDemoComplex = docRenderTasks.renderDocOutlineDemoComplex;
 
 export const renderDocAll = task({
     name: "render:doc:all", 

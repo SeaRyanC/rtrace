@@ -8,6 +8,7 @@ use std::time::Instant;
 
 use crate::camera::Camera;
 use crate::lighting::{ray_color, ray_color_with_camera};
+use crate::outline::{apply_outline_detection, OutlineBuffers, OutlineConfig};
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
 
@@ -22,6 +23,17 @@ pub enum AntiAliasingMode {
     Stochastic,
 }
 
+/// Context for rendering operations
+struct RenderContext<'a> {
+    ambient: &'a crate::scene::AmbientIllumination,
+    fog: &'a Option<crate::scene::Fog>,
+    camera_pos: &'a Point,
+    background_color: Color,
+}
+
+/// Type alias for pixel rendering results with outline data
+type PixelRenderResult = (u32, u32, Color, Option<f64>, Option<Vec3>);
+
 pub struct Renderer {
     pub width: u32,
     pub height: u32,
@@ -31,6 +43,7 @@ pub struct Renderer {
     pub samples: u32,     // Number of samples per pixel for stochastic subsampling
     pub anti_aliasing_mode: AntiAliasingMode, // Anti-aliasing sampling mode
     pub seed: Option<u64>, // Seed for deterministic randomness (None = use default seed)
+    pub outline_config: Option<OutlineConfig>, // Optional outline detection configuration
 }
 
 impl Renderer {
@@ -44,6 +57,7 @@ impl Renderer {
             samples: 1,         // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
             seed: Some(0),      // Default to deterministic seed for reproducibility
+            outline_config: None, // No outline detection by default
         }
     }
 
@@ -58,6 +72,7 @@ impl Renderer {
             samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
+            outline_config: None, // No outline detection by default
         }
     }
 
@@ -72,6 +87,7 @@ impl Renderer {
             samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
+            outline_config: None, // No outline detection by default
         }
     }
 
@@ -91,7 +107,14 @@ impl Renderer {
             samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
             anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
+            outline_config: None, // No outline detection by default
         }
+    }
+
+    /// Enable outline detection with the given configuration
+    pub fn with_outline_detection(mut self, config: OutlineConfig) -> Self {
+        self.outline_config = Some(config);
+        self
     }
 
     pub fn render(&self, scene: &Scene) -> Result<RgbImage, Box<dyn std::error::Error>> {
@@ -301,7 +324,7 @@ impl Renderer {
                 .map_err(|e| format!("Failed to create thread pool: {}", e))?;
 
             // Use the thread pool for rendering
-            let image_data = pool.install(|| {
+            let (image_data, outline_buffers) = pool.install(|| {
                 self.render_parallel(
                     &world,
                     &camera,
@@ -315,7 +338,14 @@ impl Renderer {
             });
 
             let total_time = render_start_time.elapsed();
-            let image = self.create_image_from_data(image_data);
+            let mut final_image_data = image_data;
+            
+            // Apply outline detection if configured
+            if let (Some(outline_config), Some(buffers)) = (&self.outline_config, outline_buffers) {
+                apply_outline_detection(&mut final_image_data, &buffers, outline_config);
+            }
+            
+            let image = self.create_image_from_data(final_image_data);
             println!(
                 "Total rendering time: {}",
                 format_duration(total_time.as_secs_f64())
@@ -323,7 +353,7 @@ impl Renderer {
             Ok(image)
         } else {
             // Use default parallel rendering with all available cores
-            let image_data = self.render_parallel(
+            let (image_data, outline_buffers) = self.render_parallel(
                 &world,
                 &camera,
                 &scene.lights,
@@ -335,7 +365,14 @@ impl Renderer {
             );
 
             let total_time = render_start_time.elapsed();
-            let image = self.create_image_from_data(image_data);
+            let mut final_image_data = image_data;
+            
+            // Apply outline detection if configured
+            if let (Some(outline_config), Some(buffers)) = (&self.outline_config, outline_buffers) {
+                apply_outline_detection(&mut final_image_data, &buffers, outline_config);
+            }
+            
+            let image = self.create_image_from_data(final_image_data);
             println!(
                 "Total rendering time: {}",
                 format_duration(total_time.as_secs_f64())
@@ -355,28 +392,52 @@ impl Renderer {
         camera_pos: &Point,
         background_color: Color,
         materials: &HashMap<usize, crate::scene::Material>,
-    ) -> Vec<(u32, u32, Color)> {
+    ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
         match self.anti_aliasing_mode {
-            AntiAliasingMode::Quincunx => self.render_quincunx(
-                world,
-                camera,
-                lights,
-                ambient,
-                fog,
-                camera_pos,
-                background_color,
-                materials,
-            ),
-            _ => self.render_standard(
-                world,
-                camera,
-                lights,
-                ambient,
-                fog,
-                camera_pos,
-                background_color,
-                materials,
-            ),
+            AntiAliasingMode::Quincunx => {
+                let image_data = self.render_quincunx(
+                    world,
+                    camera,
+                    lights,
+                    ambient,
+                    fog,
+                    camera_pos,
+                    background_color,
+                    materials,
+                );
+                
+                // For now, quincunx mode doesn't support outline detection due to shared samples
+                (image_data, None)
+            },
+            _ => {
+                if self.outline_config.is_some() {
+                    let render_context = RenderContext {
+                        ambient,
+                        fog,
+                        camera_pos,
+                        background_color,
+                    };
+                    self.render_standard_with_outline(
+                        world,
+                        camera,
+                        lights,
+                        &render_context,
+                        materials,
+                    )
+                } else {
+                    let image_data = self.render_standard(
+                        world,
+                        camera,
+                        lights,
+                        ambient,
+                        fog,
+                        camera_pos,
+                        background_color,
+                        materials,
+                    );
+                    (image_data, None)
+                }
+            },
         }
     }
 
@@ -520,6 +581,171 @@ impl Renderer {
             .collect();
 
         results
+    }
+
+    fn render_standard_with_outline(
+        &self,
+        world: &World,
+        camera: &Camera,
+        lights: &[crate::scene::Light],
+        render_context: &RenderContext,
+        materials: &HashMap<usize, crate::scene::Material>,
+    ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
+        use crate::lighting::ray_color_with_data;
+        
+        // Create a vector of all pixel coordinates
+        let pixels: Vec<(u32, u32)> = (0..self.height)
+            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+            .collect();
+
+        // Progress tracking setup
+        let total_pixels = self.width * self.height;
+        let progress_step = (total_pixels / 10).max(1);
+        let completed_pixels = AtomicUsize::new(0);
+        let progress_mutex = Mutex::new(());
+        let start_time = Instant::now();
+
+        // Render pixels in parallel and collect outline data
+        let results: Vec<PixelRenderResult> = pixels
+            .par_iter()
+            .map(|&(x, y)| {
+                // Calculate base pixel coordinates
+                let pixel_u = x as f64 / (self.width - 1) as f64;
+                let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
+
+                // Calculate pixel size in UV coordinates
+                let pixel_width = 1.0 / (self.width - 1) as f64;
+                let pixel_height = 1.0 / (self.height - 1) as f64;
+
+                // Collect samples for this pixel
+                let mut total_color = Color::new(0.0, 0.0, 0.0);
+                let mut pixel_depth = None;
+                let mut pixel_normal = None;
+
+                // Create deterministic RNG seeded by pixel coordinates and global seed
+                let pixel_seed = self
+                    .seed
+                    .unwrap_or(0)
+                    .wrapping_mul(0x9E3779B97F4A7C15_u64)
+                    .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
+                    .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
+                let mut rng = rand::rngs::StdRng::seed_from_u64(pixel_seed);
+
+                for sample in 0..self.samples {
+                    let (sample_u, sample_v) = match self.anti_aliasing_mode {
+                        AntiAliasingMode::NoJitter => {
+                            // No jittering: sample at exact pixel center
+                            (pixel_u, pixel_v)
+                        }
+                        AntiAliasingMode::Stochastic => {
+                            if self.samples == 1 {
+                                // Single sample with random jitter within pixel bounds
+                                let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                                let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                                (
+                                    pixel_u + jitter_u * pixel_width,
+                                    pixel_v + jitter_v * pixel_height,
+                                )
+                            } else {
+                                // Multiple samples: radially symmetric pattern with random phase
+                                let angle = 2.0 * std::f64::consts::PI * sample as f64
+                                    / self.samples as f64;
+                                let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
+                                let rotated_angle = angle + random_phase;
+
+                                // Use a smaller radius to keep samples within pixel bounds
+                                let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
+                                let jitter_u = radius * rotated_angle.cos();
+                                let jitter_v = radius * rotated_angle.sin();
+
+                                (
+                                    pixel_u + jitter_u * pixel_width,
+                                    pixel_v + jitter_v * pixel_height,
+                                )
+                            }
+                        }
+                        AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
+                    };
+
+                    let ray = camera.get_ray(sample_u, sample_v);
+
+                    // Create sample-specific seed for ray tracing consistency
+                    let sample_seed =
+                        pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED));
+
+                    let (sample_color, sample_depth, sample_normal) = ray_color_with_data(
+                        &ray,
+                        world,
+                        lights,
+                        render_context.ambient,
+                        render_context.fog,
+                        render_context.camera_pos,
+                        render_context.background_color,
+                        materials,
+                        self.max_depth,
+                        Some(camera),
+                        sample_seed,
+                    );
+
+                    total_color += sample_color;
+                    
+                    // For outline detection, we want the closest depth and corresponding normal
+                    if let (Some(depth), Some(normal)) = (sample_depth, sample_normal) {
+                        if pixel_depth.is_none() || depth < pixel_depth.unwrap() {
+                            pixel_depth = Some(depth);
+                            pixel_normal = Some(normal);
+                        }
+                    }
+                }
+
+                // Average the samples
+                let color = total_color / self.samples as f64;
+
+                // Update progress tracking
+                let current_completed = completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
+
+                // Print progress periodically with thread-safe output
+                if current_completed % progress_step as usize == 0
+                    || current_completed == total_pixels as usize
+                {
+                    if let Ok(_guard) = progress_mutex.lock() {
+                        let progress = (current_completed as f64 / total_pixels as f64) * 100.0;
+                        let elapsed = start_time.elapsed();
+
+                        if current_completed == total_pixels as usize {
+                            // Final progress update
+                            println!("Rendering: 100.0%");
+                        } else if progress > 0.0 {
+                            // Calculate estimated time remaining
+                            let estimated_total_time = elapsed.as_secs_f64()
+                                / (current_completed as f64 / total_pixels as f64);
+                            let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
+                            let eta_formatted = format_duration(estimated_remaining);
+                            println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
+                        }
+                    }
+                }
+
+                (x, y, color, pixel_depth, pixel_normal)
+            })
+            .collect();
+
+        // Separate color data and outline data
+        let mut image_data = Vec::new();
+        let mut outline_buffers = OutlineBuffers::new(self.width, self.height);
+        
+        for (x, y, color, depth, normal) in results {
+            image_data.push((x, y, color));
+            
+            if let Some(depth) = depth {
+                outline_buffers.set_depth(x, y, depth);
+            }
+            if let Some(normal) = normal {
+                outline_buffers.set_normal(x, y, normal);
+            }
+        }
+
+        (image_data, Some(outline_buffers))
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -377,12 +377,52 @@ pub struct Fog {
     pub end: f64,
 }
 
+/// Outline detection settings
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct OutlineSettings {
+    pub enabled: bool,
+    #[serde(default = "default_outline_depth_weight")]
+    pub depth_weight: f64,
+    #[serde(default = "default_outline_normal_weight")]
+    pub normal_weight: f64,
+    #[serde(default = "default_outline_threshold")]
+    pub threshold: f64,
+    #[serde(default = "default_outline_color")]
+    pub color: String, // hex color
+    #[serde(default = "default_outline_thickness")]
+    pub thickness: f64,
+    #[serde(default = "default_outline_use_8_neighbors")]
+    pub use_8_neighbors: bool,
+}
+
+fn default_outline_depth_weight() -> f64 { 1.0 }
+fn default_outline_normal_weight() -> f64 { 1.0 }
+fn default_outline_threshold() -> f64 { 0.1 }
+fn default_outline_color() -> String { "#000000".to_string() }
+fn default_outline_thickness() -> f64 { 1.0 }
+fn default_outline_use_8_neighbors() -> bool { false }
+
+impl Default for OutlineSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            depth_weight: 1.0,
+            normal_weight: 1.0,
+            threshold: 0.1,
+            color: "#000000".to_string(),
+            thickness: 1.0,
+            use_8_neighbors: false,
+        }
+    }
+}
+
 /// Scene settings
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SceneSettings {
     pub ambient_illumination: AmbientIllumination,
     pub fog: Option<Fog>,
     pub background_color: Option<String>, // hex color
+    pub outline: Option<OutlineSettings>,
 }
 
 impl Default for SceneSettings {
@@ -391,6 +431,7 @@ impl Default for SceneSettings {
             ambient_illumination: AmbientIllumination::default(),
             fog: None,
             background_color: Some("#000000".to_string()),
+            outline: None,
         }
     }
 }
@@ -468,6 +509,28 @@ impl Scene {
         let json = serde_json::to_string_pretty(self)?;
         std::fs::write(path, json)?;
         Ok(())
+    }
+
+    /// Get outline configuration from scene settings
+    pub fn get_outline_config(&self) -> Result<Option<crate::outline::OutlineConfig>, String> {
+        if let Some(outline_settings) = &self.scene_settings.outline {
+            if outline_settings.enabled {
+                let edge_color = hex_to_color(&outline_settings.color)?;
+                let outline_config = crate::outline::OutlineConfig {
+                    depth_weight: outline_settings.depth_weight,
+                    normal_weight: outline_settings.normal_weight,
+                    threshold: outline_settings.threshold,
+                    edge_color,
+                    use_8_neighbors: outline_settings.use_8_neighbors,
+                    line_thickness: outline_settings.thickness,
+                };
+                Ok(Some(outline_config))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
     }
 
     /// Compute the bounding box of all finite objects in the scene

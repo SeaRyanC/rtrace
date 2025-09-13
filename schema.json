@@ -231,6 +231,52 @@
           "type": "string",
           "pattern": "^#[0-9A-Fa-f]{6}$",
           "description": "Background color as hex string"
+        },
+        "outline": {
+          "type": "object",
+          "required": ["enabled"],
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable outline detection for the scene"
+            },
+            "depth_weight": {
+              "type": "number",
+              "minimum": 0,
+              "default": 1.0,
+              "description": "Weight for depth differences in edge detection (default: 1.0)"
+            },
+            "normal_weight": {
+              "type": "number",
+              "minimum": 0,
+              "default": 1.0,
+              "description": "Weight for normal differences in edge detection (default: 1.0)"
+            },
+            "threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "default": 0.1,
+              "description": "Threshold for edge detection (default: 0.1)"
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$",
+              "default": "#000000",
+              "description": "Outline color as hex string (default: #000000 - black)"
+            },
+            "thickness": {
+              "type": "number",
+              "minimum": 1.0,
+              "default": 1.0,
+              "description": "Line thickness factor (1.0 = no thickening, >1.0 = thicker lines, default: 1.0)"
+            },
+            "use_8_neighbors": {
+              "type": "boolean",
+              "default": false,
+              "description": "Use 8-neighbor sampling instead of 4-neighbor (default: false for performance)"
+            }
+          }
         }
       }
     }

@@ -2,6 +2,7 @@ pub mod auto_camera;
 pub mod camera;
 pub mod lighting;
 pub mod mesh;
+pub mod outline;
 pub mod ray;
 pub mod renderer;
 /// Ray tracing library for rtrace
@@ -18,6 +19,7 @@ pub mod scene;
 
 pub use auto_camera::{AutoCamera, AutoCameraResult};
 pub use mesh::{Mesh, Triangle};
+pub use outline::{OutlineBuffers, OutlineConfig};
 pub use renderer::{AntiAliasingMode, Renderer};
 pub use scene::{
     AmbientIllumination, Camera, Fog, Light, Material, Object, Scene, SceneSettings, Texture,
