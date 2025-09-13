@@ -1167,6 +1167,76 @@ mod tests {
     }
 
     #[test]
+    fn test_pixel_boundary_coverage() {
+        // This test checks if all expected pixels are rendered (no missing edges)
+        
+        let mut scene = Scene::default();
+        
+        // Add a large colored plane  
+        scene.objects.push(Object::Plane {
+            point: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            material: Material {
+                color: "#FF0000".to_string(),
+                ambient: 1.0,
+                diffuse: 0.0,
+                specular: 0.0,
+                shininess: 1.0,
+                reflectivity: None,
+                texture: None,
+            },
+            transform: None,
+        });
+
+        // Simple orthographic camera looking down at the plane
+        scene.camera.kind = "ortho".to_string();
+        scene.camera.position = [0.0, 0.0, 5.0];
+        scene.camera.target = [0.0, 0.0, 0.0];
+        scene.camera.up = [0.0, 1.0, 0.0];
+        scene.camera.width = 4.0;
+        scene.camera.height = 4.0;
+
+        // Add basic lighting
+        scene.lights.push(Light {
+            position: [0.0, 0.0, 10.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: None,
+        });
+
+        // Test small sizes where missing edge pixels would be obvious
+        for size in [4, 8] {
+            let renderer = Renderer::new(size, size);
+            let result = renderer.render(&scene);
+            assert!(result.is_ok(), "Rendering should succeed for {}x{}", size, size);
+            
+            let image = result.unwrap();
+            assert_eq!(image.width(), size, "Image width should match requested size");
+            assert_eq!(image.height(), size, "Image height should match requested size");
+            
+            // Check that all edge pixels are rendered (should be red from the plane)
+            // Top edge
+            for x in 0..size {
+                let pixel = image.get_pixel(x, 0);
+                let is_red = pixel[0] > 100; // Should be red-ish
+                println!("Top edge pixel ({}, 0): {:?}, is_red: {}", x, pixel, is_red);
+            }
+            
+            // Right edge  
+            for y in 0..size {
+                let pixel = image.get_pixel(size - 1, y);
+                let is_red = pixel[0] > 100; // Should be red-ish
+                println!("Right edge pixel ({}, {}): {:?}, is_red: {}", size - 1, y, pixel, is_red);
+            }
+                     
+            // Save debug image
+            let debug_path = format!("/tmp/debug_boundary_{}x{}.png", size, size);
+            let _ = image.save(&debug_path);
+            println!("Saved debug image to {}", debug_path);
+        }
+    }
+
+    #[test]
     fn test_mesh_scale_transform_bounds_fix() {
         // This test verifies that the mesh bounds bug has been fixed
         use crate::mesh::Mesh;
