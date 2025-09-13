@@ -155,7 +155,7 @@ fn calculate_diffuse_light_contribution(
     seed: u64,
 ) -> Color {
     // Number of samples to take on the light disk
-    const SAMPLES: u32 = 16;
+    const SAMPLES: u32 = 64;
 
     // Create deterministic RNG seeded by hit point coordinates and global seed
     let light_seed = seed

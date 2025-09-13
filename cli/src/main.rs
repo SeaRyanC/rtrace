@@ -26,8 +26,8 @@ struct Args {
     #[arg(long)]
     samples: Option<u32>,
 
-    /// Anti-aliasing mode: stochastic (default) or no-jitter
-    #[arg(long, default_value = "stochastic")]
+    /// Anti-aliasing mode: no-jitter (default) or stochastic
+    #[arg(long, default_value = "no-jitter")]
     anti_aliasing: String,
 }
 
@@ -42,10 +42,10 @@ fn main() {
 
     // Parse anti-aliasing mode
     let anti_aliasing_mode = match args.anti_aliasing.as_str() {
-        "stochastic" => AntiAliasingMode::Stochastic,
         "no-jitter" => AntiAliasingMode::NoJitter,
+        "stochastic" => AntiAliasingMode::Stochastic,
         _ => {
-            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: stochastic, no-jitter", args.anti_aliasing);
+            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: no-jitter, stochastic", args.anti_aliasing);
             std::process::exit(1);
         }
     };

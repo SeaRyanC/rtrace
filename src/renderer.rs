@@ -54,7 +54,7 @@ impl Renderer {
             use_kdtree: true,   // Default to using k-d tree
             thread_count: None, // Use all available cores by default
             samples: 1,         // Default to 1 sample per pixel
-            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
+            anti_aliasing_mode: AntiAliasingMode::NoJitter, // Default to no anti-aliasing
             seed: Some(0),      // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
             use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
@@ -70,7 +70,7 @@ impl Renderer {
             use_kdtree: false,                              // Disable k-d tree
             thread_count: None,                             // Use all available cores by default
             samples: 1, // Default to 1 sample per pixel
-            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
+            anti_aliasing_mode: AntiAliasingMode::NoJitter, // Default to no anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
             use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
@@ -86,7 +86,7 @@ impl Renderer {
             use_kdtree: true,
             thread_count: Some(thread_count),
             samples: 1, // Default to 1 sample per pixel
-            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
+            anti_aliasing_mode: AntiAliasingMode::NoJitter, // Default to no anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
             use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
@@ -107,7 +107,7 @@ impl Renderer {
             use_kdtree,
             thread_count,
             samples: 1, // Default to 1 sample per pixel
-            anti_aliasing_mode: AntiAliasingMode::Stochastic, // Default to stochastic anti-aliasing
+            anti_aliasing_mode: AntiAliasingMode::NoJitter, // Default to no anti-aliasing
             seed: Some(0), // Default to deterministic seed for reproducibility
             outline_config: None, // No outline detection by default
             use_quincunx_downsampling: true, // Default to quincunx downsampling for better quality
@@ -860,7 +860,7 @@ mod tests {
         assert_eq!(renderer.width, 800);
         assert_eq!(renderer.height, 600);
         assert_eq!(renderer.thread_count, None);
-        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Stochastic);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::NoJitter);
         assert_eq!(renderer.samples, 1); // Default to 1 sample per pixel
         assert_eq!(renderer.use_quincunx_downsampling, true); // Default to quincunx downsampling
 
@@ -869,7 +869,7 @@ mod tests {
         assert_eq!(renderer_threaded.thread_count, Some(4));
         assert_eq!(
             renderer_threaded.anti_aliasing_mode,
-            AntiAliasingMode::Stochastic
+            AntiAliasingMode::NoJitter
         );
     }
 
@@ -1136,7 +1136,7 @@ mod tests {
 
         // Test deterministic downsampling (which should also be deterministic)
         let mut renderer = Renderer::new(50, 50);
-        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::Stochastic);
+        assert_eq!(renderer.anti_aliasing_mode, AntiAliasingMode::NoJitter);
         assert_eq!(renderer.use_quincunx_downsampling, true);
         renderer.seed = Some(123);
 
