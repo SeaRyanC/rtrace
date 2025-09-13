@@ -236,7 +236,7 @@ for (let i = 0; i < buffer.length / 4; i++) {
     // Skip alpha channel for RGB PNG
 }
 
-const outputPath = path.join(__dirname, 'js-buffer-manipulation-demo.png');
+const outputPath = path.join(__dirname, 'images', 'js-buffer-manipulation-demo.png');
 const pngBuffer = PNG.sync.write(png);
 fs.writeFileSync(outputPath, pngBuffer);
 

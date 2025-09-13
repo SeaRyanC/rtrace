@@ -1017,7 +1017,7 @@ This comprehensive example demonstrates:
 
 **Sample Output:**
 
-![JavaScript Buffer Manipulation Demo](js-buffer-manipulation-demo.png)
+![JavaScript Buffer Manipulation Demo](images/js-buffer-manipulation-demo.png)
 
 The resulting image shows the power of direct buffer access:
 - **Right Half**: Original rendered scene with reflections and fog
