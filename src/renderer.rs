@@ -112,10 +112,12 @@ impl SamplingHelper {
     
     /// Calculate base pixel coordinates
     fn calculate_pixel_coords(x: u32, y: u32, width: u32, height: u32) -> (f64, f64, f64, f64) {
-        let pixel_u = x as f64 / (width - 1) as f64;
-        let pixel_v = (height - 1 - y) as f64 / (height - 1) as f64; // Flip Y coordinate
-        let pixel_width = 1.0 / (width - 1) as f64;
-        let pixel_height = 1.0 / (height - 1) as f64;
+        // Use pixel-center sampling instead of edge-to-edge sampling
+        // This ensures pixels cover the full [0,1] x [0,1] UV space without going outside it
+        let pixel_u = (x as f64 + 0.5) / width as f64;
+        let pixel_v = (height as f64 - y as f64 - 0.5) / height as f64; // Flip Y coordinate
+        let pixel_width = 1.0 / width as f64;
+        let pixel_height = 1.0 / height as f64;
         
         (pixel_u, pixel_v, pixel_width, pixel_height)
     }
@@ -1167,73 +1169,38 @@ mod tests {
     }
 
     #[test]
-    fn test_pixel_boundary_coverage() {
-        // This test checks if all expected pixels are rendered (no missing edges)
+    fn test_pixel_coordinate_mapping_fix() {
+        // This test specifically validates that the pixel coordinate fix
+        // correctly maps pixels to UV coordinates using pixel-center sampling
         
-        let mut scene = Scene::default();
+        // Test coordinate calculation for a 4x4 image
+        let width = 4;
+        let height = 4;
         
-        // Add a large colored plane  
-        scene.objects.push(Object::Plane {
-            point: [0.0, 0.0, 0.0],
-            normal: [0.0, 0.0, 1.0],
-            material: Material {
-                color: "#FF0000".to_string(),
-                ambient: 1.0,
-                diffuse: 0.0,
-                specular: 0.0,
-                shininess: 1.0,
-                reflectivity: None,
-                texture: None,
-            },
-            transform: None,
-        });
-
-        // Simple orthographic camera looking down at the plane
-        scene.camera.kind = "ortho".to_string();
-        scene.camera.position = [0.0, 0.0, 5.0];
-        scene.camera.target = [0.0, 0.0, 0.0];
-        scene.camera.up = [0.0, 1.0, 0.0];
-        scene.camera.width = 4.0;
-        scene.camera.height = 4.0;
-
-        // Add basic lighting
-        scene.lights.push(Light {
-            position: [0.0, 0.0, 10.0],
-            color: "#FFFFFF".to_string(),
-            intensity: 1.0,
-            diameter: None,
-        });
-
-        // Test small sizes where missing edge pixels would be obvious
-        for size in [4, 8] {
-            let renderer = Renderer::new(size, size);
-            let result = renderer.render(&scene);
-            assert!(result.is_ok(), "Rendering should succeed for {}x{}", size, size);
-            
-            let image = result.unwrap();
-            assert_eq!(image.width(), size, "Image width should match requested size");
-            assert_eq!(image.height(), size, "Image height should match requested size");
-            
-            // Check that all edge pixels are rendered (should be red from the plane)
-            // Top edge
-            for x in 0..size {
-                let pixel = image.get_pixel(x, 0);
-                let is_red = pixel[0] > 100; // Should be red-ish
-                println!("Top edge pixel ({}, 0): {:?}, is_red: {}", x, pixel, is_red);
+        // Test corner pixels
+        let (u0, v0, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 0, width, height);
+        let (u3, v3, _pw, _ph) = SamplingHelper::calculate_pixel_coords(3, 3, width, height);
+        
+        // With pixel-center sampling:
+        // - Top-left pixel (0,0) should map to UV (0.125, 0.875) 
+        // - Bottom-right pixel (3,3) should map to UV (0.875, 0.125)
+        
+        assert!((u0 - 0.125).abs() < 1e-10, "Top-left U coordinate should be 0.125, got {}", u0);
+        assert!((v0 - 0.875).abs() < 1e-10, "Top-left V coordinate should be 0.875, got {}", v0);
+        
+        assert!((u3 - 0.875).abs() < 1e-10, "Bottom-right U coordinate should be 0.875, got {}", u3);
+        assert!((v3 - 0.125).abs() < 1e-10, "Bottom-right V coordinate should be 0.125, got {}", v3);
+        
+        // Test that UV coordinates stay within [0,1] range for all pixels
+        for y in 0..height {
+            for x in 0..width {
+                let (u, v, _pw, _ph) = SamplingHelper::calculate_pixel_coords(x, y, width, height);
+                assert!(u >= 0.0 && u <= 1.0, "U coordinate {} for pixel ({},{}) should be in [0,1]", u, x, y);
+                assert!(v >= 0.0 && v <= 1.0, "V coordinate {} for pixel ({},{}) should be in [0,1]", v, x, y);
             }
-            
-            // Right edge  
-            for y in 0..size {
-                let pixel = image.get_pixel(size - 1, y);
-                let is_red = pixel[0] > 100; // Should be red-ish
-                println!("Right edge pixel ({}, {}): {:?}, is_red: {}", size - 1, y, pixel, is_red);
-            }
-                     
-            // Save debug image
-            let debug_path = format!("/tmp/debug_boundary_{}x{}.png", size, size);
-            let _ = image.save(&debug_path);
-            println!("Saved debug image to {}", debug_path);
         }
+        
+        println!("✓ Pixel coordinate mapping test passed");
     }
 
     #[test]
