@@ -31,8 +31,148 @@ struct RenderContext<'a> {
     background_color: Color,
 }
 
+/// Progress tracking helper
+struct ProgressTracker {
+    total_pixels: u32,
+    progress_step: usize,
+    completed_pixels: AtomicUsize,
+    progress_mutex: Mutex<()>,
+    start_time: Instant,
+}
+
+impl ProgressTracker {
+    fn new(total_pixels: u32) -> Self {
+        let progress_step = (total_pixels / 10).max(1) as usize;
+        
+        Self {
+            total_pixels,
+            progress_step,
+            completed_pixels: AtomicUsize::new(0),
+            progress_mutex: Mutex::new(()),
+            start_time: Instant::now(),
+        }
+    }
+    
+    fn update_progress(&self) {
+        let current_completed = self.completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
+
+        // Print progress periodically with thread-safe output
+        if current_completed % self.progress_step == 0
+            || current_completed == self.total_pixels as usize
+        {
+            if let Ok(_guard) = self.progress_mutex.lock() {
+                let progress = (current_completed as f64 / self.total_pixels as f64) * 100.0;
+                let elapsed = self.start_time.elapsed();
+
+                if current_completed == self.total_pixels as usize {
+                    // Final progress update
+                    println!("Rendering: 100.0%");
+                } else if progress > 0.0 {
+                    // Only show ETA if we have enough elapsed time for a reliable estimate
+                    if elapsed.as_secs_f64() >= 1.0 {
+                        // Calculate estimated time remaining
+                        let estimated_total_time = elapsed.as_secs_f64()
+                            / (current_completed as f64 / self.total_pixels as f64);
+                        let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
+                        
+                        // Only show ETA if it's at least 1 second to avoid showing "0s"
+                        if estimated_remaining >= 1.0 {
+                            let eta_formatted = format_duration(estimated_remaining);
+                            println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
+                        } else {
+                            // Show progress without ETA for estimates less than 1 second
+                            println!("Rendering: {:.1}%", progress);
+                        }
+                    } else {
+                        // Show progress without ETA for early estimates
+                        println!("Rendering: {:.1}%", progress);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Type alias for pixel rendering results with outline data
 type PixelRenderResult = (u32, u32, Color, Option<f64>, Option<Vec3>);
+
+/// Helper struct for sampling calculations
+struct SamplingHelper;
+
+impl SamplingHelper {
+    /// Create a deterministic RNG seeded by pixel coordinates and global seed
+    fn create_pixel_rng(x: u32, y: u32, seed: Option<u64>) -> rand::rngs::StdRng {
+        let pixel_seed = seed
+            .unwrap_or(0)
+            .wrapping_mul(0x9E3779B97F4A7C15_u64)
+            .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
+            .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
+        rand::rngs::StdRng::seed_from_u64(pixel_seed)
+    }
+    
+    /// Calculate base pixel coordinates
+    fn calculate_pixel_coords(x: u32, y: u32, width: u32, height: u32) -> (f64, f64, f64, f64) {
+        let pixel_u = x as f64 / (width - 1) as f64;
+        let pixel_v = (height - 1 - y) as f64 / (height - 1) as f64; // Flip Y coordinate
+        let pixel_width = 1.0 / (width - 1) as f64;
+        let pixel_height = 1.0 / (height - 1) as f64;
+        
+        (pixel_u, pixel_v, pixel_width, pixel_height)
+    }
+    
+    /// Calculate sample coordinates for anti-aliasing
+    #[allow(clippy::too_many_arguments)]
+    fn calculate_sample_coords(
+        anti_aliasing_mode: &AntiAliasingMode,
+        samples: u32,
+        sample: u32,
+        pixel_u: f64,
+        pixel_v: f64,
+        pixel_width: f64,
+        pixel_height: f64,
+        rng: &mut rand::rngs::StdRng,
+    ) -> (f64, f64) {
+        match anti_aliasing_mode {
+            AntiAliasingMode::NoJitter => {
+                // No jittering: sample at exact pixel center
+                (pixel_u, pixel_v)
+            }
+            AntiAliasingMode::Stochastic => {
+                if samples == 1 {
+                    // Single sample with random jitter within pixel bounds
+                    let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                    let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
+                    (
+                        pixel_u + jitter_u * pixel_width,
+                        pixel_v + jitter_v * pixel_height,
+                    )
+                } else {
+                    // Multiple samples: radially symmetric pattern with random phase
+                    let angle = 2.0 * std::f64::consts::PI * sample as f64
+                        / samples as f64;
+                    let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
+                    let rotated_angle = angle + random_phase;
+
+                    // Use a smaller radius to keep samples within pixel bounds
+                    let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
+                    let jitter_u = radius * rotated_angle.cos();
+                    let jitter_v = radius * rotated_angle.sin();
+
+                    (
+                        pixel_u + jitter_u * pixel_width,
+                        pixel_v + jitter_v * pixel_height,
+                    )
+                }
+            }
+            AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
+        }
+    }
+    
+    /// Create a sample-specific seed for ray tracing consistency
+    fn create_sample_seed(pixel_seed: u64, sample: u32) -> u64 {
+        pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED))
+    }
+}
 
 pub struct Renderer {
     pub width: u32,
@@ -48,47 +188,17 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(width: u32, height: u32) -> Self {
-        Self {
-            width,
-            height,
-            max_depth: 10,
-            use_kdtree: true,   // Default to using k-d tree
-            thread_count: None, // Use all available cores by default
-            samples: 1,         // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
-            seed: Some(0),      // Default to deterministic seed for reproducibility
-            outline_config: None, // No outline detection by default
-        }
+        Self::new_with_options(width, height, true, None)
     }
 
     /// Create a renderer with k-d tree disabled (brute force mesh intersection)
     pub fn new_brute_force(width: u32, height: u32) -> Self {
-        Self {
-            width,
-            height,
-            max_depth: 10,
-            use_kdtree: false,                              // Disable k-d tree
-            thread_count: None,                             // Use all available cores by default
-            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
-            seed: Some(0), // Default to deterministic seed for reproducibility
-            outline_config: None, // No outline detection by default
-        }
+        Self::new_with_options(width, height, false, None)
     }
 
     /// Create a renderer with a specific thread count
     pub fn new_with_threads(width: u32, height: u32, thread_count: usize) -> Self {
-        Self {
-            width,
-            height,
-            max_depth: 10,
-            use_kdtree: true,
-            thread_count: Some(thread_count),
-            samples: 1, // Default to 1 sample (quincunx adds shared corner samples)
-            anti_aliasing_mode: AntiAliasingMode::Quincunx, // Default to quincunx anti-aliasing
-            seed: Some(0), // Default to deterministic seed for reproducibility
-            outline_config: None, // No outline detection by default
-        }
+        Self::new_with_options(width, height, true, Some(thread_count))
     }
 
     /// Create a renderer with specific thread count and k-d tree settings
@@ -459,77 +569,42 @@ impl Renderer {
             .collect();
 
         // Progress tracking setup
-        let total_pixels = self.width * self.height;
-        let progress_step = (total_pixels / 10).max(1);
-        let completed_pixels = AtomicUsize::new(0);
-        let progress_mutex = Mutex::new(());
-        let start_time = Instant::now();
+        let progress_tracker = ProgressTracker::new(self.width * self.height);
 
         // Render pixels in parallel
         let results: Vec<(u32, u32, Color)> = pixels
             .par_iter()
             .map(|&(x, y)| {
-                // Calculate base pixel coordinates
-                let pixel_u = x as f64 / (self.width - 1) as f64;
-                let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
-
-                // Calculate pixel size in UV coordinates
-                let pixel_width = 1.0 / (self.width - 1) as f64;
-                let pixel_height = 1.0 / (self.height - 1) as f64;
+                let (pixel_u, pixel_v, pixel_width, pixel_height) = 
+                    SamplingHelper::calculate_pixel_coords(x, y, self.width, self.height);
 
                 // Collect samples for this pixel
                 let mut total_color = Color::new(0.0, 0.0, 0.0);
 
                 // Create deterministic RNG seeded by pixel coordinates and global seed
-                let pixel_seed = self
-                    .seed
+                let mut rng = SamplingHelper::create_pixel_rng(x, y, self.seed);
+                let pixel_seed = self.seed
                     .unwrap_or(0)
                     .wrapping_mul(0x9E3779B97F4A7C15_u64)
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
                     .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
-                let mut rng = rand::rngs::StdRng::seed_from_u64(pixel_seed);
 
                 for sample in 0..self.samples {
-                    let (sample_u, sample_v) = match self.anti_aliasing_mode {
-                        AntiAliasingMode::NoJitter => {
-                            // No jittering: sample at exact pixel center
-                            (pixel_u, pixel_v)
-                        }
-                        AntiAliasingMode::Stochastic => {
-                            if self.samples == 1 {
-                                // Single sample with random jitter within pixel bounds
-                                let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                                let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                                (
-                                    pixel_u + jitter_u * pixel_width,
-                                    pixel_v + jitter_v * pixel_height,
-                                )
-                            } else {
-                                // Multiple samples: radially symmetric pattern with random phase
-                                let angle = 2.0 * std::f64::consts::PI * sample as f64
-                                    / self.samples as f64;
-                                let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
-                                let rotated_angle = angle + random_phase;
-
-                                // Use a smaller radius to keep samples within pixel bounds
-                                let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
-                                let jitter_u = radius * rotated_angle.cos();
-                                let jitter_v = radius * rotated_angle.sin();
-
-                                (
-                                    pixel_u + jitter_u * pixel_width,
-                                    pixel_v + jitter_v * pixel_height,
-                                )
-                            }
-                        }
-                        AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
-                    };
+                    let (sample_u, sample_v) = SamplingHelper::calculate_sample_coords(
+                        &self.anti_aliasing_mode,
+                        self.samples,
+                        sample,
+                        pixel_u,
+                        pixel_v,
+                        pixel_width,
+                        pixel_height,
+                        &mut rng,
+                    );
 
                     let ray = camera.get_ray(sample_u, sample_v);
 
                     // Create sample-specific seed for ray tracing consistency
-                    let sample_seed =
-                        pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED));
+                    let sample_seed = SamplingHelper::create_sample_seed(pixel_seed, sample);
 
                     let sample_color = ray_color_with_camera(
                         &ray,
@@ -552,42 +627,7 @@ impl Renderer {
                 let color = total_color / self.samples as f64;
 
                 // Update progress tracking
-                let current_completed = completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
-
-                // Print progress periodically with thread-safe output
-                if current_completed % progress_step as usize == 0
-                    || current_completed == total_pixels as usize
-                {
-                    if let Ok(_guard) = progress_mutex.lock() {
-                        let progress = (current_completed as f64 / total_pixels as f64) * 100.0;
-                        let elapsed = start_time.elapsed();
-
-                        if current_completed == total_pixels as usize {
-                            // Final progress update
-                            println!("Rendering: 100.0%");
-                        } else if progress > 0.0 {
-                            // Only show ETA if we have enough elapsed time for a reliable estimate
-                            if elapsed.as_secs_f64() >= 1.0 {
-                                // Calculate estimated time remaining
-                                let estimated_total_time = elapsed.as_secs_f64()
-                                    / (current_completed as f64 / total_pixels as f64);
-                                let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
-                                
-                                // Only show ETA if it's at least 1 second to avoid showing "0s"
-                                if estimated_remaining >= 1.0 {
-                                    let eta_formatted = format_duration(estimated_remaining);
-                                    println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
-                                } else {
-                                    // Show progress without ETA for estimates less than 1 second
-                                    println!("Rendering: {:.1}%", progress);
-                                }
-                            } else {
-                                // Show progress without ETA for early estimates
-                                println!("Rendering: {:.1}%", progress);
-                            }
-                        }
-                    }
-                }
+                progress_tracker.update_progress();
 
                 (x, y, color)
             })
@@ -612,23 +652,14 @@ impl Renderer {
             .collect();
 
         // Progress tracking setup
-        let total_pixels = self.width * self.height;
-        let progress_step = (total_pixels / 10).max(1);
-        let completed_pixels = AtomicUsize::new(0);
-        let progress_mutex = Mutex::new(());
-        let start_time = Instant::now();
+        let progress_tracker = ProgressTracker::new(self.width * self.height);
 
         // Render pixels in parallel and collect outline data
         let results: Vec<PixelRenderResult> = pixels
             .par_iter()
             .map(|&(x, y)| {
-                // Calculate base pixel coordinates
-                let pixel_u = x as f64 / (self.width - 1) as f64;
-                let pixel_v = (self.height - 1 - y) as f64 / (self.height - 1) as f64; // Flip Y coordinate
-
-                // Calculate pixel size in UV coordinates
-                let pixel_width = 1.0 / (self.width - 1) as f64;
-                let pixel_height = 1.0 / (self.height - 1) as f64;
+                let (pixel_u, pixel_v, pixel_width, pixel_height) = 
+                    SamplingHelper::calculate_pixel_coords(x, y, self.width, self.height);
 
                 // Collect samples for this pixel
                 let mut total_color = Color::new(0.0, 0.0, 0.0);
@@ -636,55 +667,29 @@ impl Renderer {
                 let mut pixel_normal = None;
 
                 // Create deterministic RNG seeded by pixel coordinates and global seed
-                let pixel_seed = self
-                    .seed
+                let mut rng = SamplingHelper::create_pixel_rng(x, y, self.seed);
+                let pixel_seed = self.seed
                     .unwrap_or(0)
                     .wrapping_mul(0x9E3779B97F4A7C15_u64)
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
                     .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
-                let mut rng = rand::rngs::StdRng::seed_from_u64(pixel_seed);
 
                 for sample in 0..self.samples {
-                    let (sample_u, sample_v) = match self.anti_aliasing_mode {
-                        AntiAliasingMode::NoJitter => {
-                            // No jittering: sample at exact pixel center
-                            (pixel_u, pixel_v)
-                        }
-                        AntiAliasingMode::Stochastic => {
-                            if self.samples == 1 {
-                                // Single sample with random jitter within pixel bounds
-                                let jitter_u = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                                let jitter_v = rng.gen::<f64>() - 0.5; // [-0.5, 0.5]
-                                (
-                                    pixel_u + jitter_u * pixel_width,
-                                    pixel_v + jitter_v * pixel_height,
-                                )
-                            } else {
-                                // Multiple samples: radially symmetric pattern with random phase
-                                let angle = 2.0 * std::f64::consts::PI * sample as f64
-                                    / self.samples as f64;
-                                let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
-                                let rotated_angle = angle + random_phase;
-
-                                // Use a smaller radius to keep samples within pixel bounds
-                                let radius = 0.5 * rng.gen::<f64>(); // Random radius [0, 0.5]
-                                let jitter_u = radius * rotated_angle.cos();
-                                let jitter_v = radius * rotated_angle.sin();
-
-                                (
-                                    pixel_u + jitter_u * pixel_width,
-                                    pixel_v + jitter_v * pixel_height,
-                                )
-                            }
-                        }
-                        AntiAliasingMode::Quincunx => unreachable!(), // Handled separately
-                    };
+                    let (sample_u, sample_v) = SamplingHelper::calculate_sample_coords(
+                        &self.anti_aliasing_mode,
+                        self.samples,
+                        sample,
+                        pixel_u,
+                        pixel_v,
+                        pixel_width,
+                        pixel_height,
+                        &mut rng,
+                    );
 
                     let ray = camera.get_ray(sample_u, sample_v);
 
                     // Create sample-specific seed for ray tracing consistency
-                    let sample_seed =
-                        pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED));
+                    let sample_seed = SamplingHelper::create_sample_seed(pixel_seed, sample);
 
                     let (sample_color, sample_depth, sample_normal) = ray_color_with_data(
                         &ray,
@@ -715,42 +720,7 @@ impl Renderer {
                 let color = total_color / self.samples as f64;
 
                 // Update progress tracking
-                let current_completed = completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
-
-                // Print progress periodically with thread-safe output
-                if current_completed % progress_step as usize == 0
-                    || current_completed == total_pixels as usize
-                {
-                    if let Ok(_guard) = progress_mutex.lock() {
-                        let progress = (current_completed as f64 / total_pixels as f64) * 100.0;
-                        let elapsed = start_time.elapsed();
-
-                        if current_completed == total_pixels as usize {
-                            // Final progress update
-                            println!("Rendering: 100.0%");
-                        } else if progress > 0.0 {
-                            // Only show ETA if we have enough elapsed time for a reliable estimate
-                            if elapsed.as_secs_f64() >= 1.0 {
-                                // Calculate estimated time remaining
-                                let estimated_total_time = elapsed.as_secs_f64()
-                                    / (current_completed as f64 / total_pixels as f64);
-                                let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
-                                
-                                // Only show ETA if it's at least 1 second to avoid showing "0s"
-                                if estimated_remaining >= 1.0 {
-                                    let eta_formatted = format_duration(estimated_remaining);
-                                    println!("Rendering: {:.1}% (ETA: {})", progress, eta_formatted);
-                                } else {
-                                    // Show progress without ETA for estimates less than 1 second
-                                    println!("Rendering: {:.1}%", progress);
-                                }
-                            } else {
-                                // Show progress without ETA for early estimates
-                                println!("Rendering: {:.1}%", progress);
-                            }
-                        }
-                    }
-                }
+                progress_tracker.update_progress();
 
                 (x, y, color, pixel_depth, pixel_normal)
             })
