@@ -241,9 +241,12 @@ impl Renderer {
 
         let render_start_time = Instant::now();
 
-        // Always render to a larger canvas (width+1 x height+1) for potential quincux downsampling
-        let render_width = self.width + 1;
-        let render_height = self.height + 1;
+        // Only render to a larger canvas for quincunx downsampling
+        let (render_width, render_height) = if self.anti_aliasing_mode == AntiAliasingMode::Quincunx {
+            (self.width + 1, self.height + 1)
+        } else {
+            (self.width, self.height)
+        };
 
         // Create camera with aspect ratio based on the FINAL output dimensions
         let aspect_ratio = self.width as f64 / self.height as f64;
@@ -1151,6 +1154,79 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Samples must be greater than 0"));
+    }
+
+    #[test]
+    fn test_edge_pixel_rendering_fix() {
+        // This test specifically validates that the edge pixel fix works correctly
+        // by ensuring all pixels of the target dimensions are rendered
+        let mut scene = Scene::default();
+
+        // Add a large plane that should fill the entire image
+        scene.objects.push(Object::Plane {
+            point: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            material: Material {
+                color: "#FF0000".to_string(),
+                ambient: 0.0,
+                diffuse: 1.0,
+                specular: 0.0,
+                shininess: 1.0,
+                reflectivity: None,
+                texture: None,
+            },
+            transform: None,
+        });
+
+        // Add a light
+        scene.lights.push(Light {
+            position: [0.0, -5.0, 10.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: None,
+        });
+
+        // Test with different anti-aliasing modes to ensure edge pixels are rendered
+        let test_cases = vec![
+            ("None", AntiAliasingMode::None),
+            ("Stochastic", AntiAliasingMode::Stochastic),
+            ("Quincunx", AntiAliasingMode::Quincunx),
+        ];
+
+        for (mode_name, mode) in test_cases {
+            let mut renderer = Renderer::new(4, 4);
+            renderer.anti_aliasing_mode = mode;
+            renderer.samples = 1;
+            
+            let result = renderer.render(&scene).expect(&format!("Render failed with {} mode", mode_name));
+            
+            // Verify that the image has the correct dimensions
+            assert_eq!(result.width(), 4, "{} mode: Image width should be 4", mode_name);
+            assert_eq!(result.height(), 4, "{} mode: Image height should be 4", mode_name);
+            
+            // Verify that we get a pixel value at each corner and edge
+            let pixels: Vec<_> = result.pixels().collect();
+            assert_eq!(pixels.len(), 16, "{} mode: Should have 16 pixels total", mode_name);
+            
+            // Check edge pixels specifically (these were the ones being lost before the fix)
+            let right_edge_pixels: Vec<_> = pixels.iter()
+                .enumerate()
+                .filter(|(i, _)| *i % 4 == 3) // Right edge: pixels 3, 7, 11, 15
+                .collect();
+            assert_eq!(right_edge_pixels.len(), 4, "{} mode: Should have 4 right edge pixels", mode_name);
+            
+            let bottom_edge_pixels: Vec<_> = pixels.iter()
+                .enumerate()
+                .filter(|(i, _)| *i >= 12) // Bottom edge: pixels 12, 13, 14, 15
+                .collect();
+            assert_eq!(bottom_edge_pixels.len(), 4, "{} mode: Should have 4 bottom edge pixels", mode_name);
+            
+            // Verify that corner pixels exist (these combine right + bottom edge)
+            let bottom_right_pixel = pixels.get(15); // Bottom-right corner: pixel 15
+            assert!(bottom_right_pixel.is_some(), "{} mode: Bottom-right corner pixel should exist", mode_name);
+            
+            println!("✓ {} mode: All edge pixels rendered correctly", mode_name);
+        }
     }
 
     #[test]
