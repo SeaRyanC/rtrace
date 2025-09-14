@@ -144,9 +144,9 @@ fn compute_edge_strength(
     let current_normal = buffers.get_normal(x, y);
 
     let neighbors = if config.use_8_neighbors {
-        get_8_neighbors(x, y)
+        get_8_neighbors(x, y, buffers.width, buffers.height)
     } else {
-        get_4_neighbors(x, y)
+        get_4_neighbors(x, y, buffers.width, buffers.height)
     };
 
     let mut max_edge_strength: f64 = 0.0;
@@ -187,7 +187,7 @@ fn compute_edge_strength(
 }
 
 /// Get 4-connected neighbors (up, down, left, right)
-fn get_4_neighbors(x: u32, y: u32) -> Vec<(u32, u32)> {
+fn get_4_neighbors(x: u32, y: u32, width: u32, height: u32) -> Vec<(u32, u32)> {
     let mut neighbors = Vec::new();
     
     // Left
@@ -195,19 +195,23 @@ fn get_4_neighbors(x: u32, y: u32) -> Vec<(u32, u32)> {
         neighbors.push((x - 1, y));
     }
     // Right
-    neighbors.push((x + 1, y));
+    if x + 1 < width {
+        neighbors.push((x + 1, y));
+    }
     // Up
     if y > 0 {
         neighbors.push((x, y - 1));
     }
     // Down
-    neighbors.push((x, y + 1));
+    if y + 1 < height {
+        neighbors.push((x, y + 1));
+    }
     
     neighbors
 }
 
 /// Get 8-connected neighbors (including diagonals)
-fn get_8_neighbors(x: u32, y: u32) -> Vec<(u32, u32)> {
+fn get_8_neighbors(x: u32, y: u32, width: u32, height: u32) -> Vec<(u32, u32)> {
     let mut neighbors = Vec::new();
     
     for dy in -1i32..=1 {
@@ -219,7 +223,7 @@ fn get_8_neighbors(x: u32, y: u32) -> Vec<(u32, u32)> {
             let nx = x as i32 + dx;
             let ny = y as i32 + dy;
             
-            if nx >= 0 && ny >= 0 {
+            if nx >= 0 && ny >= 0 && (nx as u32) < width && (ny as u32) < height {
                 neighbors.push((nx as u32, ny as u32));
             }
         }
@@ -323,31 +327,48 @@ mod tests {
 
     #[test]
     fn test_get_4_neighbors() {
-        let neighbors = get_4_neighbors(5, 5);
+        let width = 10;
+        let height = 10;
+        let neighbors = get_4_neighbors(5, 5, width, height);
         assert_eq!(neighbors.len(), 4);
         assert!(neighbors.contains(&(4, 5))); // Left
         assert!(neighbors.contains(&(6, 5))); // Right
         assert!(neighbors.contains(&(5, 4))); // Up
         assert!(neighbors.contains(&(5, 6))); // Down
         
-        // Test edge case (corner)
-        let neighbors = get_4_neighbors(0, 0);
+        // Test edge case (corner) - should only have 2 neighbors
+        let neighbors = get_4_neighbors(0, 0, width, height);
         assert_eq!(neighbors.len(), 2);
         assert!(neighbors.contains(&(1, 0))); // Right
         assert!(neighbors.contains(&(0, 1))); // Down
+        
+        // Test bottom-right corner edge case - should only have 2 neighbors
+        let neighbors = get_4_neighbors(9, 9, width, height);
+        assert_eq!(neighbors.len(), 2);
+        assert!(neighbors.contains(&(8, 9))); // Left
+        assert!(neighbors.contains(&(9, 8))); // Up
     }
 
     #[test]
     fn test_get_8_neighbors() {
-        let neighbors = get_8_neighbors(5, 5);
+        let width = 10;
+        let height = 10;
+        let neighbors = get_8_neighbors(5, 5, width, height);
         assert_eq!(neighbors.len(), 8);
         
-        // Test edge case (corner)
-        let neighbors = get_8_neighbors(0, 0);
+        // Test edge case (corner) - should only have 3 neighbors
+        let neighbors = get_8_neighbors(0, 0, width, height);
         assert_eq!(neighbors.len(), 3);
         assert!(neighbors.contains(&(1, 0)));
         assert!(neighbors.contains(&(0, 1)));
         assert!(neighbors.contains(&(1, 1)));
+        
+        // Test bottom-right corner edge case - should only have 3 neighbors
+        let neighbors = get_8_neighbors(9, 9, width, height);
+        assert_eq!(neighbors.len(), 3);
+        assert!(neighbors.contains(&(8, 8)));
+        assert!(neighbors.contains(&(8, 9)));
+        assert!(neighbors.contains(&(9, 8)));
     }
 
     #[test]
@@ -471,5 +492,106 @@ mod tests {
         assert!((small_pixel_thickness - expected_small_pixels).abs() < 0.001);
         assert!((large_pixel_thickness - expected_large_pixels).abs() < 0.001);
         assert!((large_pixel_thickness / small_pixel_thickness - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_edge_pixel_outline_fix() {
+        use crate::scene::Color;
+        
+        // Create a 4x4 buffer to test edge behavior
+        let mut buffers = OutlineBuffers::new(4, 4);
+        let config = OutlineConfig {
+            depth_weight: 1.0,
+            normal_weight: 1.0,
+            threshold: 0.05,
+            edge_color: Color::new(1.0, 0.0, 0.0), // Red edges
+            use_8_neighbors: false,
+            line_thickness: 1.0,
+        };
+        
+        // Fill the interior pixels with depth and normal data
+        for y in 0..4 {
+            for x in 0..4 {
+                let depth = 5.0;
+                let normal = Vec3::new(0.0, 0.0, 1.0);
+                buffers.set_depth(x, y, depth);
+                buffers.set_normal(x, y, normal);
+            }
+        }
+        
+        // Test edge pixels - they should NOT have high edge strength just because they're on the edge
+        
+        // Test right edge pixel (3, 2) - should have low edge strength since all neighbors have same depth/normal
+        let edge_strength_right = compute_edge_strength(&buffers, 3, 2, &config);
+        assert!(edge_strength_right < config.threshold, 
+                "Right edge pixel should not have high edge strength, got {}", edge_strength_right);
+        
+        // Test bottom edge pixel (2, 3) - should have low edge strength 
+        let edge_strength_bottom = compute_edge_strength(&buffers, 2, 3, &config);
+        assert!(edge_strength_bottom < config.threshold,
+                "Bottom edge pixel should not have high edge strength, got {}", edge_strength_bottom);
+        
+        // Test bottom-right corner (3, 3) - should have low edge strength
+        let edge_strength_corner = compute_edge_strength(&buffers, 3, 3, &config);
+        assert!(edge_strength_corner < config.threshold,
+                "Bottom-right corner pixel should not have high edge strength, got {}", edge_strength_corner);
+        
+        // Test that non-edge pixels still work normally
+        let edge_strength_interior = compute_edge_strength(&buffers, 1, 1, &config);
+        assert!(edge_strength_interior < config.threshold,
+                "Interior pixel should have low edge strength, got {}", edge_strength_interior);
+    }
+
+    #[test]
+    fn test_full_image_edge_outline_integration() {
+        use crate::scene::Color;
+        
+        // Create a larger buffer to more comprehensively test the fix
+        let mut buffers = OutlineBuffers::new(10, 10);
+        let config = OutlineConfig {
+            depth_weight: 1.0,
+            normal_weight: 1.0,
+            threshold: 0.05,
+            edge_color: Color::new(1.0, 0.0, 0.0), // Red edges
+            use_8_neighbors: false,
+            line_thickness: 1.0,
+        };
+        
+        // Fill entire buffer with uniform data - no actual edges should exist
+        for y in 0..10 {
+            for x in 0..10 {
+                let depth = 5.0;
+                let normal = Vec3::new(0.0, 0.0, 1.0);
+                buffers.set_depth(x, y, depth);
+                buffers.set_normal(x, y, normal);
+            }
+        }
+        
+        // Create image data
+        let mut image_data = Vec::new();
+        for y in 0..10 {
+            for x in 0..10 {
+                image_data.push((x, y, Color::new(0.5, 0.5, 0.5))); // Gray background
+            }
+        }
+        
+        // Apply outline detection - should not change anything since no edges exist
+        apply_outline_detection(&mut image_data, &buffers, &config);
+        
+        // Check that edge pixels don't have incorrect outlining
+        let original_color = Color::new(0.5, 0.5, 0.5);
+        
+        for (x, y, color) in &image_data {
+            let is_edge = *x == 0 || *x == 9 || *y == 0 || *y == 9;
+            let color_changed = (color.x - original_color.x).abs() > 0.01 || 
+                               (color.y - original_color.y).abs() > 0.01 ||
+                               (color.z - original_color.z).abs() > 0.01;
+            
+            if is_edge {
+                assert!(!color_changed, 
+                        "Edge pixel at ({}, {}) incorrectly has outline applied: {:?} (should be {:?})", 
+                        x, y, color, original_color);
+            }
+        }
     }
 }
