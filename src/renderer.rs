@@ -112,10 +112,18 @@ impl SamplingHelper {
     
     /// Calculate base pixel coordinates
     fn calculate_pixel_coords(x: u32, y: u32, width: u32, height: u32) -> (f64, f64, f64, f64) {
-        // Use pixel-center sampling instead of edge-to-edge sampling
-        // This ensures pixels cover the full [0,1] x [0,1] UV space without going outside it
-        let pixel_u = (x as f64 + 0.5) / width as f64;
-        let pixel_v = (height as f64 - y as f64 - 0.5) / height as f64; // Flip Y coordinate
+        // Use edge-to-edge sampling to cover the full [0,1] x [0,1] UV space
+        // This ensures all pixels can sample the entire viewport including edges
+        let pixel_u = if width == 1 {
+            0.5 // For single pixel, sample at center
+        } else {
+            x as f64 / (width - 1) as f64
+        };
+        let pixel_v = if height == 1 {
+            0.5 // For single pixel, sample at center
+        } else {
+            (height - 1 - y) as f64 / (height - 1) as f64 // Flip Y coordinate
+        };
         let pixel_width = 1.0 / width as f64;
         let pixel_height = 1.0 / height as f64;
         
@@ -1247,7 +1255,7 @@ mod tests {
     #[test]
     fn test_pixel_coordinate_mapping_fix() {
         // This test specifically validates that the pixel coordinate fix
-        // correctly maps pixels to UV coordinates using pixel-center sampling
+        // correctly maps pixels to UV coordinates using edge-to-edge sampling
         
         // Test coordinate calculation for a 4x4 image
         let width = 4;
@@ -1257,15 +1265,15 @@ mod tests {
         let (u0, v0, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 0, width, height);
         let (u3, v3, _pw, _ph) = SamplingHelper::calculate_pixel_coords(3, 3, width, height);
         
-        // With pixel-center sampling:
-        // - Top-left pixel (0,0) should map to UV (0.125, 0.875) 
-        // - Bottom-right pixel (3,3) should map to UV (0.875, 0.125)
+        // With edge-to-edge sampling:
+        // - Top-left pixel (0,0) should map to UV (0.0, 1.0) 
+        // - Bottom-right pixel (3,3) should map to UV (1.0, 0.0)
         
-        assert!((u0 - 0.125).abs() < 1e-10, "Top-left U coordinate should be 0.125, got {}", u0);
-        assert!((v0 - 0.875).abs() < 1e-10, "Top-left V coordinate should be 0.875, got {}", v0);
+        assert!((u0 - 0.0).abs() < 1e-10, "Top-left U coordinate should be 0.0, got {}", u0);
+        assert!((v0 - 1.0).abs() < 1e-10, "Top-left V coordinate should be 1.0, got {}", v0);
         
-        assert!((u3 - 0.875).abs() < 1e-10, "Bottom-right U coordinate should be 0.875, got {}", u3);
-        assert!((v3 - 0.125).abs() < 1e-10, "Bottom-right V coordinate should be 0.125, got {}", v3);
+        assert!((u3 - 1.0).abs() < 1e-10, "Bottom-right U coordinate should be 1.0, got {}", u3);
+        assert!((v3 - 0.0).abs() < 1e-10, "Bottom-right V coordinate should be 0.0, got {}", v3);
         
         // Test that UV coordinates stay within [0,1] range for all pixels
         for y in 0..height {
@@ -1276,7 +1284,18 @@ mod tests {
             }
         }
         
-        println!("✓ Pixel coordinate mapping test passed");
+        // Specifically test edge coverage
+        let (u_left, _v, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 0, width, height);
+        let (u_right, _v, _pw, _ph) = SamplingHelper::calculate_pixel_coords(3, 0, width, height);
+        let (_u, v_top, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 0, width, height);
+        let (_u, v_bottom, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 3, width, height);
+        
+        assert!((u_left - 0.0).abs() < 1e-10, "Left edge should be at U=0.0, got {}", u_left);
+        assert!((u_right - 1.0).abs() < 1e-10, "Right edge should be at U=1.0, got {}", u_right);
+        assert!((v_top - 1.0).abs() < 1e-10, "Top edge should be at V=1.0, got {}", v_top);
+        assert!((v_bottom - 0.0).abs() < 1e-10, "Bottom edge should be at V=0.0, got {}", v_bottom);
+        
+        println!("✓ Pixel coordinate mapping test passed (edge-to-edge sampling)");
     }
 
     #[test]
