@@ -1,4 +1,4 @@
-const rtrace = require('../rtrace.node');
+const rtrace = require('../tracer/rtrace.node');
 const fs = require('fs');
 
 // We can't directly get triangle count from the current API, 

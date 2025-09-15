@@ -6,14 +6,17 @@ Cargo.lock
 # Node.js
 node_modules/
 *.node
+tracer/*.node
 *.tgz
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-index.js
 
 # TypeScript compiled output
 dist/
+schema/schema.js
+schema/schema.d.ts
+tracer/index.d.ts
 
 # WASM
 bindings/wasm/pkg/

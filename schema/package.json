@@ -1,0 +1,5 @@
+{
+  "name": "rtrace-schema",
+  "main": "schema.js",
+  "types": "schema.d.ts"
+}
