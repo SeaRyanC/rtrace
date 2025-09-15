@@ -14,9 +14,22 @@ yarn-error.log*
 
 # TypeScript compiled output
 dist/
-schema/schema.js
-schema/schema.d.ts
+schema/*.js
+schema/*.d.ts
 tracer/index.d.ts
+tracer/*.node
+
+# Root level build outputs (barrel exports and compiled schema)
+/index.d.ts
+/index.js
+/schema.d.ts
+/schema.js
+/validate-schema.d.ts
+/validate-schema.js
+
+# But keep source files in specific directories
+!scripts/*.js
+!doc/*.js
 
 # WASM
 bindings/wasm/pkg/
