@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-// Test script to verify NAPI bindings work correctly
-const { renderSceneToBuffer } = require('../rtrace.node');
+// Test script to verify NAPI bindings work correctly with the new API structure
+const { renderSceneToBuffer } = require('../tracer/rtrace.node');
 
-console.log('Testing NAPI bindings...');
+console.log('Testing NAPI bindings with new API structure...');
 
 // Test render scene to buffer function with a minimal scene
 try {
@@ -64,4 +64,4 @@ try {
     process.exit(1);
 }
 
-console.log('🎉 All tests passed! NAPI bindings are working correctly.');
+console.log('🎉 All tests passed! NAPI bindings are working correctly with new API structure.');
