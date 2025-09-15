@@ -8,17 +8,15 @@
  */
 
 import { SceneSchema } from './schema';
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
 import { join, extname } from 'path';
+import * as z from 'zod';
 
 // Generate JSON schema from Zod schema
 function generateJsonSchema() {
   console.log('Generating JSON schema from Zod schema...');
   
-  const jsonSchema = zodToJsonSchema(SceneSchema, {
-    name: "Scene"
-  });
+  const jsonSchema = z.toJSONSchema(SceneSchema);
   
   // Write to schema.json file
   writeFileSync('schema.json', JSON.stringify(jsonSchema, null, 2));

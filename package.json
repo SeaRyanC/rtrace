@@ -47,8 +47,7 @@
     "@types/node": "^24.3.3",
     "hereby": "^1.11.0",
     "typescript": "^5.9.2",
-    "zod": "^4.1.8",
-    "zod-to-json-schema": "^3.24.6"
+    "zod": "^4.1.8"
   },
   "dependencies": {
     "pngjs": "^7.0.0"
