@@ -73,7 +73,7 @@ export const buildCli = task({
 export const buildNode = task({
     name: "build:node",
     description: "Build Node.js bindings", 
-    run: exec("npx napi build --release --cargo-cwd bindings/node --dts tracer/index.d.ts && cp rtrace.node tracer/")
+    run: exec("npx napi build --release --cargo-cwd bindings/node tracer")
 });
 
 export const build = task({
