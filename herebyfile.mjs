@@ -454,7 +454,7 @@ export const formatCheck = task({
 export const clean = task({
     name: "clean",
     description: "Clean all build artifacts",
-    run: exec("cargo clean && rm -rf target/ rtrace.node *.png node_modules/.cache/ dist/")
+    run: exec("cargo clean && rm -rf target/ rtrace.node *.png node_modules/.cache/")
 });
 
 export const cleanRendered = task({
@@ -474,14 +474,14 @@ export const schemaGenerate = task({
     name: "schema:generate",
     description: "Generate JSON schema from Zod schema",
     dependencies: [schemaCompile],
-    run: exec("node dist/validate-schema.js --generate-schema")
+    run: exec("node schema/validate-schema.js --generate-schema")
 });
 
 export const schemaValidate = task({
     name: "schema:validate",
     description: "Validate all scene files using Zod schema",
     dependencies: [schemaCompile],
-    run: exec("node dist/validate-schema.js --validate")
+    run: exec("node schema/validate-schema.js --validate")
 });
 
 export const schemaAll = task({
