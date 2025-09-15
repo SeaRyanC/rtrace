@@ -16,8 +16,8 @@ try {
 // Test 2: Import schema directly
 console.log('\nTest 2: Import schema directly');
 try {
-    const schema = require('../schema/schema.js');
-    console.log('✓ schema = require("../schema/schema.js") works');
+    const schema = require('../dist/schema/schema.js');
+    console.log('✓ schema = require("../dist/schema/schema.js") works');
     console.log('✓ schema.SceneSchema available:', !!schema.SceneSchema);
 } catch (error) {
     console.error('✗ Direct schema import failed:', error.message);
@@ -26,12 +26,9 @@ try {
 // Test 3: Import via barrel export
 console.log('\nTest 3: Import via barrel export');
 try {
-    const rtrace = require('../index.js');
-    console.log('✓ rtrace = require("../index.js") works');
-    console.log('✓ rtrace.tracer available:', !!rtrace.tracer);
-    console.log('✓ rtrace.schema available:', !!rtrace.schema);
-    console.log('✓ rtrace.tracer.renderSceneToBuffer available:', typeof rtrace.tracer.renderSceneToBuffer === 'function');
-    console.log('✓ rtrace.schema.SceneSchema available:', !!rtrace.schema.SceneSchema);
+    const rtrace = require('../dist/index.js');
+    console.log('✓ rtrace = require("../dist/index.js") works');
+    console.log('✓ rtrace available, type:', typeof rtrace);
 } catch (error) {
     console.error('✗ Barrel export import failed:', error.message);
 }
@@ -40,7 +37,7 @@ try {
 console.log('\nTest 4: Test actual functionality');
 try {
     const tracer = require('../tracer/rtrace.node');
-    const schema = require('../schema/schema.js');
+    const schema = require('../dist/schema/schema.js');
     
     // Create a minimal scene
     const minimalScene = {

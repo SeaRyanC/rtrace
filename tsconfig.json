@@ -7,16 +7,17 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "declaration": true,
-    "outDir": "./schema",
-    "rootDir": "./src",
+    "outDir": "./dist/schema",
+    "rootDir": "./ts-schema",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": [
-    "src/**/*"
+    "ts-schema/**/*"
   ],
   "exclude": [
     "node_modules",
+    "dist",
     "schema",
     "target"
   ]
