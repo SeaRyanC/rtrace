@@ -25,26 +25,4 @@ pub use scene::{
     AmbientIllumination, Camera, Fog, Light, Material, Object, Scene, SceneSettings, Texture,
 };
 
-/// Returns a greeting message
-///
-/// # Examples
-///
-/// ```
-/// use rtrace::hello_world;
-///
-/// let message = hello_world();
-/// assert_eq!(message, "hello world");
-/// ```
-pub fn hello_world() -> String {
-    "hello world".to_string()
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_hello_world() {
-        assert_eq!(hello_world(), "hello world");
-    }
-}

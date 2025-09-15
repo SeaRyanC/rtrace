@@ -6,23 +6,23 @@ async function renderScene(sceneFile, outputPrefix, size = 1000) {
   
   const sceneJson = fs.readFileSync(sceneFile, 'utf8');
   
-  // K-d tree version
-  console.log("Rendering WITH k-d tree...");
+  // Default k-d tree version
+  console.log("Rendering with k-d tree (default)...");
   const kdtreeOutput = `../examples/${outputPrefix}_kdtree_${size}.png`;
   const kdtreeResult = rtrace.renderScene(sceneJson, kdtreeOutput, size);
   console.log("✓", kdtreeResult);
   
-  // Brute force version  
-  console.log("Rendering WITHOUT k-d tree (brute force)...");
-  const bruteOutput = `../examples/${outputPrefix}_brute_force_${size}.png`;
-  const bruteResult = rtrace.renderSceneBruteForce(sceneJson, bruteOutput, size);
-  console.log("✓", bruteResult);
+  // Multi-threaded version with specific thread count
+  console.log("Rendering with 4 threads...");
+  const threadedOutput = `../examples/${outputPrefix}_4threads_${size}.png`;
+  const threadedResult = rtrace.renderSceneThreaded(sceneJson, threadedOutput, size, 4);
+  console.log("✓", threadedResult);
 }
 
 async function main() {
   try {
-    console.log("🔧 Plus.stl Debugging Renders");
-    console.log("Comparing k-d tree vs brute force triangle intersection");
+    console.log("🔧 Plus.stl Debug Renders");
+    console.log("Generating optimized renders with k-d tree acceleration");
     
     // Render all three views
     await renderScene('.../examples/plus_front.json', 'plus_front', 1000);
@@ -30,18 +30,18 @@ async function main() {
     await renderScene('.../examples/plus_perspective.json', 'plus_perspective', 1000);
     
     console.log("\n🎉 All renders completed!");
-    console.log("\nGenerated images for comparison:");
+    console.log("\nGenerated images:");
     console.log("Front view:");
-    console.log("  - K-d tree:     ../examples/plus_front_kdtree_800x600.png");
-    console.log("  - Brute force:  ../examples/plus_front_brute_force_800x600.png");
+    console.log("  - K-d tree:     ../examples/plus_front_kdtree_1000.png");
+    console.log("  - 4 threads:    ../examples/plus_front_4threads_1000.png");
     console.log("Side view:");
-    console.log("  - K-d tree:     ../examples/plus_side_kdtree_800x600.png");
-    console.log("  - Brute force:  ../examples/plus_side_brute_force_800x600.png");
+    console.log("  - K-d tree:     ../examples/plus_side_kdtree_1000.png");
+    console.log("  - 4 threads:    ../examples/plus_side_4threads_1000.png");
     console.log("Perspective view:");
-    console.log("  - K-d tree:     ../examples/plus_perspective_kdtree_800x600.png");
-    console.log("  - Brute force:  ../examples/plus_perspective_brute_force_800x600.png");
+    console.log("  - K-d tree:     ../examples/plus_perspective_kdtree_1000.png");
+    console.log("  - 4 threads:    ../examples/plus_perspective_4threads_1000.png");
     
-    console.log("\nCompare these pairs to identify if the issue is in k-d tree or triangle logic.");
+    console.log("\nNote: renderSceneBruteForce was removed - all renders now use k-d tree optimization");
     
   } catch (error) {
     console.error("❌ Error:", error);
