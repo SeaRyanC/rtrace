@@ -62,10 +62,10 @@ rtrace/
 cargo build --release -p rtrace-cli
 
 # Render a scene
-./target/release/rtrace --input examples/simple_sphere.json --output my_render.png --width 800 --height 600
+./target/release/rtrace-cli --input examples/simple_sphere.json --output my_render.png --width 800 --height 600
 
 # View CLI help
-./target/release/rtrace --help
+./target/release/rtrace-cli --help
 ```
 
 **CLI Options:**
@@ -86,8 +86,8 @@ The ray tracer ensures reproducible results by using deterministic randomness fo
 
 ```bash
 # Renders are always deterministic and reproducible
-./target/release/rtrace --input scene.json --output render1.png
-./target/release/rtrace --input scene.json --output render2.png
+./target/release/rtrace-cli --input scene.json --output render1.png
+./target/release/rtrace-cli --input scene.json --output render2.png
 # render1.png and render2.png are identical
 ```
 
