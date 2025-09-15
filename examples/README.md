@@ -84,12 +84,12 @@ To render any JSON scene file:
 
 ```bash
 # From the root directory
-../target/release/rtrace --input examples/SCENE_FILE.json --output OUTPUT.png --size 1000
+../target/release/rtrace-cli --input examples/SCENE_FILE.json --output OUTPUT.png --size 1000
 ```
 
 For example:
 ```bash
-../target/release/rtrace --input examples/simple_sphere.json --output my_render.png --size 1000
+../target/release/rtrace-cli --input examples/simple_sphere.json --output my_render.png --size 1000
 ```
 
 ### JavaScript/Node.js API
@@ -145,12 +145,12 @@ This will create both `examples/radial_spheres.json` and `examples/radial_sphere
 
 ```bash
 # From the root directory
-./target/release/rtrace --input examples/SCENE_FILE.json --output OUTPUT.png --size 1000
+./target/release/rtrace-cli --input examples/SCENE_FILE.json --output OUTPUT.png --size 1000
 ```
 
 For example:
 ```bash
-./target/release/rtrace --input examples/simple_sphere.json --output my_render.png --size 1000
+./target/release/rtrace-cli --input examples/simple_sphere.json --output my_render.png --size 1000
 ```
 
 ## Scene Format

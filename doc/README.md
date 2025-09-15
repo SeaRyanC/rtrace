@@ -53,7 +53,7 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 ### Usage
 
 ```bash
-./target/release/rtrace [OPTIONS] --input <INPUT> --output <OUTPUT>
+./target/release/rtrace-cli [OPTIONS] --input <INPUT> --output <OUTPUT>
 ```
 
 ### Options
@@ -74,22 +74,22 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 
 ```bash
 # Basic rendering (uses quincunx anti-aliasing by default)
-./target/release/rtrace -i examples/simple_sphere.json -o output.png
+./target/release/rtrace-cli -i examples/simple_sphere.json -o output.png
 
 # Custom resolution
-./target/release/rtrace -i scene.json -o high_res.png -w 1920 -H 1080
+./target/release/rtrace-cli -i scene.json -o high_res.png -w 1920 -H 1080
 
 # High reflection depth for mirror effects
-./target/release/rtrace -i mirror_scene.json -o mirrors.png --max-depth 20
+./target/release/rtrace-cli -i mirror_scene.json -o mirrors.png --max-depth 20
 
 # Deterministic rendering (no anti-aliasing)
-./target/release/rtrace -i scene.json -o deterministic.png --anti-aliasing no-jitter
+./target/release/rtrace-cli -i scene.json -o deterministic.png --anti-aliasing no-jitter
 
 # Stochastic anti-aliasing with 4 samples
-./target/release/rtrace -i scene.json -o stochastic.png --anti-aliasing stochastic --samples 4
+./target/release/rtrace-cli -i scene.json -o stochastic.png --anti-aliasing stochastic --samples 4
 
 # High-quality quincunx anti-aliasing (default, 5 samples)
-./target/release/rtrace -i scene.json -o smooth.png --anti-aliasing quincunx
+./target/release/rtrace-cli -i scene.json -o smooth.png --anti-aliasing quincunx
 ```
 
 ---
@@ -685,7 +685,7 @@ The default method uses 5 samples per pixel in a cross pattern for high-quality,
 
 ```bash
 # Default quincunx anti-aliasing (recommended)
-./target/release/rtrace -i scene.json -o output.png --anti-aliasing quincunx
+./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing quincunx
 ```
 
 ### Stochastic  
@@ -694,10 +694,10 @@ Random sampling with configurable sample counts for flexible quality control:
 
 ```bash
 # Stochastic with 4 samples per pixel
-./target/release/rtrace -i scene.json -o output.png --anti-aliasing stochastic --samples 4
+./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing stochastic --samples 4
 
 # High quality with 16 samples
-./target/release/rtrace -i scene.json -o output.png --anti-aliasing stochastic --samples 16
+./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing stochastic --samples 16
 ```
 
 ### No Jitter
@@ -706,7 +706,7 @@ Single sample per pixel with no anti-aliasing - fastest rendering but may show j
 
 ```bash
 # No anti-aliasing (fastest)
-./target/release/rtrace -i scene.json -o output.png --anti-aliasing no-jitter
+./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing no-jitter
 ```
 
 **Performance Comparison:**
@@ -808,7 +808,7 @@ Then render normally with the CLI:
 
 ```bash
 # Render scene with outline detection
-./target/release/rtrace -i scene_with_outlines.json -o output.png -s 800
+./target/release/rtrace-cli -i scene_with_outlines.json -o output.png -s 800
 ```
 
 ### Visual Examples
@@ -982,8 +982,8 @@ All rendering is deterministic by default:
 
 ```bash
 # These commands always produce identical results
-./target/release/rtrace --input scene.json --output render1.png
-./target/release/rtrace --input scene.json --output render2.png
+./target/release/rtrace-cli --input scene.json --output render1.png
+./target/release/rtrace-cli --input scene.json --output render2.png
 # render1.png and render2.png are byte-for-byte identical
 ```
 
