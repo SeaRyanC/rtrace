@@ -224,7 +224,7 @@ async function createDocRenderTasks() {
         {
             name: "sampling-antialiasing-nosamples",
             scene: "sampling-antialiasing.json",
-            params: "--anti-aliasing no-jitter",
+            params: "--anti-aliasing none",
             description: "Demonstrates no sampling and no jitter (deterministic)"
         }
     ];
@@ -234,20 +234,20 @@ async function createDocRenderTasks() {
         {
             name: "outline-demo-no-outline",
             scene: "outline_demo.json",
-            params: "--anti-aliasing no-jitter",
+            params: "--anti-aliasing none",
             description: "Outline demo without outline detection",
             modifyScene: true, // Need to remove outline config
         },
         {
             name: "outline-demo-basic", 
             scene: "outline_demo.json",
-            params: "--anti-aliasing no-jitter",
+            params: "--anti-aliasing none",
             description: "Outline demo with basic outline detection"
         },
         {
             name: "outline-demo-complex",
             scene: "doc/scenes/outline_complex.json", 
-            params: "--anti-aliasing no-jitter",
+            params: "--anti-aliasing none",
             description: "Complex outline demo with advanced parameters"
         }
     ];
