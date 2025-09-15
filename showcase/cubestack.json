@@ -32,7 +32,8 @@
         "diffuse": 0.7,
         "specular": 0.5,
         "shininess": 64
-      }
+      },
+      "transform": ["rotate(0, 0, 0)"]
     },
     {
       "kind": "cube",
@@ -44,11 +45,12 @@
         "diffuse": 1,
         "specular": 0.5,
         "shininess": 64
-      }
+      },
+      "transform": ["rotate(0, 0, 30)"]
     },
     {
       "kind": "cube",
-      "center": [0, 0, 8.5],
+      "center": [0, 0, 8.75],
       "size": [3, 3, 3],
       "material": {
         "color": "#00FF00",
@@ -56,7 +58,8 @@
         "diffuse": 1,
         "specular": 0.5,
         "shininess": 64
-      }
+      },
+      "transform": ["rotate(0, 0, 60)"]
     }
 
   ],

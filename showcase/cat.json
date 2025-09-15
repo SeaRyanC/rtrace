@@ -2,11 +2,11 @@
   "camera": {
     "kind": "perspective",
     "position": [-12, -12, 8],
-    "target": [0.5, 0, 4],
+    "target": [0.5, -2, 3],
     "up": [0, 0, 1],
-    "width": 15,
-    "height": 15,
-    "fov": 50
+    "width": 16,
+    "height": 16,
+    "fov": 40
   },
   "objects": [
     {
@@ -25,8 +25,8 @@
     },
     {
       "kind": "sphere",
-      "center": [6, -6, 2],
-      "radius": 4,
+      "center": [6, -6, 3],
+      "radius": 3,
       "material": {
         "color": "#FFFFFF",
         "ambient": 0,
@@ -41,7 +41,7 @@
       "point": [0, 0, 0],
       "normal": [0, 0, 1],
       "material": {
-        "color": "#222222",
+        "color": "#DDDDDD",
         "ambient": 0.2,
         "diffuse": 0.2,
         "specular": 0,
@@ -70,24 +70,30 @@
   ],
   "lights": [
     {
-      "position": [200, 200, 300],
+      "position": [0, 0, 120],
       "color": "#FFFFFF",
-      "intensity": 1.0
+      "intensity": 2,
+      "diameter": 20
     },
     {
-      "position": [-200, -200, 300],
+      "position": [200, 200, 1],
       "color": "#FFFFFF",
-      "intensity": 1.0
+      "intensity": 0.3
     },
     {
-      "position": [-200, 200, 300],
+      "position": [-200, -200, 1],
       "color": "#FFFFFF",
-      "intensity": 1.0
+      "intensity": 0.3
     },
     {
-      "position": [200, -200, 300],
+      "position": [-200, 200, 1],
       "color": "#FFFFFF",
-      "intensity": 1.0
+      "intensity": 0.3
+    },
+    {
+      "position": [200, -200, 1],
+      "color": "#FFFFFF",
+      "intensity": 0.3
     }
   ],
   "scene_settings": {
@@ -95,6 +101,16 @@
       "color": "#FFFFFF",
       "intensity": 0.25
     },
+    "outline": {
+      "enabled": true,
+      "depth_weight": 1.2,
+      "normal_weight": 2.0,
+      "threshold": 0.05,
+      "color": "#000000",
+      "thickness": 2.0,
+      "use_8_neighbors": true
+    },
+
     "background_color": "#000000"
   }
 }

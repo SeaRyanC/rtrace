@@ -61,7 +61,8 @@
     {
       "position": [4, 3, 6],
       "color": "#FFFFFF",
-      "intensity": 1.2
+      "intensity": 1.2,
+      "diameter": 6
     },
     {
       "position": [-2, 4, 4],
