@@ -7,7 +7,7 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "declaration": true,
-    "outDir": "./dist",
+    "outDir": "./schema",
     "rootDir": "./src",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
@@ -17,7 +17,7 @@
   ],
   "exclude": [
     "node_modules",
-    "dist",
+    "schema",
     "target"
   ]
 }

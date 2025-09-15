@@ -12,16 +12,16 @@
   ],
   "scripts": {
     "build": "npm run build:node && npm run build:copy",
-    "build:node": "napi build --release --cargo-cwd bindings/node",
-    "build:copy": "npm run schema:compile && cp index.d.ts tracer/ && cp rtrace.node tracer/ && cp dist/schema.js dist/schema.d.ts schema/ && cp scripts/barrel-index.d.ts index.d.ts",
+    "build:node": "napi build --release --cargo-cwd bindings/node tracer",
+    "build:copy": "npm run schema:compile && node scripts/generate-barrel-types.js",
     "test": "npm run build && node scripts/test.js",
     "example": "npm run build && node scripts/example.js",
     "hereby": "hereby",
     "task": "hereby",
     "tasks": "hereby --list",
     "schema:compile": "tsc",
-    "schema:generate": "npm run schema:compile && node dist/validate-schema.js --generate-schema",
-    "schema:validate": "npm run schema:compile && node dist/validate-schema.js --validate",
+    "schema:generate": "npm run schema:compile && node schema/validate-schema.js --generate-schema",
+    "schema:validate": "npm run schema:compile && node schema/validate-schema.js --validate",
     "schema:all": "npm run schema:generate && npm run schema:validate"
   },
   "repository": {
