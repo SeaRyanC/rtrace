@@ -4,9 +4,20 @@
   "description": "A minimal Rust library with Node.js bindings",
   "main": "rtrace.node",
   "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./rtrace.node",
+      "require": "./rtrace.node"
+    },
+    "./schema": "./schema/schema.js"
+  },
   "files": [
     "rtrace.node",
-    "index.d.ts"
+    "index.d.ts",
+    "schema/schema.js",
+    "schema/schema.d.ts",
+    "schema/validate-schema.js",
+    "schema/validate-schema.d.ts"
   ],
   "scripts": {
     "build": "npm run build:node",
@@ -16,9 +27,9 @@
     "hereby": "hereby",
     "task": "hereby",
     "tasks": "hereby --list",
-    "schema:compile": "tsc",
-    "schema:generate": "npm run schema:compile && node dist/validate-schema.js --generate-schema",
-    "schema:validate": "npm run schema:compile && node dist/validate-schema.js --validate",
+    "schema:compile": "cd schema && npx tsc",
+    "schema:generate": "npm run schema:compile && node schema/validate-schema.js --generate-schema",
+    "schema:validate": "npm run schema:compile && node schema/validate-schema.js --validate",
     "schema:all": "npm run schema:generate && npm run schema:validate"
   },
   "repository": {

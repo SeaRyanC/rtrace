@@ -1,0 +1,16 @@
+{
+  "name": "rtrace-schema",
+  "version": "0.1.0",
+  "description": "Zod schema definitions for rtrace scene files",
+  "main": "schema.js",
+  "types": "schema.d.ts",
+  "exports": {
+    ".": "./schema.js"
+  },
+  "files": [
+    "schema.js",
+    "schema.d.ts",
+    "validate-schema.js",
+    "validate-schema.d.ts"
+  ]
+}

@@ -461,21 +461,21 @@ export const cleanRendered = task({
 export const schemaCompile = task({
     name: "schema:compile",
     description: "Compile TypeScript schema files",
-    run: exec("npx tsc")
+    run: exec("cd schema && npx tsc")
 });
 
 export const schemaGenerate = task({
     name: "schema:generate",
     description: "Generate JSON schema from Zod schema",
     dependencies: [schemaCompile],
-    run: exec("node dist/validate-schema.js --generate-schema")
+    run: exec("node schema/validate-schema.js --generate-schema")
 });
 
 export const schemaValidate = task({
     name: "schema:validate",
     description: "Validate all scene files using Zod schema",
     dependencies: [schemaCompile],
-    run: exec("node dist/validate-schema.js --validate")
+    run: exec("node schema/validate-schema.js --validate")
 });
 
 export const schemaAll = task({

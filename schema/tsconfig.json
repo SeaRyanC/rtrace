@@ -7,17 +7,15 @@
     "allowSyntheticDefaultImports": true,
     "strict": true,
     "declaration": true,
-    "outDir": "./dist",
+    "outDir": "./",
     "rootDir": "./src",
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": [
+    "src/**/*"
   ],
   "exclude": [
-    "node_modules",
-    "dist",
-    "target",
-    "schema"
+    "node_modules"
   ]
 }
