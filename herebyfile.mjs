@@ -461,7 +461,7 @@ export const cleanRendered = task({
 export const schemaCompile = task({
     name: "schema:compile",
     description: "Compile TypeScript schema files",
-    run: exec("cd schema && npx tsc")
+    run: exec("npx tsc -p schema")
 });
 
 export const schemaGenerate = task({
