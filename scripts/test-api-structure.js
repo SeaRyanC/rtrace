@@ -6,8 +6,8 @@ console.log('Testing new API structure...\n');
 // Test 1: Import tracer directly
 console.log('Test 1: Import tracer directly');
 try {
-    const tracer = require('../tracer/rtrace.node');
-    console.log('✓ tracer = require("../tracer/rtrace.node") works');
+    const tracer = require('../dist/index.js');
+    console.log('✓ tracer = require("../dist/index.js") works');
     console.log('✓ tracer.renderSceneToBuffer available:', typeof tracer.renderSceneToBuffer === 'function');
 } catch (error) {
     console.error('✗ Direct tracer import failed:', error.message);
@@ -36,7 +36,7 @@ try {
 // Test 4: Test actual functionality with tracer
 console.log('\nTest 4: Test actual functionality');
 try {
-    const tracer = require('../tracer/rtrace.node');
+    const tracer = require('../dist/index.js');
     const schema = require('../dist/schema/schema.js');
     
     // Create a minimal scene

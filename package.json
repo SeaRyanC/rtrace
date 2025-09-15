@@ -8,10 +8,10 @@
     "dist/"
   ],
   "scripts": {
-    "build": "npm run build:node && npm run build:schema && npm run build:copy",
-    "build:node": "napi build --release --cargo-cwd bindings/node tracer",
+    "build": "npm run build:schema && npm run build:node && npm run build:wrapper",
+    "build:node": "napi build --release --cargo-cwd bindings/node dist",
     "build:schema": "tsc",
-    "build:copy": "node scripts/copy-build-outputs.js",
+    "build:wrapper": "node scripts/create-wrappers.js",
     "test": "npm run build && node scripts/test.js",
     "example": "npm run build && node scripts/example.js",
     "hereby": "hereby",

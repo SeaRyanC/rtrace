@@ -1,4 +1,4 @@
-const rtrace = require('../tracer/rtrace.node');
+const rtrace = require('../dist/index.js');
 const fs = require('fs');
 
 async function renderScene(sceneFile, outputPrefix, size = 1000) {

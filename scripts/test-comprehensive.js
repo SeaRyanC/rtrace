@@ -14,7 +14,7 @@ try {
     console.log('✓ rtrace.schema available:', !!rtrace.schema);
     
     // Test 2: Direct tracer import
-    const tracer = require('../tracer/rtrace.node');
+    const tracer = require('../dist/index.js');
     console.log('✓ Direct tracer import works');
     console.log('✓ tracer functions available:', [
         'renderScene',
