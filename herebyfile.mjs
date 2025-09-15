@@ -205,178 +205,172 @@ export const renderDebug = task({
 });
 
 // Documentation rendering tasks - dynamically generated
-const docSceneFiles = [
-    "camera-basic.json",
-    "camera-perspective.json", 
-    "object-sphere.json",
-    "object-plane-grid.json",
-    "object-cube.json",
-    "object-mesh.json",
-    "material-properties.json",
-    "material-reflectivity.json",
-    "texture-grid-variations.json",
-    "checkerboard-basic.json",
-    "checkerboard-advanced.json",
-    "lighting-multiple.json",
-    "sampling-antialiasing.json",
-    "example-complete.json",
-    "outline_complex.json"
-];
+async function createDocRenderTasks() {
+    // Discover all JSON scene files in doc/scenes/
+    const docSceneFiles = (await readdir('doc/scenes'))
+        .filter(file => extname(file) === '.json')
+        .sort();
 
-// Metadata for scenes that need special command line parameters
-const docSceneMetadata = {
-    "sampling-antialiasing.json": {
-        "samples": 4,
-        "description": "Demonstrates stochastic subsampling for anti-aliasing"
-    }
-};
-
-// Special scenes that need multiple variants
-const docSpecialScenes = [
-    {
-        name: "sampling-antialiasing-nosamples",
-        scene: "sampling-antialiasing.json",
-        params: "--anti-aliasing no-jitter",
-        description: "Demonstrates no sampling and no jitter (deterministic)"
-    }
-];
-
-// Outline demo scenes that need special handling
-const outlineDemoScenes = [
-    {
-        name: "outline-demo-no-outline",
-        scene: "outline_demo.json",
-        params: "--anti-aliasing no-jitter",
-        description: "Outline demo without outline detection",
-        modifyScene: true, // Need to remove outline config
-    },
-    {
-        name: "outline-demo-basic", 
-        scene: "outline_demo.json",
-        params: "--anti-aliasing no-jitter",
-        description: "Outline demo with basic outline detection"
-    },
-    {
-        name: "outline-demo-complex",
-        scene: "doc/scenes/outline_complex.json", 
-        params: "--anti-aliasing no-jitter",
-        description: "Complex outline demo with advanced parameters"
-    }
-];
-
-// Multi-file scenes that need special handling
-const docMultiFileScenes = [
-    {
-        name: "scene-backgrounds",
-        files: ["scene-backgrounds-1.json", "scene-backgrounds-2.json"]
-    },
-    {
-        name: "scene-fog", 
-        files: ["scene-fog-light.json", "scene-fog-heavy.json"]
-    }
-];
-
-// Create tasks for single-file scenes
-const docRenderTasks = {};
-const docDependencies = [];
-
-for (const file of docSceneFiles) {
-    const baseName = basename(file, '.json');
-    const taskName = `renderDoc${baseName.split('-').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-    ).join('')}`;
-    
-    // Build command with base parameters
-    let command = `./target/release/rtrace-cli -i doc/scenes/${file} -o doc/images/${baseName}.png -s 500`;
-    
-    // Add metadata-based parameters if available
-    const metadata = docSceneMetadata[file];
-    if (metadata) {
-        if (metadata.samples) {
-            command += ` --samples ${metadata.samples}`;
+    // Metadata for scenes that need special command line parameters
+    const docSceneMetadata = {
+        "sampling-antialiasing.json": {
+            "samples": 4,
+            "description": "Demonstrates stochastic subsampling for anti-aliasing"
         }
-    }
-    
-    docRenderTasks[taskName] = task({
-        name: `render:doc:${baseName}`,
-        description: `Render ${baseName} example for documentation`,
-        dependencies: [buildCli],
-        run: exec(command)
-    });
-    docDependencies.push(docRenderTasks[taskName]);
-}
+    };
 
-// Create tasks for special scene variants
-for (const special of docSpecialScenes) {
-    const taskName = `renderDoc${special.name.split('-').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-    ).join('')}`;
-    
-    const command = `./target/release/rtrace-cli -i doc/scenes/${special.scene} -o doc/images/${special.name}.png -s 500 ${special.params}`;
-    
-    docRenderTasks[taskName] = task({
-        name: `render:doc:${special.name}`,
-        description: special.description,
-        dependencies: [buildCli],
-        run: exec(command)
-    });
-    docDependencies.push(docRenderTasks[taskName]);
-}
+    // Special scenes that need multiple variants
+    const docSpecialScenes = [
+        {
+            name: "sampling-antialiasing-nosamples",
+            scene: "sampling-antialiasing.json",
+            params: "--anti-aliasing none",
+            description: "Demonstrates no sampling and no jitter (deterministic)"
+        }
+    ];
 
-// Create tasks for outline demo scene variants
-for (const outlineDemo of outlineDemoScenes) {
-    const taskName = `renderDoc${outlineDemo.name.split('-').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-    ).join('')}`;
-    
-    let command;
-    if (outlineDemo.modifyScene) {
-        // For the no-outline variant, we need to use a scene without outline config
-        // We'll generate it on-the-fly by modifying the scene
-        const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
-        command = `node -e "
-            const fs = require('fs');
-            const scene = JSON.parse(fs.readFileSync('${sceneBasePath}', 'utf8'));
-            if (scene.scene_settings && scene.scene_settings.outline) {
-                delete scene.scene_settings.outline;
+    // Outline demo scenes that need special handling
+    const outlineDemoScenes = [
+        {
+            name: "outline-demo-no-outline",
+            scene: "outline_demo.json",
+            params: "--anti-aliasing none",
+            description: "Outline demo without outline detection",
+            modifyScene: true, // Need to remove outline config
+        },
+        {
+            name: "outline-demo-basic", 
+            scene: "outline_demo.json",
+            params: "--anti-aliasing none",
+            description: "Outline demo with basic outline detection"
+        },
+        {
+            name: "outline-demo-complex",
+            scene: "doc/scenes/outline_complex.json", 
+            params: "--anti-aliasing none",
+            description: "Complex outline demo with advanced parameters"
+        }
+    ];
+
+    // Multi-file scenes that need special handling
+    const docMultiFileScenes = [
+        {
+            name: "scene-backgrounds",
+            files: ["scene-backgrounds-1.json", "scene-backgrounds-2.json"]
+        },
+        {
+            name: "scene-fog", 
+            files: ["scene-fog-light.json", "scene-fog-heavy.json"]
+        }
+    ];
+
+    // Create tasks for single-file scenes
+    const docRenderTasks = {};
+    const docDependencies = [];
+
+    for (const file of docSceneFiles) {
+        const baseName = basename(file, '.json');
+        const taskName = `renderDoc${baseName.split(/[-_]/).map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join('')}`;
+        
+        // Build command with base parameters
+        let command = `./target/release/rtrace-cli -i doc/scenes/${file} -o doc/images/${baseName}.png -s 500`;
+        
+        // Add metadata-based parameters if available
+        const metadata = docSceneMetadata[file];
+        if (metadata) {
+            if (metadata.samples) {
+                command += ` --samples ${metadata.samples}`;
             }
-            fs.writeFileSync('/tmp/${outlineDemo.name}.json', JSON.stringify(scene, null, 2));
-        " && ./target/release/rtrace-cli -i /tmp/${outlineDemo.name}.json -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
-    } else {
-        const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
-        command = `./target/release/rtrace-cli -i ${sceneBasePath} -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+        }
+        
+        docRenderTasks[taskName] = task({
+            name: `render:doc:${baseName}`,
+            description: `Render ${baseName} example for documentation`,
+            dependencies: [buildCli],
+            run: exec(command)
+        });
+        docDependencies.push(docRenderTasks[taskName]);
     }
-    
-    docRenderTasks[taskName] = task({
-        name: `render:doc:${outlineDemo.name}`,
-        description: outlineDemo.description,
-        dependencies: [buildCli],
-        run: exec(command)
-    });
-    docDependencies.push(docRenderTasks[taskName]);
+
+    // Create tasks for special scene variants
+    for (const special of docSpecialScenes) {
+        const taskName = `renderDoc${special.name.split(/[-_]/).map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join('')}`;
+        
+        const command = `./target/release/rtrace-cli -i doc/scenes/${special.scene} -o doc/images/${special.name}.png -s 500 ${special.params}`;
+        
+        docRenderTasks[taskName] = task({
+            name: `render:doc:${special.name}`,
+            description: special.description,
+            dependencies: [buildCli],
+            run: exec(command)
+        });
+        docDependencies.push(docRenderTasks[taskName]);
+    }
+
+    // Create tasks for outline demo scene variants
+    for (const outlineDemo of outlineDemoScenes) {
+        const taskName = `renderDoc${outlineDemo.name.split(/[-_]/).map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join('')}`;
+        
+        let command;
+        if (outlineDemo.modifyScene) {
+            // For the no-outline variant, we need to use a scene without outline config
+            // We'll generate it on-the-fly by modifying the scene
+            const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
+            command = `node -e "
+                const fs = require('fs');
+                const scene = JSON.parse(fs.readFileSync('${sceneBasePath}', 'utf8'));
+                if (scene.scene_settings && scene.scene_settings.outline) {
+                    delete scene.scene_settings.outline;
+                }
+                fs.writeFileSync('/tmp/${outlineDemo.name}.json', JSON.stringify(scene, null, 2));
+            " && ./target/release/rtrace-cli -i /tmp/${outlineDemo.name}.json -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+        } else {
+            const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
+            command = `./target/release/rtrace-cli -i ${sceneBasePath} -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+        }
+        
+        docRenderTasks[taskName] = task({
+            name: `render:doc:${outlineDemo.name}`,
+            description: outlineDemo.description,
+            dependencies: [buildCli],
+            run: exec(command)
+        });
+        docDependencies.push(docRenderTasks[taskName]);
+    }
+
+    // Create tasks for multi-file scenes
+    for (const scene of docMultiFileScenes) {
+        const taskName = `renderDoc${scene.name.split(/[-_]/).map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join('')}`;
+        
+        const commands = scene.files.map(file => {
+            const outputName = basename(file, '.json');
+            return `./target/release/rtrace-cli -i doc/scenes/${file} -o doc/images/${outputName}.png -s 500`;
+        }).join(' && ');
+
+        docRenderTasks[taskName] = task({
+            name: `render:doc:${scene.name}`,
+            description: `Render ${scene.name} examples for documentation`,
+            dependencies: [buildCli],
+            run: exec(commands)
+        });
+        docDependencies.push(docRenderTasks[taskName]);
+    }
+
+    return { docRenderTasks, docDependencies };
 }
 
-// Create tasks for multi-file scenes
-for (const scene of docMultiFileScenes) {
-    const taskName = `renderDoc${scene.name.split('-').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-    ).join('')}`;
-    
-    const commands = scene.files.map(file => {
-        const outputName = basename(file, '.json');
-        return `./target/release/rtrace-cli -i doc/scenes/${file} -o doc/images/${outputName}.png -s 500`;
-    }).join(' && ');
+// Initialize doc render tasks
+const { docRenderTasks, docDependencies } = await createDocRenderTasks();
 
-    docRenderTasks[taskName] = task({
-        name: `render:doc:${scene.name}`,
-        description: `Render ${scene.name} examples for documentation`,
-        dependencies: [buildCli],
-        run: exec(commands)
-    });
-    docDependencies.push(docRenderTasks[taskName]);
-}
-
-// Export individual render tasks
+// Export individual render tasks (dynamically generated)
 export const renderDocCameraBasic = docRenderTasks.renderDocCameraBasic;
 export const renderDocCameraPerspective = docRenderTasks.renderDocCameraPerspective;
 export const renderDocObjectSphere = docRenderTasks.renderDocObjectSphere;
@@ -398,6 +392,18 @@ export const renderDocSceneFog = docRenderTasks.renderDocSceneFog;
 export const renderDocOutlineDemoNoOutline = docRenderTasks.renderDocOutlineDemoNoOutline;
 export const renderDocOutlineDemoBasic = docRenderTasks.renderDocOutlineDemoBasic;
 export const renderDocOutlineDemoComplex = docRenderTasks.renderDocOutlineDemoComplex;
+
+// New dynamically discovered tasks (safe access with fallback)
+export const renderDocFineGridDemo = docRenderTasks.renderDocFineGridDemo;
+export const renderDocFogDemonstration = docRenderTasks.renderDocFogDemonstration;
+export const renderDocOrthoGridDemo = docRenderTasks.renderDocOrthoGridDemo;
+export const renderDocQuincunxDemo = docRenderTasks.renderDocQuincunxDemo;
+export const renderDocSamplingComparison = docRenderTasks.renderDocSamplingComparison;
+export const renderDocSceneBackgrounds1 = docRenderTasks.renderDocSceneBackgrounds1;
+export const renderDocSceneBackgrounds2 = docRenderTasks.renderDocSceneBackgrounds2;
+export const renderDocSceneFogHeavy = docRenderTasks.renderDocSceneFogHeavy;
+export const renderDocSceneFogLight = docRenderTasks.renderDocSceneFogLight;
+export const renderDocSideViewGrid = docRenderTasks.renderDocSideViewGrid;
 
 export const renderDocAll = task({
     name: "render:doc:all", 
