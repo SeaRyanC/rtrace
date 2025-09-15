@@ -13,7 +13,7 @@
   "scripts": {
     "build": "npm run build:node && npm run build:copy",
     "build:node": "napi build --release --cargo-cwd bindings/node",
-    "build:copy": "npm run schema:compile && cp rtrace.node tracer/ && cp dist/schema.js dist/schema.d.ts schema/",
+    "build:copy": "npm run schema:compile && cp index.d.ts tracer/ && cp rtrace.node tracer/ && cp dist/schema.js dist/schema.d.ts schema/ && cp scripts/barrel-index.d.ts index.d.ts",
     "test": "npm run build && node scripts/test.js",
     "example": "npm run build && node scripts/example.js",
     "hereby": "hereby",

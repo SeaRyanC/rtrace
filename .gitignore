@@ -16,6 +16,7 @@ yarn-error.log*
 dist/
 schema/schema.js
 schema/schema.d.ts
+tracer/index.d.ts
 
 # WASM
 bindings/wasm/pkg/
