@@ -107,7 +107,11 @@ const OrthoCameraSchema = z.object({
   target: Vector3Schema.describe("Camera target point as [x, y, z]"),
   up: Vector3Schema.describe("Camera up vector as [x, y, z]"),
   width: z.number().min(0).describe("Viewport width in world units"),
-  height: z.number().min(0).describe("Viewport height in world units")
+  height: z.number().min(0).describe("Viewport height in world units"),
+  // Grid background options for orthographic cameras
+  grid_pitch: z.number().min(0).optional().describe("Distance between grid lines (world units). All three grid properties must be specified for grid to appear."),
+  grid_color: HexColorSchema.optional().describe("Grid line color as hex string (e.g., #444444)"),
+  grid_thickness: z.number().min(0).optional().describe("Grid line thickness in world units")
 });
 
 const PerspectiveCameraSchema = z.object({
