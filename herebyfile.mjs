@@ -51,7 +51,14 @@ function parallel(...tasks) {
     });
 }
 
-// Build tasks
+// Schema tasks first
+export const schemaCompile = task({
+    name: "schema:compile",
+    description: "Compile TypeScript schema files",
+    run: exec("npx tsc")
+});
+
+// Build tasks (basic components)
 export const buildRust = task({
     name: "build:rust",
     description: "Build the Rust core library",
@@ -73,19 +80,27 @@ export const buildCli = task({
 export const buildNode = task({
     name: "build:node",
     description: "Build Node.js bindings", 
-    run: exec("npx napi build --release --cargo-cwd bindings/node tracer")
+    run: exec("npx napi build --release --cargo-cwd bindings/node dist")
 });
 
+export const buildWrapper = task({
+    name: "build:wrapper",
+    description: "Create Node.js wrapper files",
+    dependencies: [buildNode],
+    run: exec("node scripts/create-wrappers.js")
+});
+
+// Main build tasks (depend on components above)
 export const build = task({
     name: "build",
     description: "Build all components",
-    dependencies: [buildNode]
+    dependencies: [schemaCompile, buildNode, buildWrapper]
 });
 
 export const buildAll = task({
     name: "build:all",
     description: "Build all components including CLI",
-    dependencies: [buildRustRelease, buildCli, buildNode]
+    dependencies: [buildRustRelease, buildCli, schemaCompile, buildNode, buildWrapper]
 });
 
 // Test tasks
@@ -98,7 +113,7 @@ export const testRust = task({
 export const testNode = task({
     name: "test:node", 
     description: "Run Node.js binding tests",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/test.js")
 });
 
@@ -124,28 +139,28 @@ export const testAll = task({
 export const example = task({
     name: "example",
     description: "Run basic Node.js bindings example",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/example.js")
 });
 
 export const exampleRadial = task({
     name: "example:radial",
     description: "Run radial spheres example",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/radial_spheres_example.js")
 });
 
 export const exampleMultithreaded = task({
     name: "example:multithreaded",
     description: "Run multithreaded demo",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/multithreaded_demo.js")
 });
 
 export const exampleAnalyze = task({
     name: "example:analyze",
     description: "Run plus model analysis",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/analyze_plus.js")
 });
 
@@ -193,14 +208,14 @@ export const renderAll = task({
 export const renderHires = task({
     name: "render:hires",
     description: "Render high-resolution images",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/render_plus_hires.js")
 });
 
 export const renderDebug = task({
     name: "render:debug",
     description: "Render debug images",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/render_plus_debug.js")
 });
 
@@ -427,7 +442,7 @@ export const debugKdtree = task({
 export const testBounds = task({
     name: "test:bounds",
     description: "Run plus model bounds testing",
-    dependencies: [buildNode],
+    dependencies: [build],
     run: exec("node scripts/test_plus_bounds.js")
 });
 
@@ -464,24 +479,18 @@ export const cleanRendered = task({
 });
 
 // Schema validation tasks
-export const schemaCompile = task({
-    name: "schema:compile",
-    description: "Compile TypeScript schema files",
-    run: exec("npx tsc")
-});
-
 export const schemaGenerate = task({
     name: "schema:generate",
     description: "Generate JSON schema from Zod schema",
     dependencies: [schemaCompile],
-    run: exec("node schema/validate-schema.js --generate-schema")
+    run: exec("node dist/schema/validate-schema.js --generate-schema")
 });
 
 export const schemaValidate = task({
     name: "schema:validate",
     description: "Validate all scene files using Zod schema",
     dependencies: [schemaCompile],
-    run: exec("node schema/validate-schema.js --validate")
+    run: exec("node dist/schema/validate-schema.js --validate")
 });
 
 export const schemaAll = task({
