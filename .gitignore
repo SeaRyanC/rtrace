@@ -19,6 +19,9 @@ schema/*.d.ts
 tracer/index.d.ts
 tracer/*.node
 
+# Generated schema file (build output)
+schema.json
+
 # Root level build outputs (barrel exports and compiled schema) - DEPRECATED (now in dist/)
 /index.d.ts
 /index.js

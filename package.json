@@ -8,19 +8,21 @@
     "dist/"
   ],
   "scripts": {
-    "build": "npm run build:schema && npm run build:node && npm run build:wrapper",
-    "build:node": "napi build --release --cargo-cwd bindings/node dist",
-    "build:schema": "tsc",
-    "build:wrapper": "node scripts/create-wrappers.js",
-    "test": "npm run build && node scripts/test.js",
-    "example": "npm run build && node scripts/example.js",
+    "build": "npx hereby build",
+    "build:node": "npx hereby build:node",
+    "build:schema": "npx hereby schema:compile",
+    "build:wrapper": "npx hereby build:wrapper",
+    "build:all": "npx hereby build:all",
+    "test": "npx hereby test:node",
+    "test:all": "npx hereby test:all",
+    "example": "npx hereby example",
     "hereby": "hereby",
     "task": "hereby",
     "tasks": "hereby --list",
-    "schema:compile": "npm run build:schema",
-    "schema:generate": "npm run build:schema && node dist/schema/validate-schema.js --generate-schema",
-    "schema:validate": "npm run build:schema && node dist/schema/validate-schema.js --validate",
-    "schema:all": "npm run schema:generate && npm run schema:validate"
+    "schema:compile": "npx hereby schema:compile",
+    "schema:generate": "npx hereby schema:generate",
+    "schema:validate": "npx hereby schema:validate",
+    "schema:all": "npx hereby schema:all"
   },
   "repository": {
     "type": "git",
