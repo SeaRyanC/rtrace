@@ -1,5 +1,5 @@
 // Multi-threaded Rendering Demo for rtrace
-const rtrace = require('../tracer/rtrace.node');
+const rtrace = require('../dist/index.js');
 const fs = require('fs');
 
 console.log('🚀 rtrace Multi-threaded Rendering Demo');

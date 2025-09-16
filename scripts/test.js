@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Test script to verify NAPI bindings work correctly with the new API structure
-const { renderSceneToBuffer } = require('../tracer/rtrace.node');
+const { renderSceneToBuffer } = require('../dist/index.js');
 
 console.log('Testing NAPI bindings with new API structure...');
 
