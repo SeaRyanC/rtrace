@@ -34,7 +34,12 @@ pub fn render_scene(
     let height = height_f64.round() as u32;
 
     // Create renderer with k-d tree enabled and multi-threading
-    let renderer = rtrace::Renderer::new(width, height);
+    let mut renderer = rtrace::Renderer::new(width, height);
+    
+    // Configure outline detection if enabled in scene settings
+    if let Ok(Some(outline_config)) = scene.get_outline_config() {
+        renderer = renderer.with_outline_detection(outline_config);
+    }
 
     // Render and save
     renderer.render_to_file(&scene, &output_path).map_err(|e| {
@@ -82,11 +87,16 @@ pub fn render_scene_threaded(
     let height = height_f64.round() as u32;
 
     // Create renderer with specific thread count
-    let renderer = if let Some(threads) = thread_count {
+    let mut renderer = if let Some(threads) = thread_count {
         rtrace::Renderer::new_with_threads(width, height, threads as usize)
     } else {
         rtrace::Renderer::new(width, height)
     };
+    
+    // Configure outline detection if enabled in scene settings
+    if let Ok(Some(outline_config)) = scene.get_outline_config() {
+        renderer = renderer.with_outline_detection(outline_config);
+    }
 
     // Render and save
     renderer.render_to_file(&scene, &output_path).map_err(|e| {
@@ -141,7 +151,12 @@ pub fn render_scene_from_file(
     let height = height_f64.round() as u32;
 
     // Create renderer with k-d tree enabled and multi-threading
-    let renderer = rtrace::Renderer::new(width, height);
+    let mut renderer = rtrace::Renderer::new(width, height);
+    
+    // Configure outline detection if enabled in scene settings
+    if let Ok(Some(outline_config)) = scene.get_outline_config() {
+        renderer = renderer.with_outline_detection(outline_config);
+    }
 
     // Render and save
     renderer.render_to_file(&scene, &output_path).map_err(|e| {
@@ -189,11 +204,16 @@ pub fn render_scene_from_file_threaded(
     let height = height_f64.round() as u32;
 
     // Create renderer with specific thread count
-    let renderer = if let Some(threads) = thread_count {
+    let mut renderer = if let Some(threads) = thread_count {
         rtrace::Renderer::new_with_threads(width, height, threads as usize)
     } else {
         rtrace::Renderer::new(width, height)
     };
+    
+    // Configure outline detection if enabled in scene settings
+    if let Ok(Some(outline_config)) = scene.get_outline_config() {
+        renderer = renderer.with_outline_detection(outline_config);
+    }
 
     // Render and save
     renderer.render_to_file(&scene, &output_path).map_err(|e| {
@@ -259,7 +279,12 @@ pub fn render_scene_to_buffer(
     let stride = width * 4; // 4 bytes per pixel (RGBA)
 
     // Create renderer with k-d tree enabled and multi-threading
-    let renderer = rtrace::Renderer::new(width, height);
+    let mut renderer = rtrace::Renderer::new(width, height);
+    
+    // Configure outline detection if enabled in scene settings
+    if let Ok(Some(outline_config)) = scene.get_outline_config() {
+        renderer = renderer.with_outline_detection(outline_config);
+    }
 
     // Render to image buffer
     let image = renderer.render(&scene).map_err(|e| {
