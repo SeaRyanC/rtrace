@@ -38,7 +38,7 @@
   },
   "homepage": "https://github.com/SeaRyanC/rtrace#readme",
   "napi": {
-    "name": "rtrace",
+    "name": "index",
     "triples": {
       "defaults": true
     }
