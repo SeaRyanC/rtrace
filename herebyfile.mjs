@@ -32,29 +32,6 @@ function exec(command, options = {}) {
     });
 }
 
-// Helper function to run tasks in series
-function series(...tasks) {
-    return tasks.reduce((prev, curr) => {
-        if (!prev) return curr;
-        if (!curr) return prev;
-        
-        return task({
-            name: `series-${Math.random().toString(36).substr(2, 9)}`,
-            dependencies: [prev, curr],
-            hiddenFromTaskList: true
-        });
-    });
-}
-
-// Helper function to run tasks in parallel  
-function parallel(...tasks) {
-    return task({
-        name: `parallel-${Math.random().toString(36).substr(2, 9)}`, 
-        dependencies: tasks.filter(Boolean),
-        hiddenFromTaskList: true
-    });
-}
-
 // Helper function to ensure directory exists
 function ensureDir(dirPath) {
     if (!existsSync(dirPath)) {
@@ -95,52 +72,15 @@ function createWrappers() {
 
 // Test NAPI bindings (from scripts/test.js)
 function testNapi() {
-    return () => {
+    return async () => {
         console.log('Testing NAPI bindings with new API structure...');
 
         // Import the built bindings using require since it's CommonJS
         const { renderSceneToBuffer } = require('./dist/index.js');
+        const { getMinimalTestSceneJson } = require('./scripts/test-scenes.js');
 
         // Test render scene to buffer function with a minimal scene
-        const minimalScene = JSON.stringify({
-            camera: {
-                kind: "perspective",
-                position: [0, -5, 0],
-                target: [0, 0, 0],
-                up: [0, 0, 1],
-                fov: 45,
-                width: 1.0,
-                height: 1.0
-            },
-            scene_settings: {
-                ambient_illumination: { 
-                    color: "#202020",
-                    intensity: 0.1 
-                },
-                background_color: "#001122"
-            },
-            objects: [
-                {
-                    kind: "sphere",
-                    center: [0, 0, 0],
-                    radius: 1,
-                    material: { 
-                        color: "#ff0000",
-                        ambient: 0.1,
-                        diffuse: 0.8,
-                        specular: 0.4,
-                        shininess: 32
-                    }
-                }
-            ],
-            lights: [
-                {
-                    position: [2, -3, 2],
-                    color: "#FFFFFF",
-                    intensity: 1.0
-                }
-            ]
-        });
+        const minimalScene = getMinimalTestSceneJson();
 
         const result = renderSceneToBuffer(minimalScene, 100);
         console.log('✓ renderSceneToBuffer() returned image with dimensions:', result.width + 'x' + result.height);
@@ -159,226 +99,17 @@ function testNapi() {
 
 // Run example demo (from scripts/example.js)
 function runExample() {
-    return async () => {
-        console.log('=== rtrace Node.js Bindings Demo ===\n');
-
-        const rtrace = await import('./dist/index.js');
-
-        // Example 1: Render scene to buffer and inspect metadata
-        console.log('1. Render a simple scene to buffer:');
-        const simpleScene = JSON.stringify({
-            camera: {
-                kind: "perspective",
-                position: [0, -5, 0],
-                target: [0, 0, 0],
-                up: [0, 0, 1],
-                fov: 45,
-                width: 1.0,
-                height: 1.0
-            },
-            scene_settings: {
-                ambient_illumination: { 
-                    color: "#202020",
-                    intensity: 0.1 
-                },
-                background_color: "#001122"
-            },
-            objects: [
-                {
-                    kind: "sphere",
-                    center: [0, 0, 0],
-                    radius: 1,
-                    material: { 
-                        color: "#ff0000",
-                        ambient: 0.1,
-                        diffuse: 0.8,
-                        specular: 0.4,
-                        shininess: 32
-                    }
-                }
-            ],
-            lights: [
-                {
-                    position: [2, -3, 2],
-                    color: "#FFFFFF",
-                    intensity: 1.0
-                }
-            ]
-        });
-
-        const result = rtrace.renderSceneToBuffer(simpleScene, 50);
-        console.log('   Image dimensions:', result.width + 'x' + result.height);
-        console.log('   Stride (bytes per row):', result.stride);
-        console.log('   Data length (RGBA bytes):', result.data.length);
-        console.log('   Expected data length:', result.width * result.height * 4);
-        console.log();
-
-        // Example 2: Available render functions
-        console.log('2. Available render functions:');
-        console.log('   - renderScene(): Render to file with default multi-threading');
-        console.log('   - renderSceneThreaded(): Render to file with specific thread count');
-        console.log('   - renderSceneFromFile(): Load scene from JSON file and render');
-        console.log('   - renderSceneFromFileThreaded(): Load from file with specific thread count');
-        console.log('   - renderSceneToBuffer(): Render to memory buffer for programmatic use');
-        console.log();
-
-        console.log('✅ Demo completed successfully!');
-    };
+    return exec("node scripts/example.js");
 }
 
 // Analyze plus STL file (from scripts/analyze_plus.js)
 function analyzePlus() {
-    return () => {
-        // We can't directly get triangle count from the current API, 
-        // but we can estimate from the binary STL structure
-        function getTriangleCountFromBinarySTL(filePath) {
-            const buffer = readFileSync(filePath);
-            if (buffer.length < 84) {
-                throw new Error('STL file too short');
-            }
-            
-            // Read triangle count from bytes 80-83 (little endian)
-            const triangleCount = buffer.readUInt32LE(80);
-            const expectedSize = 84 + triangleCount * 50; // header + count + triangles * 50 bytes each
-            
-            return { triangleCount, fileSize: buffer.length, expectedSize };
-        }
-
-        console.log("📊 Plus.stl Analysis");
-        const info = getTriangleCountFromBinarySTL('examples/plus.stl');
-        console.log(`Triangle count: ${info.triangleCount}`);
-        console.log(`File size: ${info.fileSize} bytes`);
-        console.log(`Expected size: ${info.expectedSize} bytes`);
-        console.log(`Size match: ${info.fileSize === info.expectedSize ? '✓' : '✗'}`);
-        
-        if (info.triangleCount < 1000) {
-            console.log("\nThis is a small mesh, so brute force should be fast enough to compare with k-d tree.");
-        } else if (info.triangleCount < 10000) {
-            console.log("\nThis is a medium mesh, k-d tree should provide some speedup.");  
-        } else {
-            console.log("\nThis is a large mesh, k-d tree should provide significant speedup.");
-        }
-    };
+    return exec("node scripts/analyze_plus.js");
 }
 
 // Run radial spheres example (from scripts/radial_spheres_example.js)
 function runRadialSpheresExample() {
-    return async () => {
-        console.log('=== Radial Spheres Scene Demo ===\n');
-
-        const rtrace = await import('./dist/index.js');
-
-        // Function to create a sphere with given position, color, and radius
-        function createSphere(center, color, radius = 0.8) {
-            return {
-                kind: "sphere",
-                center: center,
-                radius: radius,
-                material: {
-                    color: color,
-                    ambient: 0.1,
-                    diffuse: 0.8,
-                    specular: 0.4,
-                    shininess: 32
-                }
-            };
-        }
-
-        // Function to convert HSV to hex color
-        function hsvToHex(h, s, v) {
-            const c = v * s;
-            const x = c * (1 - Math.abs((h / 60) % 2 - 1));
-            const m = v - c;
-            
-            let r, g, b;
-            if (h >= 0 && h < 60) {
-                r = c; g = x; b = 0;
-            } else if (h >= 60 && h < 120) {
-                r = x; g = c; b = 0;
-            } else if (h >= 120 && h < 180) {
-                r = 0; g = c; b = x;
-            } else if (h >= 180 && h < 240) {
-                r = 0; g = x; b = c;
-            } else if (h >= 240 && h < 300) {
-                r = x; g = 0; b = c;
-            } else {
-                r = c; g = 0; b = x;
-            }
-            
-            r = Math.round((r + m) * 255);
-            g = Math.round((g + m) * 255);
-            b = Math.round((b + m) * 255);
-            
-            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-        }
-
-        // Generate spheres in a radial pattern
-        const objects = [];
-        const numRings = 3;
-        const spheresPerRing = 8;
-        
-        for (let ring = 1; ring <= numRings; ring++) {
-            const radius = ring * 2.5;
-            const sphereCount = spheresPerRing * ring;
-            
-            for (let i = 0; i < sphereCount; i++) {
-                const angle = (i / sphereCount) * 2 * Math.PI;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                const z = 0;
-                
-                // Color based on ring and position
-                const hue = (angle / (2 * Math.PI)) * 360;
-                const saturation = 0.8;
-                const value = 1.0 - (ring - 1) * 0.2; // Dimmer for outer rings
-                const color = hsvToHex(hue, saturation, value);
-                
-                objects.push(createSphere([x, y, z], color, 0.4));
-            }
-        }
-
-        // Add a central sphere
-        objects.push(createSphere([0, 0, 0], "#FFFFFF", 0.6));
-
-        const scene = {
-            camera: {
-                kind: "perspective",
-                position: [0, -15, 8],
-                target: [0, 0, 0],
-                up: [0, 0, 1],
-                fov: 45,
-                width: 1.0,
-                height: 1.0
-            },
-            scene_settings: {
-                ambient_illumination: { 
-                    color: "#1a1a1a",
-                    intensity: 0.1 
-                },
-                background_color: "#000011"
-            },
-            objects: objects,
-            lights: [
-                {
-                    position: [5, -10, 10],
-                    color: "#FFFFFF",
-                    intensity: 1.2
-                },
-                {
-                    position: [-5, -10, 5],
-                    color: "#FFAA88",
-                    intensity: 0.8
-                }
-            ]
-        };
-
-        console.log(`Generated scene with ${objects.length} spheres`);
-        console.log('Rendering radial spheres scene...');
-        
-        const result = rtrace.renderSceneToBuffer(JSON.stringify(scene), 400);
-        console.log(`✅ Rendered ${result.width}x${result.height} image`);
-        console.log('Scene demonstrates: colored spheres, radial patterns, multiple lights');
-    };
+    return exec("node scripts/radial_spheres_example.js");
 }
 
 // Test plus bounds (from scripts/test_plus_bounds.js)
@@ -409,146 +140,17 @@ function testPlusBounds() {
 
 // Render plus debug images (from scripts/render_plus_debug.js)
 function renderPlusDebug() {
-    return async () => {
-        const rtrace = require('./dist/index.js');
-
-        async function renderScene(sceneFile, outputPrefix, size = 1000) {
-            console.log(`\n=== Rendering ${sceneFile} ===`);
-            
-            const sceneJson = readFileSync(sceneFile, 'utf8');
-            
-            // Default k-d tree version
-            console.log("Rendering with k-d tree (default)...");
-            const kdtreeOutput = `examples/${outputPrefix}_kdtree_${size}.png`;
-            const kdtreeResult = rtrace.renderScene(sceneJson, kdtreeOutput, size);
-            console.log("✓", kdtreeResult);
-            
-            // Multi-threaded version with specific thread count
-            console.log("Rendering with 4 threads...");
-            const threadedOutput = `examples/${outputPrefix}_4threads_${size}.png`;
-            const threadedResult = rtrace.renderSceneThreaded(sceneJson, threadedOutput, size, 4);
-            console.log("✓", threadedResult);
-        }
-
-        console.log("🔧 Plus.stl Debug Renders");
-        console.log("Generating optimized renders with k-d tree acceleration");
-        
-        // Render all three views
-        await renderScene('examples/plus_front.json', 'plus_front', 1000);
-        await renderScene('examples/plus_side.json', 'plus_side', 1000);
-        await renderScene('examples/plus_perspective.json', 'plus_perspective', 1000);
-        
-        console.log("\n🎉 All renders completed!");
-        console.log("\nGenerated images:");
-        console.log("Front view:");
-        console.log("  - K-d tree:     examples/plus_front_kdtree_1000.png");
-        console.log("  - 4 threads:    examples/plus_front_4threads_1000.png");
-        console.log("Side view:");
-        console.log("  - K-d tree:     examples/plus_side_kdtree_1000.png");
-        console.log("  - 4 threads:    examples/plus_side_4threads_1000.png");
-        console.log("Perspective view:");
-        console.log("  - K-d tree:     examples/plus_perspective_kdtree_1000.png");
-        console.log("  - 4 threads:    examples/plus_perspective_4threads_1000.png");
-        
-        console.log("\nNote: renderSceneBruteForce was removed - all renders now use k-d tree optimization");
-    };
+    return exec("node scripts/render_plus_debug.js");
 }
 
 // Render plus high resolution (from scripts/render_plus_hires.js)
 function renderPlusHires() {
-    return async () => {
-        const rtrace = await import('./dist/index.js');
-
-        console.log("Loading plus.stl scene for high-res rendering...");
-        const sceneJson = readFileSync('examples/plus_front.json', 'utf8');
-        
-        // Render in high resolution with different threading options
-        console.log("\nRendering plus.stl with diagonal 1000 using k-d tree acceleration...");
-        const resultKdTree = rtrace.renderScene(sceneJson, 'examples/plus_kdtree_1000.png', 1000);
-        console.log("K-d tree result:", resultKdTree);
-        
-        console.log("\nRendering plus.stl with diagonal 1000 using single thread...");
-        const resultSingleThread = rtrace.renderSceneThreaded(sceneJson, 'examples/plus_single_thread_1000.png', 1000, 1);
-        console.log("Single thread result:", resultSingleThread);
-        
-        console.log("\n✅ High-res renders completed successfully!");
-        console.log("Compare these high-resolution images:");
-        console.log("- Multi-threaded: examples/plus_kdtree_1000.png");
-        console.log("- Single thread:  examples/plus_single_thread_1000.png");
-        console.log("\nNote: renderSceneBruteForce was removed - all renders now use k-d tree optimization");
-    };
+    return exec("node scripts/render_plus_hires.js");
 }
 
 // Run multithreaded demo (from scripts/multithreaded_demo.js)
 function runMultithreadedDemo() {
-    return async () => {
-        console.log('🚀 rtrace Multi-threaded Rendering Demo');
-        console.log('========================================\n');
-
-        const rtrace = await import('./dist/index.js');
-
-        // Test with an existing scene
-        const sceneFile = 'examples/simple_cube.json';
-
-        if (!existsSync(sceneFile)) {
-            console.error(`❌ Scene file ${sceneFile} not found`);
-            console.log('Available scenes:');
-            const examples = readdirSync('examples').filter(f => f.endsWith('.json'));
-            examples.forEach(f => console.log(`   examples/${f}`));
-            return;
-        }
-
-        console.log('Demonstrating multi-threaded rendering capabilities...\n');
-        
-        // Test different thread configurations
-        const tests = [
-            { name: 'Single Thread', threads: 1 },
-            { name: 'Dual Thread', threads: 2 }, 
-            { name: 'All Cores', threads: null },
-        ];
-        
-        for (const test of tests) {
-            console.log(`📊 ${test.name} Rendering:`);
-            console.time(test.name);
-            
-            try {
-                let result;
-                if (test.threads === null) {
-                    // Use default multi-threading (all cores)
-                    result = rtrace.renderSceneFromFile(sceneFile, `./demo_${test.name.toLowerCase().replace(' ', '_')}.png`, 500);
-                } else {
-                    // Use specific thread count
-                    result = rtrace.renderSceneFromFileThreaded(sceneFile, `./demo_${test.name.toLowerCase().replace(' ', '_')}.png`, 500, test.threads);
-                }
-                console.timeEnd(test.name);
-                console.log(`   ✓ ${result}\n`);
-            } catch (error) {
-                console.error(`   ❌ Error: ${error.message}\n`);
-            }
-        }
-        
-        console.log('🎯 Key Benefits of Multi-threaded Rendering:');
-        console.log('   • Faster rendering times through parallel processing');
-        console.log('   • Better utilization of modern multi-core processors');
-        console.log('   • Configurable thread count for optimal performance');
-        console.log('   • Identical output quality regardless of thread count');
-        console.log('   • Seamless integration with existing API');
-        
-        console.log('\n📝 API Usage:');
-        console.log('   rtrace.renderScene(json, output, size)              // Auto multi-threading');
-        console.log('   rtrace.renderSceneThreaded(json, output, size, threads) // Custom threads');
-        console.log('   rtrace.renderSceneFromFile(file, output, size)      // File-based rendering');
-        
-        // Clean up demo files
-        setTimeout(() => {
-            ['./demo_single_thread.png', './demo_dual_thread.png', './demo_all_cores.png'].forEach(file => {
-                if (existsSync(file)) {
-                    unlinkSync(file);
-                }
-            });
-            console.log('\n🧹 Demo files cleaned up.');
-        }, 1000);
-    };
+    return exec("node scripts/multithreaded_demo.js");
 }
 
 // Schema tasks first
