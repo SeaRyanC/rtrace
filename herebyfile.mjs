@@ -4,6 +4,9 @@ import { promisify } from "util";
 import { readdir, access } from "fs/promises";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "fs";
 import { extname, basename } from "path";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
 
 // Helper function to execute shell commands
 function exec(command, options = {}) {
@@ -52,28 +55,6 @@ function parallel(...tasks) {
     });
 }
 
-// Helper function to execute a JavaScript function directly
-function execJS(code) {
-    return () => new Promise((resolve, reject) => {
-        const child = spawn('node', ['-e', code], {
-            stdio: 'inherit',
-            shell: false
-        });
-
-        child.on('close', (code) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject(new Error(`JavaScript execution failed with exit code ${code}`));
-            }
-        });
-
-        child.on('error', (error) => {
-            reject(error);
-        });
-    });
-}
-
 // Helper function to ensure directory exists
 function ensureDir(dirPath) {
     if (!existsSync(dirPath)) {
@@ -114,65 +95,66 @@ function createWrappers() {
 
 // Test NAPI bindings (from scripts/test.js)
 function testNapi() {
-    const testCode = `
-const { renderSceneToBuffer } = require('./dist/index.js');
+    return () => {
+        console.log('Testing NAPI bindings with new API structure...');
 
-console.log('Testing NAPI bindings with new API structure...');
+        // Import the built bindings using require since it's CommonJS
+        const { renderSceneToBuffer } = require('./dist/index.js');
 
-const minimalScene = JSON.stringify({
-    camera: {
-        kind: "perspective",
-        position: [0, -5, 0],
-        target: [0, 0, 0],
-        up: [0, 0, 1],
-        fov: 45,
-        width: 1.0,
-        height: 1.0
-    },
-    scene_settings: {
-        ambient_illumination: { 
-            color: "#202020",
-            intensity: 0.1 
-        },
-        background_color: "#001122"
-    },
-    objects: [
-        {
-            kind: "sphere",
-            center: [0, 0, 0],
-            radius: 1,
-            material: { 
-                color: "#ff0000",
-                ambient: 0.1,
-                diffuse: 0.8,
-                specular: 0.4,
-                shininess: 32
-            }
+        // Test render scene to buffer function with a minimal scene
+        const minimalScene = JSON.stringify({
+            camera: {
+                kind: "perspective",
+                position: [0, -5, 0],
+                target: [0, 0, 0],
+                up: [0, 0, 1],
+                fov: 45,
+                width: 1.0,
+                height: 1.0
+            },
+            scene_settings: {
+                ambient_illumination: { 
+                    color: "#202020",
+                    intensity: 0.1 
+                },
+                background_color: "#001122"
+            },
+            objects: [
+                {
+                    kind: "sphere",
+                    center: [0, 0, 0],
+                    radius: 1,
+                    material: { 
+                        color: "#ff0000",
+                        ambient: 0.1,
+                        diffuse: 0.8,
+                        specular: 0.4,
+                        shininess: 32
+                    }
+                }
+            ],
+            lights: [
+                {
+                    position: [2, -3, 2],
+                    color: "#FFFFFF",
+                    intensity: 1.0
+                }
+            ]
+        });
+
+        const result = renderSceneToBuffer(minimalScene, 100);
+        console.log('✓ renderSceneToBuffer() returned image with dimensions:', result.width + 'x' + result.height);
+
+        if (!result.data || result.data.length === 0) {
+            throw new Error('Expected image data, got empty buffer');
         }
-    ],
-    lights: [
-        {
-            position: [2, -3, 2],
-            color: "#FFFFFF",
-            intensity: 1.0
+
+        if (result.width <= 0 || result.height <= 0) {
+            throw new Error('Expected positive dimensions, got: ' + result.width + 'x' + result.height);
         }
-    ]
-});
 
-const result = renderSceneToBuffer(minimalScene, 100);
-console.log('✓ renderSceneToBuffer() returned image with dimensions:', result.width + 'x' + result.height);
-
-if (!result.data || result.data.length === 0) {
-    throw new Error('Expected image data, got empty buffer');
-}
-
-if (result.width <= 0 || result.height <= 0) {
-    throw new Error('Expected positive dimensions, got: ' + result.width + 'x' + result.height);
-}
-
-console.log('🎉 All tests passed! NAPI bindings are working correctly with new API structure.');
-`;
-    return execJS(testCode);
+        console.log('🎉 All tests passed! NAPI bindings are working correctly with new API structure.');
+    };
 }
 
 // Run example demo (from scripts/example.js)
