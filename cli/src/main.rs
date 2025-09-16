@@ -99,10 +99,9 @@ fn main() {
     renderer.samples = samples;
     renderer.seed = Some(0); // Always use deterministic seed 0
     
-    // Configure outline detection from scene settings
+    // Check if outline detection is enabled and handle anti-aliasing compatibility
     match scene.get_outline_config() {
-        Ok(Some(outline_config)) => {
-            renderer = renderer.with_outline_detection(outline_config);
+        Ok(Some(_outline_config)) => {
             println!("Outline detection enabled from scene configuration");
             
             // Check if current anti-aliasing mode is compatible with outline detection

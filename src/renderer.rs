@@ -188,6 +188,7 @@ impl SamplingHelper {
     }
 }
 
+#[derive(Clone)]
 pub struct Renderer {
     pub width: u32,
     pub height: u32,
@@ -246,6 +247,22 @@ impl Renderer {
         if self.samples == 0 {
             return Err("Samples must be greater than 0".into());
         }
+
+        // Create a renderer configuration that automatically applies scene outline settings
+        let mut effective_renderer = self.clone();
+        
+        // Apply outline configuration from scene if present and not already configured
+        if effective_renderer.outline_config.is_none() {
+            if let Ok(Some(outline_config)) = scene.get_outline_config() {
+                effective_renderer.outline_config = Some(outline_config);
+            }
+        }
+
+        effective_renderer.render_with_config(scene)
+    }
+
+    /// Internal render method that uses the renderer's current configuration
+    fn render_with_config(&self, scene: &Scene) -> Result<RgbImage, Box<dyn std::error::Error>> {
 
         let render_start_time = Instant::now();
 
