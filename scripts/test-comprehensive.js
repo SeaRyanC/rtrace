@@ -8,13 +8,13 @@ console.log('Testing internal API structure...');
 
 try {
     // Test 1: Barrel export
-    const rtrace = require('../index.js');
-    console.log('✓ Barrel export works: require("../index.js")');
+    const rtrace = require('../dist/index.js');
+    console.log('✓ Barrel export works: require("../dist/index.js")');
     console.log('✓ rtrace.tracer available:', !!rtrace.tracer);
     console.log('✓ rtrace.schema available:', !!rtrace.schema);
     
     // Test 2: Direct tracer import
-    const tracer = require('../tracer/rtrace.node');
+    const tracer = require('../dist/index.js');
     console.log('✓ Direct tracer import works');
     console.log('✓ tracer functions available:', [
         'renderScene',
@@ -25,7 +25,7 @@ try {
     ].every(fn => typeof tracer[fn] === 'function'));
     
     // Test 3: Direct schema import
-    const schema = require('../schema/schema.js');
+    const schema = require('../dist/schema/schema.js');
     console.log('✓ Direct schema import works');
     console.log('✓ schema.SceneSchema available:', !!schema.SceneSchema);
     

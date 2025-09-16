@@ -1,5 +1,0 @@
-{
-  "name": "rtrace-tracer",
-  "main": "rtrace.node",
-  "types": "index.d.ts"
-}

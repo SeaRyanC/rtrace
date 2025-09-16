@@ -1,5 +1,5 @@
 // Example usage of rtrace Node.js bindings
-const rtrace = require('../tracer/rtrace.node');
+const rtrace = require('../dist/index.js');
 
 console.log('=== rtrace Node.js Bindings Demo ===\n');
 
