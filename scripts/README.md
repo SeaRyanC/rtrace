@@ -16,6 +16,9 @@ This directory contains JavaScript demo scripts, examples, and test utilities fo
 - `render_plus_debug.js` - Debug rendering script for plus model
 - `render_plus_hires.js` - High-resolution rendering script
 
+### Utility Scripts
+- `test-scenes.js` - Shared scene definitions to avoid duplication across test files
+
 ## Usage
 
 Most scripts should be run from the root directory of the project:
@@ -32,4 +35,4 @@ node scripts/analyze_plus.js
 node scripts/multithreaded_demo.js
 ```
 
-Note: Scripts reference `../examples/` for scene files and `../rtrace.node` for the native module.
+Note: Scripts reference `../examples/` for scene files and the built distribution files in `../dist/`.
