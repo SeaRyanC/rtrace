@@ -1,15 +1,9 @@
 use napi::{Error, Result, Status};
 use napi_derive::napi;
 
-
-
 /// Render a scene from JSON string directly
 #[napi]
-pub fn render_scene(
-    scene_json: String,
-    output_path: String,
-    size: Option<u32>,
-) -> Result<String> {
+pub fn render_scene(scene_json: String, output_path: String, size: Option<u32>) -> Result<String> {
     let diagonal_size = size.unwrap_or(1000);
 
     // Parse the JSON scene
@@ -23,13 +17,13 @@ pub fn render_scene(
     // Compute pixel dimensions from diagonal size and camera aspect ratio
     let camera_aspect_ratio = scene.camera.width / scene.camera.height;
     let diagonal = diagonal_size as f64;
-    
+
     // Using diagonal D and aspect ratio R = W/H:
-    // H = D / sqrt(R² + 1)  
+    // H = D / sqrt(R² + 1)
     // W = R * H
     let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
     let width_f64 = camera_aspect_ratio * height_f64;
-    
+
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
 
@@ -71,13 +65,13 @@ pub fn render_scene_threaded(
     // Compute pixel dimensions from diagonal size and camera aspect ratio
     let camera_aspect_ratio = scene.camera.width / scene.camera.height;
     let diagonal = diagonal_size as f64;
-    
+
     // Using diagonal D and aspect ratio R = W/H:
-    // H = D / sqrt(R² + 1)  
+    // H = D / sqrt(R² + 1)
     // W = R * H
     let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
     let width_f64 = camera_aspect_ratio * height_f64;
-    
+
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
 
@@ -108,8 +102,6 @@ pub fn render_scene_threaded(
     ))
 }
 
-
-
 /// Render a scene from JSON file directly (handles relative paths correctly)
 #[napi]
 pub fn render_scene_from_file(
@@ -130,13 +122,13 @@ pub fn render_scene_from_file(
     // Compute pixel dimensions from diagonal size and camera aspect ratio
     let camera_aspect_ratio = scene.camera.width / scene.camera.height;
     let diagonal = diagonal_size as f64;
-    
+
     // Using diagonal D and aspect ratio R = W/H:
-    // H = D / sqrt(R² + 1)  
+    // H = D / sqrt(R² + 1)
     // W = R * H
     let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
     let width_f64 = camera_aspect_ratio * height_f64;
-    
+
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
 
@@ -178,13 +170,13 @@ pub fn render_scene_from_file_threaded(
     // Compute pixel dimensions from diagonal size and camera aspect ratio
     let camera_aspect_ratio = scene.camera.width / scene.camera.height;
     let diagonal = diagonal_size as f64;
-    
+
     // Using diagonal D and aspect ratio R = W/H:
-    // H = D / sqrt(R² + 1)  
+    // H = D / sqrt(R² + 1)
     // W = R * H
     let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
     let width_f64 = camera_aspect_ratio * height_f64;
-    
+
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
 
@@ -230,10 +222,7 @@ pub struct ImageBuffer {
 
 /// Render a scene from JSON string and return the image buffer with metadata
 #[napi]
-pub fn render_scene_to_buffer(
-    scene_json: String,
-    size: Option<u32>,
-) -> Result<ImageBuffer> {
+pub fn render_scene_to_buffer(scene_json: String, size: Option<u32>) -> Result<ImageBuffer> {
     let diagonal_size = size.unwrap_or(1000);
 
     // Parse the JSON scene
@@ -247,13 +236,13 @@ pub fn render_scene_to_buffer(
     // Compute pixel dimensions from diagonal size and camera aspect ratio
     let camera_aspect_ratio = scene.camera.width / scene.camera.height;
     let diagonal = diagonal_size as f64;
-    
+
     // Using diagonal D and aspect ratio R = W/H:
-    // H = D / sqrt(R² + 1)  
+    // H = D / sqrt(R² + 1)
     // W = R * H
     let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
     let width_f64 = camera_aspect_ratio * height_f64;
-    
+
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
     let stride = width * 4; // 4 bytes per pixel (RGBA)
@@ -271,12 +260,12 @@ pub fn render_scene_to_buffer(
 
     // Convert image to RGBA buffer for easy JavaScript manipulation
     let mut rgba_buffer = Vec::with_capacity((width * height * 4) as usize);
-    
+
     for (_, _, pixel) in image.enumerate_pixels() {
         rgba_buffer.push(pixel[0]); // Red
-        rgba_buffer.push(pixel[1]); // Green  
+        rgba_buffer.push(pixel[1]); // Green
         rgba_buffer.push(pixel[2]); // Blue
-        rgba_buffer.push(255);      // Alpha (always opaque)
+        rgba_buffer.push(255); // Alpha (always opaque)
     }
 
     Ok(ImageBuffer {

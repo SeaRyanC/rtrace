@@ -213,11 +213,13 @@ impl Cube {
         material_index: usize,
     ) -> Self {
         let half_size = size / 2.0;
-        let inverse = transform_matrix.try_inverse().unwrap_or_else(nalgebra::Matrix4::identity);
+        let inverse = transform_matrix
+            .try_inverse()
+            .unwrap_or_else(nalgebra::Matrix4::identity);
         Self {
             center,
             half_size,
-            transform: inverse, // Store world-to-local transform
+            transform: inverse,                  // Store world-to-local transform
             inverse_transform: transform_matrix, // Store local-to-world transform
             material_color,
             material_index,
@@ -234,13 +236,13 @@ impl Cube {
         // For oriented cubes, we need to transform all 8 corners and find the AABB
         let corners = [
             Point::new(-self.half_size.x, -self.half_size.y, -self.half_size.z),
-            Point::new(-self.half_size.x, -self.half_size.y,  self.half_size.z),
-            Point::new(-self.half_size.x,  self.half_size.y, -self.half_size.z),
-            Point::new(-self.half_size.x,  self.half_size.y,  self.half_size.z),
-            Point::new( self.half_size.x, -self.half_size.y, -self.half_size.z),
-            Point::new( self.half_size.x, -self.half_size.y,  self.half_size.z),
-            Point::new( self.half_size.x,  self.half_size.y, -self.half_size.z),
-            Point::new( self.half_size.x,  self.half_size.y,  self.half_size.z),
+            Point::new(-self.half_size.x, -self.half_size.y, self.half_size.z),
+            Point::new(-self.half_size.x, self.half_size.y, -self.half_size.z),
+            Point::new(-self.half_size.x, self.half_size.y, self.half_size.z),
+            Point::new(self.half_size.x, -self.half_size.y, -self.half_size.z),
+            Point::new(self.half_size.x, -self.half_size.y, self.half_size.z),
+            Point::new(self.half_size.x, self.half_size.y, -self.half_size.z),
+            Point::new(self.half_size.x, self.half_size.y, self.half_size.z),
         ];
 
         // Transform corners to world space and find AABB
@@ -249,7 +251,8 @@ impl Cube {
 
         for corner in &corners {
             // Transform corner to world space: center + rotation * corner
-            let world_corner = self.center + (self.inverse_transform * corner.to_homogeneous()).xyz();
+            let world_corner =
+                self.center + (self.inverse_transform * corner.to_homogeneous()).xyz();
             min.x = min.x.min(world_corner.x);
             min.y = min.y.min(world_corner.y);
             min.z = min.z.min(world_corner.z);
@@ -298,10 +301,10 @@ mod tests {
     #[test]
     fn test_cube_rotation_z() {
         use nalgebra::Matrix4;
-        
+
         // Create a 45-degree rotation around Z-axis
         let rotation_matrix = Matrix4::from_euler_angles(0.0, 0.0, 45.0_f64.to_radians());
-        
+
         let cube = Cube::new_with_transform(
             Point::new(0.0, 0.0, 0.0),
             Vec3::new(2.0, 2.0, 2.0),
@@ -313,11 +316,14 @@ mod tests {
         // Test ray intersection from above should still work
         let ray = Ray::new(Point::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, -1.0));
         let hit = cube.hit(&ray, 0.001, 1000.0);
-        
+
         assert!(hit.is_some(), "Ray should intersect rotated cube");
-        
+
         let hit_record = hit.unwrap();
-        assert!((hit_record.point.z - 1.0).abs() < 1e-10, "Hit should be at z=1 (top face)");
+        assert!(
+            (hit_record.point.z - 1.0).abs() < 1e-10,
+            "Hit should be at z=1 (top face)"
+        );
         assert!(hit_record.point.x.abs() < 1e-10, "Hit x should be near 0");
         assert!(hit_record.point.y.abs() < 1e-10, "Hit y should be near 0");
     }
@@ -325,10 +331,10 @@ mod tests {
     #[test]
     fn test_cube_rotation_bounds() {
         use nalgebra::Matrix4;
-        
+
         // Test that rotating a cube around Z-axis expands its bounding box correctly
         let rotation_matrix = Matrix4::from_euler_angles(0.0, 0.0, 45.0_f64.to_radians());
-        
+
         let cube = Cube::new_with_transform(
             Point::new(0.0, 0.0, 0.0),
             Vec3::new(2.0, 2.0, 2.0), // 2x2x2 cube
@@ -338,16 +344,28 @@ mod tests {
         );
 
         let (min, max) = cube.bounds();
-        
+
         // When a 2x2 square is rotated 45 degrees, its diagonal becomes the new width/height
         // Diagonal = sqrt(2^2 + 2^2) = sqrt(8) = 2*sqrt(2) ≈ 2.828
         let expected_half_diagonal = 2.0_f64.sqrt();
-        
-        assert!((min.x - (-expected_half_diagonal)).abs() < 1e-10, "Min X should be expanded");
-        assert!((max.x - expected_half_diagonal).abs() < 1e-10, "Max X should be expanded");
-        assert!((min.y - (-expected_half_diagonal)).abs() < 1e-10, "Min Y should be expanded");
-        assert!((max.y - expected_half_diagonal).abs() < 1e-10, "Max Y should be expanded");
-        
+
+        assert!(
+            (min.x - (-expected_half_diagonal)).abs() < 1e-10,
+            "Min X should be expanded"
+        );
+        assert!(
+            (max.x - expected_half_diagonal).abs() < 1e-10,
+            "Max X should be expanded"
+        );
+        assert!(
+            (min.y - (-expected_half_diagonal)).abs() < 1e-10,
+            "Min Y should be expanded"
+        );
+        assert!(
+            (max.y - expected_half_diagonal).abs() < 1e-10,
+            "Max Y should be expanded"
+        );
+
         // Z bounds should remain unchanged
         assert!((min.z - (-1.0)).abs() < 1e-10, "Min Z should be -1");
         assert!((max.z - 1.0).abs() < 1e-10, "Max Z should be 1");
@@ -366,12 +384,15 @@ mod tests {
         // Test ray intersection
         let ray = Ray::new(Point::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, -1.0));
         let hit = cube.hit(&ray, 0.001, 1000.0);
-        
+
         assert!(hit.is_some(), "Ray should intersect unrotated cube");
-        
+
         let hit_record = hit.unwrap();
-        assert!((hit_record.point.z - 1.0).abs() < 1e-10, "Hit should be at z=1");
-        
+        assert!(
+            (hit_record.point.z - 1.0).abs() < 1e-10,
+            "Hit should be at z=1"
+        );
+
         // Test bounds
         let (min, max) = cube.bounds();
         assert_eq!(min, Point::new(-1.0, -1.0, -1.0));
@@ -391,15 +412,27 @@ mod tests {
         // Test ray intersection from above the cube
         let ray = Ray::new(Point::new(5.0, 3.0, 5.0), Vec3::new(0.0, 0.0, -1.0));
         let hit = cube.hit(&ray, 0.001, 1000.0);
-        
-        assert!(hit.is_some(), "Ray should intersect cube at correct position");
-        
+
+        assert!(
+            hit.is_some(),
+            "Ray should intersect cube at correct position"
+        );
+
         let hit_record = hit.unwrap();
         // Should hit the top face at z = center.z + half_size.z = 2 + 1 = 3
-        assert!((hit_record.point.z - 3.0).abs() < 1e-10, "Hit should be at z=3 (top face of cube at center z=2)");
-        assert!((hit_record.point.x - 5.0).abs() < 1e-10, "Hit x should be at cube center x=5");
-        assert!((hit_record.point.y - 3.0).abs() < 1e-10, "Hit y should be at cube center y=3");
-        
+        assert!(
+            (hit_record.point.z - 3.0).abs() < 1e-10,
+            "Hit should be at z=3 (top face of cube at center z=2)"
+        );
+        assert!(
+            (hit_record.point.x - 5.0).abs() < 1e-10,
+            "Hit x should be at cube center x=5"
+        );
+        assert!(
+            (hit_record.point.y - 3.0).abs() < 1e-10,
+            "Hit y should be at cube center y=3"
+        );
+
         // Test bounds - should be centered around (5, 3, 2)
         let (min, max) = cube.bounds();
         assert_eq!(min, Point::new(4.0, 2.0, 1.0)); // center - half_size
@@ -410,16 +443,17 @@ mod tests {
 impl Intersectable for Cube {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         // Transform ray to cube's local coordinate space
-        let local_origin = Point::from((self.transform * (ray.origin - self.center).to_homogeneous()).xyz());
+        let local_origin =
+            Point::from((self.transform * (ray.origin - self.center).to_homogeneous()).xyz());
         let local_direction = (self.transform * ray.direction.to_homogeneous()).xyz();
-        
+
         // Handle degenerate direction (shouldn't happen with normalized rays, but be safe)
         if local_direction.magnitude() < 1e-8 {
             return None;
         }
-        
+
         let local_ray = Ray::new(local_origin, local_direction);
-        
+
         // Perform intersection against axis-aligned box in local space
         let mut t_min_hit = t_min;
         let mut t_max_hit = t_max;
@@ -466,20 +500,24 @@ impl Intersectable for Cube {
 
         // Calculate hit point in local space
         let local_hit_point = local_ray.at(t);
-        
+
         // Transform hit point back to world space
-        let world_hit_point = self.center + (self.inverse_transform * local_hit_point.to_homogeneous()).xyz();
-        
+        let world_hit_point =
+            self.center + (self.inverse_transform * local_hit_point.to_homogeneous()).xyz();
+
         // Transform normal back to world space (use inverse transpose for normals)
         let world_normal = if self.transform == nalgebra::Matrix4::identity() {
             normal
         } else {
             // For normals, we need the inverse transpose of the rotation part
             let rotation_part = self.transform.fixed_view::<3, 3>(0, 0);
-            let normal_transform = rotation_part.try_inverse().unwrap_or_else(nalgebra::Matrix3::identity).transpose();
+            let normal_transform = rotation_part
+                .try_inverse()
+                .unwrap_or_else(nalgebra::Matrix3::identity)
+                .transpose();
             normal_transform * normal
         };
-        
+
         Some(HitRecord::new(
             world_hit_point,
             world_normal,

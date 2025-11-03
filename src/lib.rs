@@ -26,4 +26,3 @@ pub use renderer::{AntiAliasingMode, Renderer};
 pub use scene::{
     AmbientIllumination, Camera, Fog, Light, Material, Object, Scene, SceneSettings, Texture,
 };
-

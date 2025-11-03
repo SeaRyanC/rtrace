@@ -1,6 +1,6 @@
+use crate::ray::Cube;
 use nalgebra::{Matrix4, Point3, Vector3};
 use serde::{Deserialize, Serialize};
-use crate::ray::Cube;
 
 /// Color representation as RGB values (0.0-1.0)
 pub type Color = Vector3<f64>;
@@ -395,12 +395,24 @@ pub struct OutlineSettings {
     pub use_8_neighbors: bool,
 }
 
-fn default_outline_depth_weight() -> f64 { 1.0 }
-fn default_outline_normal_weight() -> f64 { 1.0 }
-fn default_outline_threshold() -> f64 { 0.1 }
-fn default_outline_color() -> String { "#000000".to_string() }
-fn default_outline_thickness() -> f64 { 2.0 }
-fn default_outline_use_8_neighbors() -> bool { false }
+fn default_outline_depth_weight() -> f64 {
+    1.0
+}
+fn default_outline_normal_weight() -> f64 {
+    1.0
+}
+fn default_outline_threshold() -> f64 {
+    0.1
+}
+fn default_outline_color() -> String {
+    "#000000".to_string()
+}
+fn default_outline_thickness() -> f64 {
+    2.0
+}
+fn default_outline_use_8_neighbors() -> bool {
+    false
+}
 
 impl Default for OutlineSettings {
     fn default() -> Self {
@@ -586,7 +598,13 @@ impl Scene {
                     // Create a temporary cube to get bounds
                     let temp_cube = if let Some(transform_strings) = transform {
                         if let Ok(transform_matrix) = parse_transforms(transform_strings) {
-                            Cube::new_with_transform(center_point, cube_size, transform_matrix, Color::new(0.0, 0.0, 0.0), 0)
+                            Cube::new_with_transform(
+                                center_point,
+                                cube_size,
+                                transform_matrix,
+                                Color::new(0.0, 0.0, 0.0),
+                                0,
+                            )
                         } else {
                             Cube::new(center_point, cube_size, Color::new(0.0, 0.0, 0.0), 0)
                         }

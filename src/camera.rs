@@ -173,30 +173,30 @@ impl Camera {
             // For perspective projection
             let view_vec = point - self.origin;
             let depth = view_vec.dot(self.view_direction.as_ref());
-            
+
             if depth <= 0.0 {
                 // Point is behind the camera
                 return (nalgebra::Point2::new(-1.0, -1.0), depth);
             }
-            
+
             // Project onto viewport plane
             let viewport_point = self.origin + depth * self.view_direction.as_ref();
             let offset = point - viewport_point;
-            
+
             // Convert to UV coordinates
             let u = offset.dot(&self.horizontal) / self.horizontal.magnitude_squared() + 0.5;
             let v = offset.dot(&self.vertical) / self.vertical.magnitude_squared() + 0.5;
-            
+
             (nalgebra::Point2::new(u, v), depth)
         } else {
             // For orthographic projection
             let offset = point - self.lower_left_corner;
             let u = offset.dot(&self.horizontal) / self.horizontal.magnitude_squared();
             let v = offset.dot(&self.vertical) / self.vertical.magnitude_squared();
-            
+
             // Depth is the distance along the view direction
             let depth = (point - self.origin).dot(self.view_direction.as_ref());
-            
+
             (nalgebra::Point2::new(u, v), depth)
         }
     }

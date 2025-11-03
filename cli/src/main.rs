@@ -82,13 +82,13 @@ fn main() {
     // Compute pixel dimensions from diagonal size and camera aspect ratio
     let camera_aspect_ratio = scene.camera.width / scene.camera.height;
     let diagonal = args.size as f64;
-    
+
     // Using diagonal D and aspect ratio R = W/H:
     // H = D / sqrt(R² + 1)
     // W = R * H
     let height_f64 = diagonal / (camera_aspect_ratio * camera_aspect_ratio + 1.0).sqrt();
     let width_f64 = camera_aspect_ratio * height_f64;
-    
+
     let width = width_f64.round() as u32;
     let height = height_f64.round() as u32;
 
@@ -100,14 +100,14 @@ fn main() {
     // Use rasterization if requested
     if args.rasterize {
         println!("Using rasterization mode for fast preview...");
-        
+
         let rasterizer = Rasterizer::new(width, height);
-        
+
         if let Err(e) = rasterizer.render_to_file(&scene, &args.output) {
             eprintln!("Error rasterizing image: {}", e);
             std::process::exit(1);
         }
-        
+
         println!("Successfully rasterized to '{}'", args.output);
         return;
     }
@@ -117,12 +117,12 @@ fn main() {
     renderer.max_depth = args.max_depth;
     renderer.samples = samples;
     renderer.seed = Some(0); // Always use deterministic seed 0
-    
+
     // Check if outline detection is enabled and handle anti-aliasing compatibility
     match scene.get_outline_config() {
         Ok(Some(_outline_config)) => {
             println!("Outline detection enabled from scene configuration");
-            
+
             // Check if current anti-aliasing mode is compatible with outline detection
             if anti_aliasing_mode == AntiAliasingMode::Quincunx {
                 println!("Warning: Quincunx anti-aliasing is not compatible with outline detection. Switching to none mode.");

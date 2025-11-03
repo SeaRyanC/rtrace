@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::camera::Camera;
-use crate::lighting::{ray_color_with_camera};
+use crate::lighting::ray_color_with_camera;
 use crate::outline::{apply_outline_detection, OutlineBuffers, OutlineConfig};
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
@@ -43,7 +43,7 @@ struct ProgressTracker {
 impl ProgressTracker {
     fn new(total_pixels: u32) -> Self {
         let progress_step = (total_pixels / 10).max(1) as usize;
-        
+
         Self {
             total_pixels,
             progress_step,
@@ -52,7 +52,7 @@ impl ProgressTracker {
             start_time: Instant::now(),
         }
     }
-    
+
     fn update_progress(&self) {
         let current_completed = self.completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
 
@@ -74,7 +74,7 @@ impl ProgressTracker {
                         let estimated_total_time = elapsed.as_secs_f64()
                             / (current_completed as f64 / self.total_pixels as f64);
                         let estimated_remaining = estimated_total_time - elapsed.as_secs_f64();
-                        
+
                         // Only show ETA if it's at least 1 second to avoid showing "0s"
                         if estimated_remaining >= 1.0 {
                             let eta_formatted = format_duration(estimated_remaining);
@@ -109,7 +109,7 @@ impl SamplingHelper {
             .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
         rand::rngs::StdRng::seed_from_u64(pixel_seed)
     }
-    
+
     /// Calculate base pixel coordinates
     fn calculate_pixel_coords(x: u32, y: u32, width: u32, height: u32) -> (f64, f64, f64, f64) {
         // Use edge-to-edge sampling to cover the full [0,1] x [0,1] UV space
@@ -126,10 +126,10 @@ impl SamplingHelper {
         };
         let pixel_width = 1.0 / width as f64;
         let pixel_height = 1.0 / height as f64;
-        
+
         (pixel_u, pixel_v, pixel_width, pixel_height)
     }
-    
+
     /// Calculate sample coordinates for anti-aliasing
     #[allow(clippy::too_many_arguments)]
     fn calculate_sample_coords(
@@ -158,8 +158,7 @@ impl SamplingHelper {
                     )
                 } else {
                     // Multiple samples: radially symmetric pattern with random phase
-                    let angle = 2.0 * std::f64::consts::PI * sample as f64
-                        / samples as f64;
+                    let angle = 2.0 * std::f64::consts::PI * sample as f64 / samples as f64;
                     let random_phase = rng.gen::<f64>() * 2.0 * std::f64::consts::PI;
                     let rotated_angle = angle + random_phase;
 
@@ -181,7 +180,7 @@ impl SamplingHelper {
             }
         }
     }
-    
+
     /// Create a sample-specific seed for ray tracing consistency
     fn create_sample_seed(pixel_seed: u64, sample: u32) -> u64 {
         pixel_seed.wrapping_add((sample as u64).wrapping_mul(0x1F845FED))
@@ -250,7 +249,7 @@ impl Renderer {
 
         // Create a renderer configuration that automatically applies scene outline settings
         let mut effective_renderer = self.clone();
-        
+
         // Apply outline configuration from scene if present and not already configured
         if effective_renderer.outline_config.is_none() {
             if let Ok(Some(outline_config)) = scene.get_outline_config() {
@@ -263,11 +262,11 @@ impl Renderer {
 
     /// Internal render method that uses the renderer's current configuration
     fn render_with_config(&self, scene: &Scene) -> Result<RgbImage, Box<dyn std::error::Error>> {
-
         let render_start_time = Instant::now();
 
         // Only render to a larger canvas for quincunx downsampling
-        let (render_width, render_height) = if self.anti_aliasing_mode == AntiAliasingMode::Quincunx {
+        let (render_width, render_height) = if self.anti_aliasing_mode == AntiAliasingMode::Quincunx
+        {
             (self.width + 1, self.height + 1)
         } else {
             (self.width, self.height)
@@ -405,7 +404,7 @@ impl Renderer {
                     } else {
                         Box::new(Cube::new(center_point, cube_size, color, index))
                     };
-                    
+
                     world.add(cube);
                     materials.insert(index, material.clone());
                 }
@@ -488,16 +487,17 @@ impl Renderer {
             });
 
             let total_time = render_start_time.elapsed();
-            
+
             // Apply outline detection if configured (before downsampling)
             let mut final_image_data = image_data;
             if let (Some(outline_config), Some(buffers)) = (&self.outline_config, outline_buffers) {
                 apply_outline_detection(&mut final_image_data, &buffers, outline_config);
             }
-            
+
             // Downsample if needed using quincux pattern
-            final_image_data = self.downsample_if_needed(final_image_data, render_width, render_height);
-            
+            final_image_data =
+                self.downsample_if_needed(final_image_data, render_width, render_height);
+
             let image = self.create_image_from_data(final_image_data);
             println!(
                 "Total rendering time: {}",
@@ -520,16 +520,17 @@ impl Renderer {
             );
 
             let total_time = render_start_time.elapsed();
-            
+
             // Apply outline detection if configured (before downsampling)
             let mut final_image_data = image_data;
             if let (Some(outline_config), Some(buffers)) = (&self.outline_config, outline_buffers) {
                 apply_outline_detection(&mut final_image_data, &buffers, outline_config);
             }
-            
+
             // Downsample if needed using quincux pattern
-            final_image_data = self.downsample_if_needed(final_image_data, render_width, render_height);
-            
+            final_image_data =
+                self.downsample_if_needed(final_image_data, render_width, render_height);
+
             let image = self.create_image_from_data(final_image_data);
             println!(
                 "Total rendering time: {}",
@@ -614,7 +615,7 @@ impl Renderer {
         let results: Vec<(u32, u32, Color)> = pixels
             .par_iter()
             .map(|&(x, y)| {
-                let (pixel_u, pixel_v, pixel_width, pixel_height) = 
+                let (pixel_u, pixel_v, pixel_width, pixel_height) =
                     SamplingHelper::calculate_pixel_coords(x, y, render_width, render_height);
 
                 // Collect samples for this pixel
@@ -622,7 +623,8 @@ impl Renderer {
 
                 // Create deterministic RNG seeded by pixel coordinates and global seed
                 let mut rng = SamplingHelper::create_pixel_rng(x, y, self.seed);
-                let pixel_seed = self.seed
+                let pixel_seed = self
+                    .seed
                     .unwrap_or(0)
                     .wrapping_mul(0x9E3779B97F4A7C15_u64)
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
@@ -686,7 +688,7 @@ impl Renderer {
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
         use crate::lighting::ray_color_with_data;
-        
+
         // Create a vector of all pixel coordinates
         let pixels: Vec<(u32, u32)> = (0..render_height)
             .flat_map(|y| (0..render_width).map(move |x| (x, y)))
@@ -699,7 +701,7 @@ impl Renderer {
         let results: Vec<PixelRenderResult> = pixels
             .par_iter()
             .map(|&(x, y)| {
-                let (pixel_u, pixel_v, pixel_width, pixel_height) = 
+                let (pixel_u, pixel_v, pixel_width, pixel_height) =
                     SamplingHelper::calculate_pixel_coords(x, y, render_width, render_height);
 
                 // Collect samples for this pixel
@@ -709,7 +711,8 @@ impl Renderer {
 
                 // Create deterministic RNG seeded by pixel coordinates and global seed
                 let mut rng = SamplingHelper::create_pixel_rng(x, y, self.seed);
-                let pixel_seed = self.seed
+                let pixel_seed = self
+                    .seed
                     .unwrap_or(0)
                     .wrapping_mul(0x9E3779B97F4A7C15_u64)
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
@@ -747,7 +750,7 @@ impl Renderer {
                     );
 
                     total_color += sample_color;
-                    
+
                     // For outline detection, we want the closest depth and corresponding normal
                     if let (Some(depth), Some(normal)) = (sample_depth, sample_normal) {
                         if pixel_depth.is_none() || depth < pixel_depth.unwrap() {
@@ -770,10 +773,10 @@ impl Renderer {
         // Separate color data and outline data
         let mut image_data = Vec::new();
         let mut outline_buffers = OutlineBuffers::new(render_width, render_height);
-        
+
         for (x, y, color, depth, normal) in results {
             image_data.push((x, y, color));
-            
+
             if let Some(depth) = depth {
                 outline_buffers.set_depth(x, y, depth);
             }
@@ -813,7 +816,7 @@ impl Renderer {
                 // The larger render is (width+1) x (height+1), so we sample:
                 // - Center: (x, y) in the larger image
                 // - Corners: (x, y), (x+1, y), (x, y+1), (x+1, y+1)
-                
+
                 let default_color = Color::new(0.0, 0.0, 0.0);
                 let center_color = *pixel_map.get(&(x, y)).unwrap_or(&default_color);
                 let top_right_color = *pixel_map.get(&(x + 1, y)).unwrap_or(&default_color);
@@ -825,7 +828,11 @@ impl Renderer {
                 let fifth_sample_color = center_color;
 
                 // Average the 5 samples (true quincux pattern)
-                let total_color = center_color + top_right_color + bottom_left_color + bottom_right_color + fifth_sample_color;
+                let total_color = center_color
+                    + top_right_color
+                    + bottom_left_color
+                    + bottom_right_color
+                    + fifth_sample_color;
                 let averaged_color = total_color / 5.0;
 
                 downsampled_data.push((x, y, averaged_color));
@@ -879,10 +886,7 @@ mod tests {
         // Test with specific thread count
         let renderer_threaded = Renderer::new_with_threads(800, 600, 4);
         assert_eq!(renderer_threaded.thread_count, Some(4));
-        assert_eq!(
-            renderer_threaded.anti_aliasing_mode,
-            AntiAliasingMode::None
-        );
+        assert_eq!(renderer_threaded.anti_aliasing_mode, AntiAliasingMode::None);
     }
 
     #[test]
@@ -1222,34 +1226,67 @@ mod tests {
             let mut renderer = Renderer::new(4, 4);
             renderer.anti_aliasing_mode = mode;
             renderer.samples = 1;
-            
-            let result = renderer.render(&scene).expect(&format!("Render failed with {} mode", mode_name));
-            
+
+            let result = renderer
+                .render(&scene)
+                .expect(&format!("Render failed with {} mode", mode_name));
+
             // Verify that the image has the correct dimensions
-            assert_eq!(result.width(), 4, "{} mode: Image width should be 4", mode_name);
-            assert_eq!(result.height(), 4, "{} mode: Image height should be 4", mode_name);
-            
+            assert_eq!(
+                result.width(),
+                4,
+                "{} mode: Image width should be 4",
+                mode_name
+            );
+            assert_eq!(
+                result.height(),
+                4,
+                "{} mode: Image height should be 4",
+                mode_name
+            );
+
             // Verify that we get a pixel value at each corner and edge
             let pixels: Vec<_> = result.pixels().collect();
-            assert_eq!(pixels.len(), 16, "{} mode: Should have 16 pixels total", mode_name);
-            
+            assert_eq!(
+                pixels.len(),
+                16,
+                "{} mode: Should have 16 pixels total",
+                mode_name
+            );
+
             // Check edge pixels specifically (these were the ones being lost before the fix)
-            let right_edge_pixels: Vec<_> = pixels.iter()
+            let right_edge_pixels: Vec<_> = pixels
+                .iter()
                 .enumerate()
                 .filter(|(i, _)| *i % 4 == 3) // Right edge: pixels 3, 7, 11, 15
                 .collect();
-            assert_eq!(right_edge_pixels.len(), 4, "{} mode: Should have 4 right edge pixels", mode_name);
-            
-            let bottom_edge_pixels: Vec<_> = pixels.iter()
+            assert_eq!(
+                right_edge_pixels.len(),
+                4,
+                "{} mode: Should have 4 right edge pixels",
+                mode_name
+            );
+
+            let bottom_edge_pixels: Vec<_> = pixels
+                .iter()
                 .enumerate()
                 .filter(|(i, _)| *i >= 12) // Bottom edge: pixels 12, 13, 14, 15
                 .collect();
-            assert_eq!(bottom_edge_pixels.len(), 4, "{} mode: Should have 4 bottom edge pixels", mode_name);
-            
+            assert_eq!(
+                bottom_edge_pixels.len(),
+                4,
+                "{} mode: Should have 4 bottom edge pixels",
+                mode_name
+            );
+
             // Verify that corner pixels exist (these combine right + bottom edge)
             let bottom_right_pixel = pixels.get(15); // Bottom-right corner: pixel 15
-            assert!(bottom_right_pixel.is_some(), "{} mode: Bottom-right corner pixel should exist", mode_name);
-            
+            assert!(
+                bottom_right_pixel.is_some(),
+                "{} mode: Bottom-right corner pixel should exist",
+                mode_name
+            );
+
             println!("✓ {} mode: All edge pixels rendered correctly", mode_name);
         }
     }
@@ -1273,45 +1310,89 @@ mod tests {
     fn test_pixel_coordinate_mapping_fix() {
         // This test specifically validates that the pixel coordinate fix
         // correctly maps pixels to UV coordinates using edge-to-edge sampling
-        
+
         // Test coordinate calculation for a 4x4 image
         let width = 4;
         let height = 4;
-        
+
         // Test corner pixels
         let (u0, v0, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 0, width, height);
         let (u3, v3, _pw, _ph) = SamplingHelper::calculate_pixel_coords(3, 3, width, height);
-        
+
         // With edge-to-edge sampling:
-        // - Top-left pixel (0,0) should map to UV (0.0, 1.0) 
+        // - Top-left pixel (0,0) should map to UV (0.0, 1.0)
         // - Bottom-right pixel (3,3) should map to UV (1.0, 0.0)
-        
-        assert!((u0 - 0.0).abs() < 1e-10, "Top-left U coordinate should be 0.0, got {}", u0);
-        assert!((v0 - 1.0).abs() < 1e-10, "Top-left V coordinate should be 1.0, got {}", v0);
-        
-        assert!((u3 - 1.0).abs() < 1e-10, "Bottom-right U coordinate should be 1.0, got {}", u3);
-        assert!((v3 - 0.0).abs() < 1e-10, "Bottom-right V coordinate should be 0.0, got {}", v3);
-        
+
+        assert!(
+            (u0 - 0.0).abs() < 1e-10,
+            "Top-left U coordinate should be 0.0, got {}",
+            u0
+        );
+        assert!(
+            (v0 - 1.0).abs() < 1e-10,
+            "Top-left V coordinate should be 1.0, got {}",
+            v0
+        );
+
+        assert!(
+            (u3 - 1.0).abs() < 1e-10,
+            "Bottom-right U coordinate should be 1.0, got {}",
+            u3
+        );
+        assert!(
+            (v3 - 0.0).abs() < 1e-10,
+            "Bottom-right V coordinate should be 0.0, got {}",
+            v3
+        );
+
         // Test that UV coordinates stay within [0,1] range for all pixels
         for y in 0..height {
             for x in 0..width {
                 let (u, v, _pw, _ph) = SamplingHelper::calculate_pixel_coords(x, y, width, height);
-                assert!(u >= 0.0 && u <= 1.0, "U coordinate {} for pixel ({},{}) should be in [0,1]", u, x, y);
-                assert!(v >= 0.0 && v <= 1.0, "V coordinate {} for pixel ({},{}) should be in [0,1]", v, x, y);
+                assert!(
+                    u >= 0.0 && u <= 1.0,
+                    "U coordinate {} for pixel ({},{}) should be in [0,1]",
+                    u,
+                    x,
+                    y
+                );
+                assert!(
+                    v >= 0.0 && v <= 1.0,
+                    "V coordinate {} for pixel ({},{}) should be in [0,1]",
+                    v,
+                    x,
+                    y
+                );
             }
         }
-        
+
         // Specifically test edge coverage
         let (u_left, _v, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 0, width, height);
         let (u_right, _v, _pw, _ph) = SamplingHelper::calculate_pixel_coords(3, 0, width, height);
         let (_u, v_top, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 0, width, height);
         let (_u, v_bottom, _pw, _ph) = SamplingHelper::calculate_pixel_coords(0, 3, width, height);
-        
-        assert!((u_left - 0.0).abs() < 1e-10, "Left edge should be at U=0.0, got {}", u_left);
-        assert!((u_right - 1.0).abs() < 1e-10, "Right edge should be at U=1.0, got {}", u_right);
-        assert!((v_top - 1.0).abs() < 1e-10, "Top edge should be at V=1.0, got {}", v_top);
-        assert!((v_bottom - 0.0).abs() < 1e-10, "Bottom edge should be at V=0.0, got {}", v_bottom);
-        
+
+        assert!(
+            (u_left - 0.0).abs() < 1e-10,
+            "Left edge should be at U=0.0, got {}",
+            u_left
+        );
+        assert!(
+            (u_right - 1.0).abs() < 1e-10,
+            "Right edge should be at U=1.0, got {}",
+            u_right
+        );
+        assert!(
+            (v_top - 1.0).abs() < 1e-10,
+            "Top edge should be at V=1.0, got {}",
+            v_top
+        );
+        assert!(
+            (v_bottom - 0.0).abs() < 1e-10,
+            "Bottom edge should be at V=0.0, got {}",
+            v_bottom
+        );
+
         println!("✓ Pixel coordinate mapping test passed (edge-to-edge sampling)");
     }
 
