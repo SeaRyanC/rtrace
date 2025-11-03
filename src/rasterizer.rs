@@ -1,9 +1,34 @@
+//! Rasterizer module for fast preview rendering
+//!
+//! This module provides a basic triangle painting algorithm as an alternative to raytracing.
+//! It's designed for fast preview rendering where speed is more important than visual quality.
+//!
+//! ## Features:
+//! - Triangle rasterization with depth buffer and backface culling
+//! - Automatic tessellation of geometric primitives (spheres, cubes, planes)
+//! - Simple flat shading with basic directional lighting
+//! - Support for mesh objects and all transform operations
+//!
+//! ## Limitations:
+//! - No shadows or reflections (preview mode only)
+//! - No anti-aliasing
+//! - Simple flat shading (no Phong or advanced materials)
+//! - No texture support
+
 use image::{ImageBuffer, Rgb, RgbImage};
 use nalgebra::{Matrix4, Point3, Vector3};
 
 use crate::camera::Camera;
 use crate::mesh::Mesh;
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
+
+// Tessellation parameters
+const SPHERE_LAT_SEGMENTS: usize = 20;
+const SPHERE_LON_SEGMENTS: usize = 20;
+const PLANE_GRID_SIZE: usize = 10;
+
+// Simple directional light for flat shading
+const LIGHT_DIRECTION: [f64; 3] = [0.5, -0.5, 1.0];
 
 /// Rasterizer for fast preview rendering using triangle painting
 pub struct Rasterizer {
@@ -243,7 +268,12 @@ impl Rasterizer {
 
                             // Simple flat shading with the triangle color
                             // Apply basic lighting based on normal
-                            let light_dir = Vec3::new(0.5, -0.5, 1.0).normalize();
+                            let light_dir = Vec3::new(
+                                LIGHT_DIRECTION[0],
+                                LIGHT_DIRECTION[1],
+                                LIGHT_DIRECTION[2],
+                            )
+                            .normalize();
                             let brightness = (tri.normal.dot(&light_dir) * 0.5 + 0.5).max(0.2);
 
                             color_buffer[idx] = tri.color * brightness;
@@ -335,8 +365,8 @@ fn tessellate_sphere(center: Point, radius: f64, color: Color) -> Vec<WorldTrian
     let mut triangles = Vec::new();
 
     // Use UV sphere tessellation with reasonable detail
-    let lat_segments = 20;
-    let lon_segments = 20;
+    let lat_segments = SPHERE_LAT_SEGMENTS;
+    let lon_segments = SPHERE_LON_SEGMENTS;
 
     for lat in 0..lat_segments {
         let theta0 = std::f64::consts::PI * (lat as f64) / (lat_segments as f64);
@@ -491,7 +521,7 @@ fn tessellate_plane(point: Point, normal: Vec3, color: Color) -> Vec<WorldTriang
     let forward = right.cross(&normal_unit).normalize();
 
     // Create a grid of triangles on the plane
-    let grid_size = 10; // 10x10 grid for reasonable tessellation
+    let grid_size = PLANE_GRID_SIZE;
     let cell_size = size / grid_size as f64;
 
     for i in 0..grid_size {
