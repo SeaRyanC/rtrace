@@ -1,5 +1,5 @@
 use clap::Parser;
-use rtrace::{AntiAliasingMode, Renderer, Scene};
+use rtrace::{AntiAliasingMode, Rasterizer, Renderer, Scene};
 use std::path::Path;
 
 /// Ray tracer CLI - renders 3D scenes from JSON descriptions
@@ -29,6 +29,10 @@ struct Args {
     /// Anti-aliasing mode: quincunx, stochastic, or none
     #[arg(long, default_value = "none")]
     anti_aliasing: String,
+
+    /// Use rasterization instead of raytracing for fast preview
+    #[arg(long)]
+    rasterize: bool,
 }
 
 fn main() {
@@ -92,6 +96,21 @@ fn main() {
         "Using camera aspect ratio {:.3} to compute {}×{} pixels from diagonal {}",
         camera_aspect_ratio, width, height, args.size
     );
+
+    // Use rasterization if requested
+    if args.rasterize {
+        println!("Using rasterization mode for fast preview...");
+        
+        let rasterizer = Rasterizer::new(width, height);
+        
+        if let Err(e) = rasterizer.render_to_file(&scene, &args.output) {
+            eprintln!("Error rasterizing image: {}", e);
+            std::process::exit(1);
+        }
+        
+        println!("Successfully rasterized to '{}'", args.output);
+        return;
+    }
 
     // Create renderer
     let mut renderer = Renderer::new(width, height);

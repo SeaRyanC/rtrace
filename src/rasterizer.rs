@@ -1,0 +1,516 @@
+use image::{ImageBuffer, Rgb, RgbImage};
+use nalgebra::{Matrix4, Point3, Vector3};
+
+use crate::camera::Camera;
+use crate::mesh::Mesh;
+use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
+
+/// Rasterizer for fast preview rendering using triangle painting
+pub struct Rasterizer {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Tessellated triangle with world coordinates
+#[derive(Debug, Clone)]
+struct WorldTriangle {
+    pub vertices: [Point; 3],
+    pub normal: Vec3,
+    pub color: Color,
+}
+
+impl Rasterizer {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
+    }
+
+    /// Rasterize a scene to an image
+    pub fn render(&self, scene: &Scene) -> Result<RgbImage, Box<dyn std::error::Error>> {
+        println!("Rasterizing {}×{} image...", self.width, self.height);
+
+        // Get background color
+        let background_color = if let Some(bg) = &scene.scene_settings.background_color {
+            hex_to_color(bg)?
+        } else {
+            Color::new(0.0, 0.0, 0.0)
+        };
+
+        // Create camera with aspect ratio
+        let aspect_ratio = self.width as f64 / self.height as f64;
+        let camera = Camera::from_config(&scene.camera, aspect_ratio)?;
+
+        // Collect all triangles from the scene
+        let mut triangles = Vec::new();
+        
+        for object in &scene.objects {
+            match object {
+                Object::Sphere { center, radius, material, transform } => {
+                    let color = hex_to_color(&material.color)?;
+                    let mut sphere_tris = tessellate_sphere(
+                        Point::new(center[0], center[1], center[2]),
+                        *radius,
+                        color,
+                    );
+                    
+                    // Apply transforms if present
+                    if let Some(transform_strings) = transform {
+                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                            apply_transform_to_triangles(&mut sphere_tris, &transform_matrix);
+                        }
+                    }
+                    
+                    triangles.extend(sphere_tris);
+                }
+                Object::Cube { center, size, material, transform } => {
+                    let color = hex_to_color(&material.color)?;
+                    let mut cube_tris = tessellate_cube(
+                        Point::new(center[0], center[1], center[2]),
+                        Vec3::new(size[0], size[1], size[2]),
+                        color,
+                    );
+                    
+                    // Apply transforms if present
+                    if let Some(transform_strings) = transform {
+                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                            apply_transform_to_triangles(&mut cube_tris, &transform_matrix);
+                        }
+                    }
+                    
+                    triangles.extend(cube_tris);
+                }
+                Object::Plane { point, normal, material, transform } => {
+                    let color = hex_to_color(&material.color)?;
+                    let mut plane_tris = tessellate_plane(
+                        Point::new(point[0], point[1], point[2]),
+                        Vec3::new(normal[0], normal[1], normal[2]),
+                        color,
+                    );
+                    
+                    // Apply transforms if present
+                    if let Some(transform_strings) = transform {
+                        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                            apply_transform_to_triangles(&mut plane_tris, &transform_matrix);
+                        }
+                    }
+                    
+                    triangles.extend(plane_tris);
+                }
+                Object::Mesh { mesh_data, material, transform, .. } => {
+                    if let Some(mesh) = mesh_data {
+                        let color = hex_to_color(&material.color)?;
+                        let mut mesh_tris = convert_mesh_to_world_triangles(mesh, color);
+                        
+                        // Apply transforms if present
+                        if let Some(transform_strings) = transform {
+                            if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+                                apply_transform_to_triangles(&mut mesh_tris, &transform_matrix);
+                            }
+                        }
+                        
+                        triangles.extend(mesh_tris);
+                    }
+                }
+            }
+        }
+
+        println!("Tessellated scene into {} triangles", triangles.len());
+
+        // Rasterize triangles
+        let image = self.rasterize_triangles(&triangles, &camera, background_color);
+        
+        Ok(image)
+    }
+
+    /// Rasterize a list of triangles
+    fn rasterize_triangles(
+        &self,
+        triangles: &[WorldTriangle],
+        camera: &Camera,
+        background_color: Color,
+    ) -> RgbImage {
+        // Create depth buffer and color buffer
+        let mut depth_buffer = vec![f64::INFINITY; (self.width * self.height) as usize];
+        let mut color_buffer = vec![background_color; (self.width * self.height) as usize];
+
+        // Project and rasterize each triangle
+        for tri in triangles {
+            self.rasterize_triangle(tri, camera, &mut depth_buffer, &mut color_buffer);
+        }
+
+        // Convert to image
+        let mut image = ImageBuffer::new(self.width, self.height);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = (y * self.width + x) as usize;
+                let color = color_buffer[idx];
+                let r = (color.x.clamp(0.0, 1.0) * 255.0) as u8;
+                let g = (color.y.clamp(0.0, 1.0) * 255.0) as u8;
+                let b = (color.z.clamp(0.0, 1.0) * 255.0) as u8;
+                image.put_pixel(x, y, Rgb([r, g, b]));
+            }
+        }
+
+        image
+    }
+
+    /// Rasterize a single triangle using basic scanline algorithm
+    fn rasterize_triangle(
+        &self,
+        tri: &WorldTriangle,
+        camera: &Camera,
+        depth_buffer: &mut [f64],
+        color_buffer: &mut [Color],
+    ) {
+        // Project vertices to screen space
+        let mut screen_verts = [Point3::new(0.0, 0.0, 0.0); 3];
+        let mut depths = [0.0; 3];
+        
+        for i in 0..3 {
+            let (screen_pos, depth) = camera.project_point(&tri.vertices[i]);
+            
+            // Convert from [0,1] UV space to pixel coordinates
+            let px = screen_pos.x * (self.width - 1) as f64;
+            let py = (1.0 - screen_pos.y) * (self.height - 1) as f64; // Flip Y
+            
+            screen_verts[i] = Point3::new(px, py, depth);
+            depths[i] = depth;
+        }
+
+        // Backface culling (skip if triangle is facing away)
+        let v0 = screen_verts[0];
+        let v1 = screen_verts[1];
+        let v2 = screen_verts[2];
+        
+        let cross = (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
+        if cross <= 0.0 {
+            return; // Skip back-facing triangles
+        }
+
+        // Compute bounding box
+        let min_x = v0.x.min(v1.x).min(v2.x).floor().max(0.0) as u32;
+        let max_x = v0.x.max(v1.x).max(v2.x).ceil().min(self.width as f64 - 1.0) as u32;
+        let min_y = v0.y.min(v1.y).min(v2.y).floor().max(0.0) as u32;
+        let max_y = v0.y.max(v1.y).max(v2.y).ceil().min(self.height as f64 - 1.0) as u32;
+
+        // Rasterize pixels within bounding box
+        for py in min_y..=max_y {
+            for px in min_x..=max_x {
+                let p = Point3::new(px as f64 + 0.5, py as f64 + 0.5, 0.0);
+
+                // Compute barycentric coordinates
+                if let Some((w0, w1, w2)) = barycentric(p, v0, v1, v2) {
+                    if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
+                        // Interpolate depth
+                        let depth = w0 * depths[0] + w1 * depths[1] + w2 * depths[2];
+                        
+                        let idx = (py * self.width + px) as usize;
+                        
+                        // Depth test
+                        if depth < depth_buffer[idx] {
+                            depth_buffer[idx] = depth;
+                            
+                            // Simple flat shading with the triangle color
+                            // Apply basic lighting based on normal
+                            let light_dir = Vec3::new(0.5, -0.5, 1.0).normalize();
+                            let brightness = (tri.normal.dot(&light_dir) * 0.5 + 0.5).max(0.2);
+                            
+                            color_buffer[idx] = tri.color * brightness;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn render_to_file(
+        &self,
+        scene: &Scene,
+        output_path: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let image = self.render(scene)?;
+        image.save(output_path)?;
+        println!("Rasterized image saved to: {}", output_path);
+        Ok(())
+    }
+}
+
+/// Compute barycentric coordinates of point p with respect to triangle (a, b, c)
+fn barycentric(p: Point3<f64>, a: Point3<f64>, b: Point3<f64>, c: Point3<f64>) -> Option<(f64, f64, f64)> {
+    let v0 = Vector3::new(b.x - a.x, b.y - a.y, 0.0);
+    let v1 = Vector3::new(c.x - a.x, c.y - a.y, 0.0);
+    let v2 = Vector3::new(p.x - a.x, p.y - a.y, 0.0);
+
+    let dot00 = v0.dot(&v0);
+    let dot01 = v0.dot(&v1);
+    let dot02 = v0.dot(&v2);
+    let dot11 = v1.dot(&v1);
+    let dot12 = v1.dot(&v2);
+
+    let denom = dot00 * dot11 - dot01 * dot01;
+    if denom.abs() < 1e-10 {
+        return None;
+    }
+
+    let inv_denom = 1.0 / denom;
+    let u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
+    let v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
+    let w = 1.0 - u - v;
+
+    Some((w, u, v))
+}
+
+/// Apply transform matrix to a list of triangles
+fn apply_transform_to_triangles(triangles: &mut [WorldTriangle], transform: &Matrix4<f64>) {
+    for tri in triangles {
+        for vertex in &mut tri.vertices {
+            let transformed = transform * vertex.to_homogeneous();
+            *vertex = Point::new(transformed.x, transformed.y, transformed.z);
+        }
+        
+        // Transform normal (use inverse transpose for normals)
+        if let Some(inverse) = transform.try_inverse() {
+            let inverse_transpose = inverse.transpose();
+            let normal_homogeneous = inverse_transpose * tri.normal.to_homogeneous();
+            tri.normal = Vec3::new(normal_homogeneous.x, normal_homogeneous.y, normal_homogeneous.z).normalize();
+        }
+    }
+}
+
+/// Convert mesh to world triangles
+fn convert_mesh_to_world_triangles(mesh: &Mesh, color: Color) -> Vec<WorldTriangle> {
+    mesh.triangles
+        .iter()
+        .map(|tri| WorldTriangle {
+            vertices: tri.vertices,
+            normal: tri.normal,
+            color,
+        })
+        .collect()
+}
+
+/// Tessellate a sphere into triangles
+fn tessellate_sphere(center: Point, radius: f64, color: Color) -> Vec<WorldTriangle> {
+    let mut triangles = Vec::new();
+    
+    // Use UV sphere tessellation with reasonable detail
+    let lat_segments = 20;
+    let lon_segments = 20;
+    
+    for lat in 0..lat_segments {
+        let theta0 = std::f64::consts::PI * (lat as f64) / (lat_segments as f64);
+        let theta1 = std::f64::consts::PI * ((lat + 1) as f64) / (lat_segments as f64);
+        
+        for lon in 0..lon_segments {
+            let phi0 = 2.0 * std::f64::consts::PI * (lon as f64) / (lon_segments as f64);
+            let phi1 = 2.0 * std::f64::consts::PI * ((lon + 1) as f64) / (lon_segments as f64);
+            
+            // Create two triangles for each quad
+            let v00 = sphere_point(center, radius, theta0, phi0);
+            let v01 = sphere_point(center, radius, theta0, phi1);
+            let v10 = sphere_point(center, radius, theta1, phi0);
+            let v11 = sphere_point(center, radius, theta1, phi1);
+            
+            // First triangle
+            if lat > 0 {
+                let normal = ((v00 - center) + (v01 - center) + (v10 - center)).normalize();
+                triangles.push(WorldTriangle {
+                    vertices: [v00, v01, v10],
+                    normal,
+                    color,
+                });
+            }
+            
+            // Second triangle
+            if lat < lat_segments - 1 {
+                let normal = ((v01 - center) + (v11 - center) + (v10 - center)).normalize();
+                triangles.push(WorldTriangle {
+                    vertices: [v01, v11, v10],
+                    normal,
+                    color,
+                });
+            }
+        }
+    }
+    
+    triangles
+}
+
+/// Get a point on a sphere surface
+fn sphere_point(center: Point, radius: f64, theta: f64, phi: f64) -> Point {
+    let x = radius * theta.sin() * phi.cos();
+    let y = radius * theta.sin() * phi.sin();
+    let z = radius * theta.cos();
+    Point::new(center.x + x, center.y + y, center.z + z)
+}
+
+/// Tessellate a cube into triangles
+fn tessellate_cube(center: Point, size: Vec3, color: Color) -> Vec<WorldTriangle> {
+    let mut triangles = Vec::new();
+    
+    let half_size = size / 2.0;
+    
+    // Define 8 corners of the cube
+    let corners = [
+        Point::new(center.x - half_size.x, center.y - half_size.y, center.z - half_size.z),
+        Point::new(center.x + half_size.x, center.y - half_size.y, center.z - half_size.z),
+        Point::new(center.x + half_size.x, center.y + half_size.y, center.z - half_size.z),
+        Point::new(center.x - half_size.x, center.y + half_size.y, center.z - half_size.z),
+        Point::new(center.x - half_size.x, center.y - half_size.y, center.z + half_size.z),
+        Point::new(center.x + half_size.x, center.y - half_size.y, center.z + half_size.z),
+        Point::new(center.x + half_size.x, center.y + half_size.y, center.z + half_size.z),
+        Point::new(center.x - half_size.x, center.y + half_size.y, center.z + half_size.z),
+    ];
+    
+    // Define faces (two triangles per face)
+    let faces = [
+        // Front face (z+)
+        ([4, 5, 6], Vec3::new(0.0, 0.0, 1.0)),
+        ([4, 6, 7], Vec3::new(0.0, 0.0, 1.0)),
+        // Back face (z-)
+        ([0, 2, 1], Vec3::new(0.0, 0.0, -1.0)),
+        ([0, 3, 2], Vec3::new(0.0, 0.0, -1.0)),
+        // Right face (x+)
+        ([1, 2, 6], Vec3::new(1.0, 0.0, 0.0)),
+        ([1, 6, 5], Vec3::new(1.0, 0.0, 0.0)),
+        // Left face (x-)
+        ([0, 4, 7], Vec3::new(-1.0, 0.0, 0.0)),
+        ([0, 7, 3], Vec3::new(-1.0, 0.0, 0.0)),
+        // Top face (y+)
+        ([3, 7, 6], Vec3::new(0.0, 1.0, 0.0)),
+        ([3, 6, 2], Vec3::new(0.0, 1.0, 0.0)),
+        // Bottom face (y-)
+        ([0, 1, 5], Vec3::new(0.0, -1.0, 0.0)),
+        ([0, 5, 4], Vec3::new(0.0, -1.0, 0.0)),
+    ];
+    
+    for (indices, normal) in &faces {
+        triangles.push(WorldTriangle {
+            vertices: [corners[indices[0]], corners[indices[1]], corners[indices[2]]],
+            normal: *normal,
+            color,
+        });
+    }
+    
+    triangles
+}
+
+/// Tessellate a plane into triangles (limited to 1000x1000 as per spec)
+fn tessellate_plane(point: Point, normal: Vec3, color: Color) -> Vec<WorldTriangle> {
+    let mut triangles = Vec::new();
+    
+    // Limit plane to 1000x1000 as specified
+    let size = 1000.0;
+    
+    // Find two perpendicular vectors to the normal
+    let normal_unit = normal.normalize();
+    let up = if normal_unit.z.abs() < 0.9 {
+        Vec3::new(0.0, 0.0, 1.0)
+    } else {
+        Vec3::new(1.0, 0.0, 0.0)
+    };
+    
+    let right = normal_unit.cross(&up).normalize();
+    let forward = right.cross(&normal_unit).normalize();
+    
+    // Create a grid of triangles on the plane
+    let grid_size = 10; // 10x10 grid for reasonable tessellation
+    let cell_size = size / grid_size as f64;
+    
+    for i in 0..grid_size {
+        for j in 0..grid_size {
+            let u0 = (i as f64 - grid_size as f64 / 2.0) * cell_size;
+            let u1 = ((i + 1) as f64 - grid_size as f64 / 2.0) * cell_size;
+            let v0 = (j as f64 - grid_size as f64 / 2.0) * cell_size;
+            let v1 = ((j + 1) as f64 - grid_size as f64 / 2.0) * cell_size;
+            
+            let p00 = point + right * u0 + forward * v0;
+            let p10 = point + right * u1 + forward * v0;
+            let p01 = point + right * u0 + forward * v1;
+            let p11 = point + right * u1 + forward * v1;
+            
+            // Two triangles per quad
+            triangles.push(WorldTriangle {
+                vertices: [p00, p10, p01],
+                normal: normal_unit,
+                color,
+            });
+            
+            triangles.push(WorldTriangle {
+                vertices: [p10, p11, p01],
+                normal: normal_unit,
+                color,
+            });
+        }
+    }
+    
+    triangles
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rasterizer_creation() {
+        let rasterizer = Rasterizer::new(800, 600);
+        assert_eq!(rasterizer.width, 800);
+        assert_eq!(rasterizer.height, 600);
+    }
+
+    #[test]
+    fn test_sphere_tessellation() {
+        let center = Point::new(0.0, 0.0, 0.0);
+        let radius = 1.0;
+        let color = Color::new(1.0, 0.0, 0.0);
+        let triangles = tessellate_sphere(center, radius, color);
+        
+        // Should generate some triangles
+        assert!(!triangles.is_empty());
+        
+        // All vertices should be approximately at radius distance from center
+        for tri in &triangles {
+            for vertex in &tri.vertices {
+                let dist = (vertex - center).magnitude();
+                assert!((dist - radius).abs() < 0.1, "Vertex distance from center: {}", dist);
+            }
+        }
+    }
+
+    #[test]
+    fn test_cube_tessellation() {
+        let center = Point::new(0.0, 0.0, 0.0);
+        let size = Vec3::new(2.0, 2.0, 2.0);
+        let color = Color::new(0.0, 1.0, 0.0);
+        let triangles = tessellate_cube(center, size, color);
+        
+        // Cube should have 12 triangles (2 per face, 6 faces)
+        assert_eq!(triangles.len(), 12);
+    }
+
+    #[test]
+    fn test_plane_tessellation() {
+        let point = Point::new(0.0, 0.0, 0.0);
+        let normal = Vec3::new(0.0, 0.0, 1.0);
+        let color = Color::new(0.0, 0.0, 1.0);
+        let triangles = tessellate_plane(point, normal, color);
+        
+        // Should generate grid of triangles
+        assert!(!triangles.is_empty());
+    }
+
+    #[test]
+    fn test_barycentric() {
+        let a = Point3::new(0.0, 0.0, 0.0);
+        let b = Point3::new(1.0, 0.0, 0.0);
+        let c = Point3::new(0.0, 1.0, 0.0);
+        
+        // Point at center of triangle
+        let p = Point3::new(0.33, 0.33, 0.0);
+        let coords = barycentric(p, a, b, c);
+        assert!(coords.is_some());
+        
+        let (w0, w1, w2) = coords.unwrap();
+        assert!(w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0);
+        assert!((w0 + w1 + w2 - 1.0).abs() < 1e-10);
+    }
+}
