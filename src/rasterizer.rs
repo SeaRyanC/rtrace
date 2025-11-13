@@ -6,29 +6,25 @@
 //! ## Features:
 //! - Triangle rasterization with depth buffer and backface culling
 //! - Automatic tessellation of geometric primitives (spheres, cubes, planes)
-//! - Simple flat shading with basic directional lighting
+//! - Phong lighting model matching the raytracer
 //! - Support for mesh objects and all transform operations
 //!
 //! ## Limitations:
 //! - No shadows or reflections (preview mode only)
 //! - No anti-aliasing
-//! - Simple flat shading (no Phong or advanced materials)
 //! - No texture support
 
 use image::{ImageBuffer, Rgb, RgbImage};
-use nalgebra::{Matrix4, Point3, Vector3};
+use nalgebra::{Matrix4, Point3, Vector3, Unit};
 
 use crate::camera::Camera;
 use crate::mesh::Mesh;
-use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
+use crate::scene::{hex_to_color, Color, Material, Object, Point, Scene, Vec3};
 
 // Tessellation parameters
 const SPHERE_LAT_SEGMENTS: usize = 20;
 const SPHERE_LON_SEGMENTS: usize = 20;
 const PLANE_GRID_SIZE: usize = 10;
-
-// Simple directional light for flat shading
-const LIGHT_DIRECTION: [f64; 3] = [0.5, -0.5, 1.0];
 
 /// Rasterizer for fast preview rendering using triangle painting
 pub struct Rasterizer {
@@ -36,12 +32,13 @@ pub struct Rasterizer {
     pub height: u32,
 }
 
-/// Tessellated triangle with world coordinates
+/// Tessellated triangle with world coordinates and material
 #[derive(Debug, Clone)]
 struct WorldTriangle {
     pub vertices: [Point; 3],
     pub normal: Vec3,
     pub color: Color,
+    pub material: Material,
 }
 
 impl Rasterizer {
@@ -63,6 +60,11 @@ impl Rasterizer {
         // Create camera with aspect ratio
         let aspect_ratio = self.width as f64 / self.height as f64;
         let camera = Camera::from_config(&scene.camera, aspect_ratio)?;
+        let camera_pos = Point::new(
+            scene.camera.position[0],
+            scene.camera.position[1],
+            scene.camera.position[2],
+        );
 
         // Collect all triangles from the scene
         let mut triangles = Vec::new();
@@ -80,6 +82,7 @@ impl Rasterizer {
                         Point::new(center[0], center[1], center[2]),
                         *radius,
                         color,
+                        material.clone(),
                     );
 
                     // Apply transforms if present
@@ -104,6 +107,7 @@ impl Rasterizer {
                         Point::new(center[0], center[1], center[2]),
                         Vec3::new(size[0], size[1], size[2]),
                         color,
+                        material.clone(),
                     );
 
                     // Apply transforms if present
@@ -128,6 +132,7 @@ impl Rasterizer {
                         Point::new(point[0], point[1], point[2]),
                         Vec3::new(normal[0], normal[1], normal[2]),
                         color,
+                        material.clone(),
                     );
 
                     // Apply transforms if present
@@ -149,7 +154,7 @@ impl Rasterizer {
                 } => {
                     if let Some(mesh) = mesh_data {
                         let color = hex_to_color(&material.color)?;
-                        let mut mesh_tris = convert_mesh_to_world_triangles(mesh, color);
+                        let mut mesh_tris = convert_mesh_to_world_triangles(mesh, color, material.clone());
 
                         // Apply transforms if present
                         if let Some(transform_strings) = transform {
@@ -169,7 +174,7 @@ impl Rasterizer {
         println!("Tessellated scene into {} triangles", triangles.len());
 
         // Rasterize triangles
-        let image = self.rasterize_triangles(&triangles, &camera, background_color);
+        let image = self.rasterize_triangles(&triangles, &camera, &camera_pos, scene, background_color);
 
         Ok(image)
     }
@@ -179,16 +184,57 @@ impl Rasterizer {
         &self,
         triangles: &[WorldTriangle],
         camera: &Camera,
+        camera_pos: &Point,
+        scene: &Scene,
         background_color: Color,
     ) -> RgbImage {
+        println!("rasterize_triangles called with {} triangles", triangles.len());
         // Create depth buffer and color buffer
         let mut depth_buffer = vec![f64::INFINITY; (self.width * self.height) as usize];
         let mut color_buffer = vec![background_color; (self.width * self.height) as usize];
+        // Store world position and normal for each pixel for lighting calculations
+        let mut position_buffer = vec![None; (self.width * self.height) as usize];
+        let mut normal_buffer = vec![None; (self.width * self.height) as usize];
+        let mut material_buffer = vec![None; (self.width * self.height) as usize];
 
         // Project and rasterize each triangle
-        for tri in triangles {
-            self.rasterize_triangle(tri, camera, &mut depth_buffer, &mut color_buffer);
+        for (idx, tri) in triangles.iter().enumerate() {
+            self.rasterize_triangle(
+                tri,
+                camera,
+                &mut depth_buffer,
+                &mut position_buffer,
+                &mut normal_buffer,
+                &mut material_buffer,
+                true, // debug all triangles
+            );
         }
+
+        // Apply lighting to each pixel
+        let mut lit_pixels = 0;
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = (y * self.width + x) as usize;
+                if let (Some(pos), Some(normal), Some((color, material))) = (
+                    position_buffer[idx],
+                    normal_buffer[idx],
+                    &material_buffer[idx],
+                ) {
+                    // Calculate Phong lighting
+                    let lit_color = self.calculate_lighting(
+                        &pos,
+                        &normal,
+                        color,
+                        material,
+                        camera_pos,
+                        scene,
+                    );
+                    color_buffer[idx] = lit_color;
+                    lit_pixels += 1;
+                }
+            }
+        }
+        println!("Applied lighting to {} pixels", lit_pixels);
 
         // Convert to image
         let mut image = ImageBuffer::new(self.width, self.height);
@@ -206,13 +252,66 @@ impl Rasterizer {
         image
     }
 
+    /// Calculate Phong lighting for a point
+    fn calculate_lighting(
+        &self,
+        point: &Point,
+        normal: &Vec3,
+        material_color: &Color,
+        material: &Material,
+        camera_pos: &Point,
+        scene: &Scene,
+    ) -> Color {
+        // Ambient component
+        let ambient_color =
+            hex_to_color(&scene.scene_settings.ambient_illumination.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
+        let ambient = material.ambient
+            * scene.scene_settings.ambient_illumination.intensity
+            * ambient_color.component_mul(material_color);
+
+        let mut total_light = ambient;
+
+        // Process each light
+        for light in &scene.lights {
+            let light_pos = Point::new(light.position[0], light.position[1], light.position[2]);
+            let light_color =
+                hex_to_color(&light.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
+
+            let light_dir = Unit::new_normalize(light_pos - point);
+
+            // Diffuse component
+            let diffuse_strength = normal.dot(&light_dir).max(0.0);
+            let diffuse = material.diffuse
+                * diffuse_strength
+                * light.intensity
+                * light_color.component_mul(material_color);
+
+            // Specular component (Phong model)
+            let specular = if diffuse_strength > 0.0 {
+                let view_dir = Unit::new_normalize(*camera_pos - point);
+                let reflect_dir = reflect(&(-light_dir.as_ref()), normal);
+                let spec_strength = view_dir.dot(&reflect_dir).max(0.0).powf(material.shininess);
+                material.specular * spec_strength * light.intensity * light_color
+            } else {
+                Color::new(0.0, 0.0, 0.0)
+            };
+
+            total_light += diffuse + specular;
+        }
+
+        total_light
+    }
+
     /// Rasterize a single triangle using basic scanline algorithm
     fn rasterize_triangle(
         &self,
         tri: &WorldTriangle,
         camera: &Camera,
         depth_buffer: &mut [f64],
-        color_buffer: &mut [Color],
+        position_buffer: &mut [Option<Point>],
+        normal_buffer: &mut [Option<Vec3>],
+        material_buffer: &mut [Option<(Color, Material)>],
+        debug: bool,
     ) {
         // Project vertices to screen space
         let mut screen_verts = [Point3::new(0.0, 0.0, 0.0); 3];
@@ -229,25 +328,38 @@ impl Rasterizer {
             depths[i] = depth;
         }
 
+        if debug {
+            println!("Triangle:");
+            println!("  World vertices: {:?}", tri.vertices);
+            println!("  Screen verts: {:?}", screen_verts);
+        }
+
         // Backface culling (skip if triangle is facing away)
         let v0 = screen_verts[0];
         let v1 = screen_verts[1];
         let v2 = screen_verts[2];
 
         let cross = (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
-        if cross <= 0.0 {
-            return; // Skip back-facing triangles
+        // Temporarily disable backface culling to debug
+        // if cross <= 0.0 {
+        //     if debug {
+        //         println!("  Back-face culled (cross = {})", cross);
+        //     }
+        //     return; // Skip back-facing triangles
+        // }
+        if debug {
+            println!("  Cross product: {}", cross);
         }
 
         // Compute bounding box
         let min_x = v0.x.min(v1.x).min(v2.x).floor().max(0.0) as u32;
         let max_x = v0.x.max(v1.x).max(v2.x).ceil().min(self.width as f64 - 1.0) as u32;
         let min_y = v0.y.min(v1.y).min(v2.y).floor().max(0.0) as u32;
-        let max_y =
-            v0.y.max(v1.y)
-                .max(v2.y)
-                .ceil()
-                .min(self.height as f64 - 1.0) as u32;
+        let max_y = v0.y
+            .max(v1.y)
+            .max(v2.y)
+            .ceil()
+            .min(self.height as f64 - 1.0) as u32;
 
         // Rasterize pixels within bounding box
         for py in min_y..=max_y {
@@ -266,17 +378,13 @@ impl Rasterizer {
                         if depth < depth_buffer[idx] {
                             depth_buffer[idx] = depth;
 
-                            // Simple flat shading with the triangle color
-                            // Apply basic lighting based on normal
-                            let light_dir = Vec3::new(
-                                LIGHT_DIRECTION[0],
-                                LIGHT_DIRECTION[1],
-                                LIGHT_DIRECTION[2],
-                            )
-                            .normalize();
-                            let brightness = (tri.normal.dot(&light_dir) * 0.5 + 0.5).max(0.2);
-
-                            color_buffer[idx] = tri.color * brightness;
+                            // Interpolate world position
+                            let world_pos = tri.vertices[0].coords * w0
+                                + tri.vertices[1].coords * w1
+                                + tri.vertices[2].coords * w2;
+                            position_buffer[idx] = Some(Point::from(world_pos));
+                            normal_buffer[idx] = Some(tri.normal);
+                            material_buffer[idx] = Some((tri.color, tri.material.clone()));
                         }
                     }
                 }
@@ -294,6 +402,12 @@ impl Rasterizer {
         println!("Rasterized image saved to: {}", output_path);
         Ok(())
     }
+}
+
+/// Reflect a vector around a normal
+fn reflect(incident: &Vec3, normal: &Vec3) -> Unit<Vec3> {
+    let normal_unit = Unit::new_normalize(*normal);
+    Unit::new_normalize(incident - 2.0 * incident.dot(&normal_unit) * normal_unit.as_ref())
 }
 
 /// Compute barycentric coordinates of point p with respect to triangle (a, b, c)
@@ -349,19 +463,20 @@ fn apply_transform_to_triangles(triangles: &mut [WorldTriangle], transform: &Mat
 }
 
 /// Convert mesh to world triangles
-fn convert_mesh_to_world_triangles(mesh: &Mesh, color: Color) -> Vec<WorldTriangle> {
+fn convert_mesh_to_world_triangles(mesh: &Mesh, color: Color, material: Material) -> Vec<WorldTriangle> {
     mesh.triangles
         .iter()
         .map(|tri| WorldTriangle {
             vertices: tri.vertices,
             normal: tri.normal,
             color,
+            material: material.clone(),
         })
         .collect()
 }
 
 /// Tessellate a sphere into triangles
-fn tessellate_sphere(center: Point, radius: f64, color: Color) -> Vec<WorldTriangle> {
+fn tessellate_sphere(center: Point, radius: f64, color: Color, material: Material) -> Vec<WorldTriangle> {
     let mut triangles = Vec::new();
 
     // Use UV sphere tessellation with reasonable detail
@@ -389,6 +504,7 @@ fn tessellate_sphere(center: Point, radius: f64, color: Color) -> Vec<WorldTrian
                     vertices: [v00, v01, v10],
                     normal,
                     color,
+                    material: material.clone(),
                 });
             }
 
@@ -399,6 +515,7 @@ fn tessellate_sphere(center: Point, radius: f64, color: Color) -> Vec<WorldTrian
                     vertices: [v01, v11, v10],
                     normal,
                     color,
+                    material: material.clone(),
                 });
             }
         }
@@ -416,7 +533,7 @@ fn sphere_point(center: Point, radius: f64, theta: f64, phi: f64) -> Point {
 }
 
 /// Tessellate a cube into triangles
-fn tessellate_cube(center: Point, size: Vec3, color: Color) -> Vec<WorldTriangle> {
+fn tessellate_cube(center: Point, size: Vec3, color: Color, material: Material) -> Vec<WorldTriangle> {
     let mut triangles = Vec::new();
 
     let half_size = size / 2.0;
@@ -496,6 +613,7 @@ fn tessellate_cube(center: Point, size: Vec3, color: Color) -> Vec<WorldTriangle
             ],
             normal: *normal,
             color,
+            material: material.clone(),
         });
     }
 
@@ -503,7 +621,7 @@ fn tessellate_cube(center: Point, size: Vec3, color: Color) -> Vec<WorldTriangle
 }
 
 /// Tessellate a plane into triangles (limited to 1000x1000 as per spec)
-fn tessellate_plane(point: Point, normal: Vec3, color: Color) -> Vec<WorldTriangle> {
+fn tessellate_plane(point: Point, normal: Vec3, color: Color, material: Material) -> Vec<WorldTriangle> {
     let mut triangles = Vec::new();
 
     // Limit plane to 1000x1000 as specified
@@ -541,12 +659,14 @@ fn tessellate_plane(point: Point, normal: Vec3, color: Color) -> Vec<WorldTriang
                 vertices: [p00, p10, p01],
                 normal: normal_unit,
                 color,
+                material: material.clone(),
             });
 
             triangles.push(WorldTriangle {
                 vertices: [p10, p11, p01],
                 normal: normal_unit,
                 color,
+                material: material.clone(),
             });
         }
     }
@@ -570,7 +690,8 @@ mod tests {
         let center = Point::new(0.0, 0.0, 0.0);
         let radius = 1.0;
         let color = Color::new(1.0, 0.0, 0.0);
-        let triangles = tessellate_sphere(center, radius, color);
+        let material = Material::default();
+        let triangles = tessellate_sphere(center, radius, color, material);
 
         // Should generate some triangles
         assert!(!triangles.is_empty());
@@ -593,7 +714,8 @@ mod tests {
         let center = Point::new(0.0, 0.0, 0.0);
         let size = Vec3::new(2.0, 2.0, 2.0);
         let color = Color::new(0.0, 1.0, 0.0);
-        let triangles = tessellate_cube(center, size, color);
+        let material = Material::default();
+        let triangles = tessellate_cube(center, size, color, material);
 
         // Cube should have 12 triangles (2 per face, 6 faces)
         assert_eq!(triangles.len(), 12);
@@ -604,7 +726,8 @@ mod tests {
         let point = Point::new(0.0, 0.0, 0.0);
         let normal = Vec3::new(0.0, 0.0, 1.0);
         let color = Color::new(0.0, 0.0, 1.0);
-        let triangles = tessellate_plane(point, normal, color);
+        let material = Material::default();
+        let triangles = tessellate_plane(point, normal, color, material);
 
         // Should generate grid of triangles
         assert!(!triangles.is_empty());
