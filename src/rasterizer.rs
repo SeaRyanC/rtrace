@@ -197,6 +197,7 @@ impl Rasterizer {
         let mut material_buffer = vec![None; (self.width * self.height) as usize];
 
         // Project and rasterize each triangle
+        let is_perspective = camera.is_perspective;
         for tri in triangles {
             self.rasterize_triangle(
                 tri,
@@ -205,6 +206,8 @@ impl Rasterizer {
                 &mut position_buffer,
                 &mut normal_buffer,
                 &mut material_buffer,
+                camera_pos,
+                is_perspective,
             );
         }
 
@@ -306,7 +309,19 @@ impl Rasterizer {
         position_buffer: &mut [Option<Point>],
         normal_buffer: &mut [Option<Vec3>],
         material_buffer: &mut [Option<(Color, Material)>],
+        camera_pos: &Point,
+        is_perspective: bool,
     ) {
+        // Backface culling
+        if is_perspective {
+            // For perspective: check if triangle faces the camera in world space
+            let tri_center = (tri.vertices[0].coords + tri.vertices[1].coords + tri.vertices[2].coords) / 3.0;
+            let to_camera = camera_pos - Point::from(tri_center);
+            if tri.normal.dot(&to_camera) <= 0.0 {
+                return; // Triangle faces away from camera
+            }
+        }
+
         // Project vertices to screen space
         let mut screen_verts = [Point3::new(0.0, 0.0, 0.0); 3];
         let mut depths = [0.0; 3];
@@ -322,14 +337,22 @@ impl Rasterizer {
             depths[i] = depth;
         }
 
-        // Backface culling (skip if triangle is facing away)
+        // Screen-space backface culling (for orthographic) or degenerate triangle check
         let v0 = screen_verts[0];
         let v1 = screen_verts[1];
         let v2 = screen_verts[2];
 
         let cross = (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
-        if cross <= 0.0 {
-            return; // Skip back-facing and degenerate triangles
+        if !is_perspective {
+            // For orthographic: use screen-space winding for backface culling
+            if cross <= 0.0 {
+                return; // Skip back-facing triangles
+            }
+        } else {
+            // For perspective: just skip degenerate triangles
+            if cross.abs() < 0.001 {
+                return;
+            }
         }
 
         // Compute bounding box
