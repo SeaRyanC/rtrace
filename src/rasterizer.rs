@@ -188,7 +188,6 @@ impl Rasterizer {
         scene: &Scene,
         background_color: Color,
     ) -> RgbImage {
-        println!("rasterize_triangles called with {} triangles", triangles.len());
         // Create depth buffer and color buffer
         let mut depth_buffer = vec![f64::INFINITY; (self.width * self.height) as usize];
         let mut color_buffer = vec![background_color; (self.width * self.height) as usize];
@@ -198,7 +197,7 @@ impl Rasterizer {
         let mut material_buffer = vec![None; (self.width * self.height) as usize];
 
         // Project and rasterize each triangle
-        for (idx, tri) in triangles.iter().enumerate() {
+        for tri in triangles {
             self.rasterize_triangle(
                 tri,
                 camera,
@@ -206,12 +205,10 @@ impl Rasterizer {
                 &mut position_buffer,
                 &mut normal_buffer,
                 &mut material_buffer,
-                true, // debug all triangles
             );
         }
 
         // Apply lighting to each pixel
-        let mut lit_pixels = 0;
         for y in 0..self.height {
             for x in 0..self.width {
                 let idx = (y * self.width + x) as usize;
@@ -230,11 +227,9 @@ impl Rasterizer {
                         scene,
                     );
                     color_buffer[idx] = lit_color;
-                    lit_pixels += 1;
                 }
             }
         }
-        println!("Applied lighting to {} pixels", lit_pixels);
 
         // Convert to image
         let mut image = ImageBuffer::new(self.width, self.height);
@@ -311,7 +306,6 @@ impl Rasterizer {
         position_buffer: &mut [Option<Point>],
         normal_buffer: &mut [Option<Vec3>],
         material_buffer: &mut [Option<(Color, Material)>],
-        debug: bool,
     ) {
         // Project vertices to screen space
         let mut screen_verts = [Point3::new(0.0, 0.0, 0.0); 3];
@@ -328,27 +322,14 @@ impl Rasterizer {
             depths[i] = depth;
         }
 
-        if debug {
-            println!("Triangle:");
-            println!("  World vertices: {:?}", tri.vertices);
-            println!("  Screen verts: {:?}", screen_verts);
-        }
-
         // Backface culling (skip if triangle is facing away)
         let v0 = screen_verts[0];
         let v1 = screen_verts[1];
         let v2 = screen_verts[2];
 
         let cross = (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
-        // Temporarily disable backface culling to debug
-        // if cross <= 0.0 {
-        //     if debug {
-        //         println!("  Back-face culled (cross = {})", cross);
-        //     }
-        //     return; // Skip back-facing triangles
-        // }
-        if debug {
-            println!("  Cross product: {}", cross);
+        if cross <= 0.0 {
+            return; // Skip back-facing and degenerate triangles
         }
 
         // Compute bounding box
