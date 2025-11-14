@@ -15,7 +15,7 @@
 //! - No texture support
 
 use image::{ImageBuffer, Rgb, RgbImage};
-use nalgebra::{Matrix4, Point3, Vector3, Unit};
+use nalgebra::{Matrix4, Point3, Unit, Vector3};
 
 use crate::camera::Camera;
 use crate::mesh::Mesh;
@@ -154,7 +154,8 @@ impl Rasterizer {
                 } => {
                     if let Some(mesh) = mesh_data {
                         let color = hex_to_color(&material.color)?;
-                        let mut mesh_tris = convert_mesh_to_world_triangles(mesh, color, material.clone());
+                        let mut mesh_tris =
+                            convert_mesh_to_world_triangles(mesh, color, material.clone());
 
                         // Apply transforms if present
                         if let Some(transform_strings) = transform {
@@ -174,7 +175,8 @@ impl Rasterizer {
         println!("Tessellated scene into {} triangles", triangles.len());
 
         // Rasterize triangles
-        let image = self.rasterize_triangles(&triangles, &camera, &camera_pos, scene, background_color);
+        let image =
+            self.rasterize_triangles(&triangles, &camera, &camera_pos, scene, background_color);
 
         Ok(image)
     }
@@ -198,6 +200,7 @@ impl Rasterizer {
 
         // Project and rasterize each triangle
         let is_perspective = camera.is_perspective;
+
         for tri in triangles {
             self.rasterize_triangle(
                 tri,
@@ -221,14 +224,8 @@ impl Rasterizer {
                     &material_buffer[idx],
                 ) {
                     // Calculate Phong lighting
-                    let lit_color = self.calculate_lighting(
-                        &pos,
-                        &normal,
-                        color,
-                        material,
-                        camera_pos,
-                        scene,
-                    );
+                    let lit_color =
+                        self.calculate_lighting(&pos, &normal, color, material, camera_pos, scene);
                     color_buffer[idx] = lit_color;
                 }
             }
@@ -261,8 +258,8 @@ impl Rasterizer {
         scene: &Scene,
     ) -> Color {
         // Ambient component
-        let ambient_color =
-            hex_to_color(&scene.scene_settings.ambient_illumination.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
+        let ambient_color = hex_to_color(&scene.scene_settings.ambient_illumination.color)
+            .unwrap_or(Color::new(1.0, 1.0, 1.0));
         let ambient = material.ambient
             * scene.scene_settings.ambient_illumination.intensity
             * ambient_color.component_mul(material_color);
@@ -272,8 +269,7 @@ impl Rasterizer {
         // Process each light
         for light in &scene.lights {
             let light_pos = Point::new(light.position[0], light.position[1], light.position[2]);
-            let light_color =
-                hex_to_color(&light.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
+            let light_color = hex_to_color(&light.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
 
             let light_dir = Unit::new_normalize(light_pos - point);
 
@@ -312,12 +308,15 @@ impl Rasterizer {
         camera_pos: &Point,
         is_perspective: bool,
     ) {
-        // Backface culling
+        // Backface culling for perspective cameras
         if is_perspective {
             // For perspective: check if triangle faces the camera in world space
-            let tri_center = (tri.vertices[0].coords + tri.vertices[1].coords + tri.vertices[2].coords) / 3.0;
+            let tri_center =
+                (tri.vertices[0].coords + tri.vertices[1].coords + tri.vertices[2].coords) / 3.0;
             let to_camera = camera_pos - Point::from(tri_center);
-            if tri.normal.dot(&to_camera) <= 0.0 {
+            let dot = tri.normal.dot(&to_camera);
+
+            if dot <= 0.0 {
                 return; // Triangle faces away from camera
             }
         }
@@ -343,27 +342,25 @@ impl Rasterizer {
         let v2 = screen_verts[2];
 
         let cross = (v1.x - v0.x) * (v2.y - v0.y) - (v1.y - v0.y) * (v2.x - v0.x);
-        if !is_perspective {
-            // For orthographic: use screen-space winding for backface culling
-            if cross <= 0.0 {
-                return; // Skip back-facing triangles
-            }
-        } else {
-            // For perspective: just skip degenerate triangles
-            if cross.abs() < 0.001 {
-                return;
-            }
+
+        // Skip degenerate triangles (projected to a line or point)
+        if cross.abs() < 0.001 {
+            return;
         }
+
+        // For perspective cameras, do world-space backface culling (already done above)
+        // For orthographic cameras, skip screen-space backface culling as it's unreliable
+        // The depth buffer will handle which faces are visible
 
         // Compute bounding box
         let min_x = v0.x.min(v1.x).min(v2.x).floor().max(0.0) as u32;
         let max_x = v0.x.max(v1.x).max(v2.x).ceil().min(self.width as f64 - 1.0) as u32;
         let min_y = v0.y.min(v1.y).min(v2.y).floor().max(0.0) as u32;
-        let max_y = v0.y
-            .max(v1.y)
-            .max(v2.y)
-            .ceil()
-            .min(self.height as f64 - 1.0) as u32;
+        let max_y =
+            v0.y.max(v1.y)
+                .max(v2.y)
+                .ceil()
+                .min(self.height as f64 - 1.0) as u32;
 
         // Rasterize pixels within bounding box
         for py in min_y..=max_y {
@@ -467,7 +464,11 @@ fn apply_transform_to_triangles(triangles: &mut [WorldTriangle], transform: &Mat
 }
 
 /// Convert mesh to world triangles
-fn convert_mesh_to_world_triangles(mesh: &Mesh, color: Color, material: Material) -> Vec<WorldTriangle> {
+fn convert_mesh_to_world_triangles(
+    mesh: &Mesh,
+    color: Color,
+    material: Material,
+) -> Vec<WorldTriangle> {
     mesh.triangles
         .iter()
         .map(|tri| WorldTriangle {
@@ -480,7 +481,12 @@ fn convert_mesh_to_world_triangles(mesh: &Mesh, color: Color, material: Material
 }
 
 /// Tessellate a sphere into triangles
-fn tessellate_sphere(center: Point, radius: f64, color: Color, material: Material) -> Vec<WorldTriangle> {
+fn tessellate_sphere(
+    center: Point,
+    radius: f64,
+    color: Color,
+    material: Material,
+) -> Vec<WorldTriangle> {
     let mut triangles = Vec::new();
 
     // Use UV sphere tessellation with reasonable detail
@@ -537,7 +543,12 @@ fn sphere_point(center: Point, radius: f64, theta: f64, phi: f64) -> Point {
 }
 
 /// Tessellate a cube into triangles
-fn tessellate_cube(center: Point, size: Vec3, color: Color, material: Material) -> Vec<WorldTriangle> {
+fn tessellate_cube(
+    center: Point,
+    size: Vec3,
+    color: Color,
+    material: Material,
+) -> Vec<WorldTriangle> {
     let mut triangles = Vec::new();
 
     let half_size = size / 2.0;
@@ -625,7 +636,12 @@ fn tessellate_cube(center: Point, size: Vec3, color: Color, material: Material) 
 }
 
 /// Tessellate a plane into triangles (limited to 1000x1000 as per spec)
-fn tessellate_plane(point: Point, normal: Vec3, color: Color, material: Material) -> Vec<WorldTriangle> {
+fn tessellate_plane(
+    point: Point,
+    normal: Vec3,
+    color: Color,
+    material: Material,
+) -> Vec<WorldTriangle> {
     let mut triangles = Vec::new();
 
     // Limit plane to 1000x1000 as specified
