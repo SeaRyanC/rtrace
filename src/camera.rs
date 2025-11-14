@@ -179,13 +179,14 @@ impl Camera {
                 return (nalgebra::Point2::new(-1.0, -1.0), depth);
             }
 
-            // Project onto viewport plane
-            let viewport_point = self.origin + depth * self.view_direction.as_ref();
-            let offset = point - viewport_point;
+            // Project onto the view plane at focal_length
+            // The viewport is defined at focal_length distance, so we scale the offset by focal_length/depth
+            let point_on_plane = self.origin + view_vec * (self.focal_length / depth);
+            let offset = point_on_plane - self.lower_left_corner;
 
             // Convert to UV coordinates
-            let u = offset.dot(&self.horizontal) / self.horizontal.magnitude_squared() + 0.5;
-            let v = offset.dot(&self.vertical) / self.vertical.magnitude_squared() + 0.5;
+            let u = offset.dot(&self.horizontal) / self.horizontal.magnitude_squared();
+            let v = offset.dot(&self.vertical) / self.vertical.magnitude_squared();
 
             (nalgebra::Point2::new(u, v), depth)
         } else {
