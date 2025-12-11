@@ -122,24 +122,15 @@ fn calculate_point_light_contribution(
         return Color::new(0.0, 0.0, 0.0);
     }
 
-    // Diffuse component
-    let diffuse_strength = hit_record.normal.dot(&light_dir).max(0.0);
-    let diffuse = material.diffuse
-        * diffuse_strength
-        * light_intensity
-        * light_color.component_mul(material_color);
-
-    // Specular component (Phong model)
-    let specular = if diffuse_strength > 0.0 {
-        let view_dir = Unit::new_normalize(*camera_pos - hit_record.point);
-        let reflect_dir = reflect(&(-light_dir.as_ref()), &hit_record.normal);
-        let spec_strength = view_dir.dot(&reflect_dir).max(0.0).powf(material.shininess);
-        material.specular * spec_strength * light_intensity * light_color
-    } else {
-        Color::new(0.0, 0.0, 0.0)
-    };
-
-    diffuse + specular
+    calculate_diffuse_and_specular(
+        hit_record,
+        material,
+        &light_dir,
+        light_color,
+        light_intensity,
+        camera_pos,
+        material_color,
+    )
 }
 
 /// Calculate light contribution from a diffuse (area) light source
@@ -190,24 +181,15 @@ fn calculate_diffuse_light_contribution(
 
         visible_samples += 1;
 
-        // Diffuse component
-        let diffuse_strength = hit_record.normal.dot(&light_dir).max(0.0);
-        let diffuse = material.diffuse
-            * diffuse_strength
-            * light_intensity
-            * light_color.component_mul(material_color);
-
-        // Specular component (Phong model)
-        let specular = if diffuse_strength > 0.0 {
-            let view_dir = Unit::new_normalize(*camera_pos - hit_record.point);
-            let reflect_dir = reflect(&(-light_dir.as_ref()), &hit_record.normal);
-            let spec_strength = view_dir.dot(&reflect_dir).max(0.0).powf(material.shininess);
-            material.specular * spec_strength * light_intensity * light_color
-        } else {
-            Color::new(0.0, 0.0, 0.0)
-        };
-
-        total_contribution += diffuse + specular;
+        total_contribution += calculate_diffuse_and_specular(
+            hit_record,
+            material,
+            &light_dir,
+            light_color,
+            light_intensity,
+            camera_pos,
+            material_color,
+        );
     }
 
     // Scale the contributions based on visibility - more visible samples means more light received
@@ -287,6 +269,36 @@ pub fn phong_lighting(
     }
 
     color
+}
+
+/// Calculate diffuse and specular components for a single light direction
+fn calculate_diffuse_and_specular(
+    hit_record: &HitRecord,
+    material: &Material,
+    light_dir: &Unit<Vec3>,
+    light_color: &Color,
+    light_intensity: f64,
+    camera_pos: &Point,
+    material_color: &Color,
+) -> Color {
+    // Diffuse component
+    let diffuse_strength = hit_record.normal.dot(light_dir).max(0.0);
+    let diffuse = material.diffuse
+        * diffuse_strength
+        * light_intensity
+        * light_color.component_mul(material_color);
+
+    // Specular component (Phong model)
+    let specular = if diffuse_strength > 0.0 {
+        let view_dir = Unit::new_normalize(*camera_pos - hit_record.point);
+        let reflect_dir = reflect(&(-light_dir.as_ref()), &hit_record.normal);
+        let spec_strength = view_dir.dot(&reflect_dir).max(0.0).powf(material.shininess);
+        material.specular * spec_strength * light_intensity * light_color
+    } else {
+        Color::new(0.0, 0.0, 0.0)
+    };
+
+    diffuse + specular
 }
 
 /// Reflect a vector around a normal
