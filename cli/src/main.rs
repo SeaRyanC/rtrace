@@ -1,6 +1,7 @@
 use clap::Parser;
 use rtrace::{AntiAliasingMode, Rasterizer, Renderer, Scene};
 use std::path::Path;
+use std::process::Command;
 
 /// Ray tracer CLI - renders 3D scenes from JSON descriptions
 #[derive(Parser, Debug)]
@@ -10,7 +11,7 @@ struct Args {
     #[arg(short, long)]
     input: String,
 
-    /// Output PNG image file
+    /// Output file (PNG for single image, WebM for movie)
     #[arg(short, long)]
     output: String,
 
@@ -33,6 +34,93 @@ struct Args {
     /// Use rasterization instead of raytracing for fast preview
     #[arg(long)]
     rasterize: bool,
+
+    /// Generate a movie by rotating the scene 360 degrees about the Z axis.
+    /// Uses rasterization and outputs a .webm file.
+    #[arg(long)]
+    movie: bool,
+}
+
+/// Render a 360-degree rotation movie of the scene
+fn render_movie(scene: &Scene, output_path: &str, width: u32, height: u32) {
+    println!("Generating 360-degree rotation movie using rasterization...");
+
+    // Create temporary directory for frames
+    let temp_dir = std::env::temp_dir().join("rtrace_movie_frames");
+    if temp_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&temp_dir) {
+            eprintln!("Warning: Could not clean up temp directory: {}", e);
+        }
+    }
+    if let Err(e) = std::fs::create_dir_all(&temp_dir) {
+        eprintln!("Error creating temp directory: {}", e);
+        std::process::exit(1);
+    }
+
+    let rasterizer = Rasterizer::new(width, height);
+
+    // Render 360 frames (one per degree)
+    for angle in 0..360 {
+        let mut rotated_scene = scene.clone();
+        rotated_scene.rotate_objects_z(angle as f64);
+
+        let frame_path = temp_dir.join(format!("frame_{:04}.png", angle));
+        if let Err(e) = rasterizer.render_to_file(&rotated_scene, frame_path.to_str().unwrap()) {
+            eprintln!("Error rendering frame {}: {}", angle, e);
+            std::process::exit(1);
+        }
+
+        // Progress indicator
+        if angle % 36 == 0 {
+            println!(
+                "Rendered frame {}/360 ({:.0}%)",
+                angle,
+                (angle as f64 / 360.0) * 100.0
+            );
+        }
+    }
+    println!("Rendered frame 360/360 (100%)");
+
+    // Use ffmpeg to encode frames into WebM
+    println!("Encoding frames to WebM...");
+
+    let frame_pattern = temp_dir.join("frame_%04d.png");
+    let status = Command::new("ffmpeg")
+        .args([
+            "-y", // Overwrite output file if it exists
+            "-framerate",
+            "30",
+            "-i",
+            frame_pattern.to_str().unwrap(),
+            "-c:v",
+            "libvpx-vp9",
+            "-b:v",
+            "2M",
+            "-pix_fmt",
+            "yuva420p",
+            output_path,
+        ])
+        .status();
+
+    match status {
+        Ok(exit_status) if exit_status.success() => {
+            println!("Successfully created movie: {}", output_path);
+        }
+        Ok(exit_status) => {
+            eprintln!("ffmpeg exited with status: {}", exit_status);
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("Error running ffmpeg: {}", e);
+            eprintln!("Make sure ffmpeg is installed and available in PATH");
+            std::process::exit(1);
+        }
+    }
+
+    // Clean up temp directory
+    if let Err(e) = std::fs::remove_dir_all(&temp_dir) {
+        eprintln!("Warning: Could not clean up temp directory: {}", e);
+    }
 }
 
 fn main() {
@@ -41,26 +129,6 @@ fn main() {
     // Validate input file exists
     if !Path::new(&args.input).exists() {
         eprintln!("Error: Input file '{}' does not exist", args.input);
-        std::process::exit(1);
-    }
-
-    // Parse anti-aliasing mode
-    let anti_aliasing_mode = match args.anti_aliasing.as_str() {
-        "quincunx" => AntiAliasingMode::Quincunx,
-        "stochastic" => AntiAliasingMode::Stochastic,
-        "none" => AntiAliasingMode::None,
-        _ => {
-            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, none", args.anti_aliasing);
-            std::process::exit(1);
-        }
-    };
-
-    // Determine sample count based on mode and user input
-    let samples = args.samples.unwrap_or(1); // Default to 1 sample for all modes
-
-    // Validate samples parameter
-    if samples == 0 {
-        eprintln!("Error: Samples must be greater than 0");
         std::process::exit(1);
     }
 
@@ -97,6 +165,12 @@ fn main() {
         camera_aspect_ratio, width, height, args.size
     );
 
+    // Handle movie mode
+    if args.movie {
+        render_movie(&scene, &args.output, width, height);
+        return;
+    }
+
     // Use rasterization if requested
     if args.rasterize {
         println!("Using rasterization mode for fast preview...");
@@ -110,6 +184,26 @@ fn main() {
 
         println!("Successfully rasterized to '{}'", args.output);
         return;
+    }
+
+    // Parse anti-aliasing mode
+    let anti_aliasing_mode = match args.anti_aliasing.as_str() {
+        "quincunx" => AntiAliasingMode::Quincunx,
+        "stochastic" => AntiAliasingMode::Stochastic,
+        "none" => AntiAliasingMode::None,
+        _ => {
+            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, none", args.anti_aliasing);
+            std::process::exit(1);
+        }
+    };
+
+    // Determine sample count based on mode and user input
+    let samples = args.samples.unwrap_or(1); // Default to 1 sample for all modes
+
+    // Validate samples parameter
+    if samples == 0 {
+        eprintln!("Error: Samples must be greater than 0");
+        std::process::exit(1);
     }
 
     // Create renderer
