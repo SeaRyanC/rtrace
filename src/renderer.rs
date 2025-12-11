@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::camera::Camera;
-use crate::lighting::ray_color_with_camera;
+use crate::lighting::ray_color_with_data;
 use crate::outline::{apply_outline_detection, OutlineBuffers, OutlineConfig};
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
@@ -57,7 +57,7 @@ impl ProgressTracker {
         let current_completed = self.completed_pixels.fetch_add(1, Ordering::Relaxed) + 1;
 
         // Print progress periodically with thread-safe output
-        if current_completed % self.progress_step == 0
+        if current_completed.is_multiple_of(self.progress_step)
             || current_completed == self.total_pixels as usize
         {
             if let Ok(_guard) = self.progress_mutex.lock() {
@@ -311,9 +311,9 @@ impl Renderer {
                             );
 
                             // For radius, we need to consider scaling - use the maximum scale component
-                            let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
-                            let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
-                            let scale_z = (transform_matrix.column(2).xyz().magnitude()) as f64;
+                            let scale_x = transform_matrix.column(0).xyz().magnitude();
+                            let scale_y = transform_matrix.column(1).xyz().magnitude();
+                            let scale_z = transform_matrix.column(2).xyz().magnitude();
                             let max_scale = scale_x.max(scale_y).max(scale_z);
                             effective_radius *= max_scale;
                         }
@@ -554,55 +554,38 @@ impl Renderer {
         background_color: Color,
         materials: &HashMap<usize, crate::scene::Material>,
     ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
-        // Quincux is no longer handled as a special case in the main pipeline
-        // All anti-aliasing modes now use the standard rendering path
-        if self.outline_config.is_some() {
-            let render_context = RenderContext {
-                ambient,
-                fog,
-                camera_pos,
-                background_color,
-            };
-            self.render_standard_with_outline(
-                render_width,
-                render_height,
-                world,
-                camera,
-                lights,
-                &render_context,
-                materials,
-            )
-        } else {
-            let image_data = self.render_standard(
-                render_width,
-                render_height,
-                world,
-                camera,
-                lights,
-                ambient,
-                fog,
-                camera_pos,
-                background_color,
-                materials,
-            );
-            (image_data, None)
-        }
+        let render_context = RenderContext {
+            ambient,
+            fog,
+            camera_pos,
+            background_color,
+        };
+        let collect_outline_data = self.outline_config.is_some();
+        self.render_pixels(
+            render_width,
+            render_height,
+            world,
+            camera,
+            lights,
+            &render_context,
+            materials,
+            collect_outline_data,
+        )
     }
 
+    /// Unified pixel rendering function that handles both regular and outline-enabled rendering
     #[allow(clippy::too_many_arguments)]
-    fn render_standard(
+    fn render_pixels(
         &self,
         render_width: u32,
         render_height: u32,
         world: &World,
         camera: &Camera,
         lights: &[crate::scene::Light],
-        ambient: &crate::scene::AmbientIllumination,
-        fog: &Option<crate::scene::Fog>,
-        camera_pos: &Point,
-        background_color: Color,
+        render_context: &RenderContext,
         materials: &HashMap<usize, crate::scene::Material>,
-    ) -> Vec<(u32, u32, Color)> {
+        collect_outline_data: bool,
+    ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
         // Create a vector of all pixel coordinates
         let pixels: Vec<(u32, u32)> = (0..render_height)
             .flat_map(|y| (0..render_width).map(move |x| (x, y)))
@@ -612,92 +595,6 @@ impl Renderer {
         let progress_tracker = ProgressTracker::new(render_width * render_height);
 
         // Render pixels in parallel
-        let results: Vec<(u32, u32, Color)> = pixels
-            .par_iter()
-            .map(|&(x, y)| {
-                let (pixel_u, pixel_v, pixel_width, pixel_height) =
-                    SamplingHelper::calculate_pixel_coords(x, y, render_width, render_height);
-
-                // Collect samples for this pixel
-                let mut total_color = Color::new(0.0, 0.0, 0.0);
-
-                // Create deterministic RNG seeded by pixel coordinates and global seed
-                let mut rng = SamplingHelper::create_pixel_rng(x, y, self.seed);
-                let pixel_seed = self
-                    .seed
-                    .unwrap_or(0)
-                    .wrapping_mul(0x9E3779B97F4A7C15_u64)
-                    .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
-                    .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
-
-                for sample in 0..self.samples {
-                    let (sample_u, sample_v) = SamplingHelper::calculate_sample_coords(
-                        &self.anti_aliasing_mode,
-                        self.samples,
-                        sample,
-                        pixel_u,
-                        pixel_v,
-                        pixel_width,
-                        pixel_height,
-                        &mut rng,
-                    );
-
-                    let ray = camera.get_ray(sample_u, sample_v);
-
-                    // Create sample-specific seed for ray tracing consistency
-                    let sample_seed = SamplingHelper::create_sample_seed(pixel_seed, sample);
-
-                    let sample_color = ray_color_with_camera(
-                        &ray,
-                        world,
-                        lights,
-                        ambient,
-                        fog,
-                        camera_pos,
-                        background_color,
-                        materials,
-                        self.max_depth,
-                        Some(camera),
-                        sample_seed,
-                    );
-
-                    total_color += sample_color;
-                }
-
-                // Average the samples
-                let color = total_color / self.samples as f64;
-
-                // Update progress tracking
-                progress_tracker.update_progress();
-
-                (x, y, color)
-            })
-            .collect();
-
-        results
-    }
-
-    fn render_standard_with_outline(
-        &self,
-        render_width: u32,
-        render_height: u32,
-        world: &World,
-        camera: &Camera,
-        lights: &[crate::scene::Light],
-        render_context: &RenderContext,
-        materials: &HashMap<usize, crate::scene::Material>,
-    ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
-        use crate::lighting::ray_color_with_data;
-
-        // Create a vector of all pixel coordinates
-        let pixels: Vec<(u32, u32)> = (0..render_height)
-            .flat_map(|y| (0..render_width).map(move |x| (x, y)))
-            .collect();
-
-        // Progress tracking setup
-        let progress_tracker = ProgressTracker::new(render_width * render_height);
-
-        // Render pixels in parallel and collect outline data
         let results: Vec<PixelRenderResult> = pixels
             .par_iter()
             .map(|&(x, y)| {
@@ -752,10 +649,12 @@ impl Renderer {
                     total_color += sample_color;
 
                     // For outline detection, we want the closest depth and corresponding normal
-                    if let (Some(depth), Some(normal)) = (sample_depth, sample_normal) {
-                        if pixel_depth.is_none() || depth < pixel_depth.unwrap() {
-                            pixel_depth = Some(depth);
-                            pixel_normal = Some(normal);
+                    if collect_outline_data {
+                        if let (Some(depth), Some(normal)) = (sample_depth, sample_normal) {
+                            if pixel_depth.is_none() || depth < pixel_depth.unwrap() {
+                                pixel_depth = Some(depth);
+                                pixel_normal = Some(normal);
+                            }
                         }
                     }
                 }
@@ -770,22 +669,30 @@ impl Renderer {
             })
             .collect();
 
-        // Separate color data and outline data
-        let mut image_data = Vec::new();
-        let mut outline_buffers = OutlineBuffers::new(render_width, render_height);
+        // Build output data
+        if collect_outline_data {
+            let mut image_data = Vec::with_capacity(results.len());
+            let mut outline_buffers = OutlineBuffers::new(render_width, render_height);
 
-        for (x, y, color, depth, normal) in results {
-            image_data.push((x, y, color));
+            for (x, y, color, depth, normal) in results {
+                image_data.push((x, y, color));
 
-            if let Some(depth) = depth {
-                outline_buffers.set_depth(x, y, depth);
+                if let Some(depth) = depth {
+                    outline_buffers.set_depth(x, y, depth);
+                }
+                if let Some(normal) = normal {
+                    outline_buffers.set_normal(x, y, normal);
+                }
             }
-            if let Some(normal) = normal {
-                outline_buffers.set_normal(x, y, normal);
-            }
+
+            (image_data, Some(outline_buffers))
+        } else {
+            let image_data = results
+                .into_iter()
+                .map(|(x, y, color, _, _)| (x, y, color))
+                .collect();
+            (image_data, None)
         }
-
-        (image_data, Some(outline_buffers))
     }
 
     /// Downsample the larger rendered image to the target dimensions using quincux pattern if needed
