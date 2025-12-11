@@ -97,6 +97,7 @@ fn sample_disk_light_point<R: Rng>(
 }
 
 /// Calculate light contribution from a point light source
+#[allow(clippy::too_many_arguments)]
 fn calculate_point_light_contribution(
     hit_record: &HitRecord,
     material: &Material,
@@ -121,27 +122,19 @@ fn calculate_point_light_contribution(
         return Color::new(0.0, 0.0, 0.0);
     }
 
-    // Diffuse component
-    let diffuse_strength = hit_record.normal.dot(&light_dir).max(0.0);
-    let diffuse = material.diffuse
-        * diffuse_strength
-        * light_intensity
-        * light_color.component_mul(material_color);
-
-    // Specular component (Phong model)
-    let specular = if diffuse_strength > 0.0 {
-        let view_dir = Unit::new_normalize(*camera_pos - hit_record.point);
-        let reflect_dir = reflect(&(-light_dir.as_ref()), &hit_record.normal);
-        let spec_strength = view_dir.dot(&reflect_dir).max(0.0).powf(material.shininess);
-        material.specular * spec_strength * light_intensity * light_color
-    } else {
-        Color::new(0.0, 0.0, 0.0)
-    };
-
-    diffuse + specular
+    calculate_diffuse_and_specular(
+        hit_record,
+        material,
+        &light_dir,
+        light_color,
+        light_intensity,
+        camera_pos,
+        material_color,
+    )
 }
 
 /// Calculate light contribution from a diffuse (area) light source
+#[allow(clippy::too_many_arguments)]
 fn calculate_diffuse_light_contribution(
     hit_record: &HitRecord,
     material: &Material,
@@ -188,24 +181,15 @@ fn calculate_diffuse_light_contribution(
 
         visible_samples += 1;
 
-        // Diffuse component
-        let diffuse_strength = hit_record.normal.dot(&light_dir).max(0.0);
-        let diffuse = material.diffuse
-            * diffuse_strength
-            * light_intensity
-            * light_color.component_mul(material_color);
-
-        // Specular component (Phong model)
-        let specular = if diffuse_strength > 0.0 {
-            let view_dir = Unit::new_normalize(*camera_pos - hit_record.point);
-            let reflect_dir = reflect(&(-light_dir.as_ref()), &hit_record.normal);
-            let spec_strength = view_dir.dot(&reflect_dir).max(0.0).powf(material.shininess);
-            material.specular * spec_strength * light_intensity * light_color
-        } else {
-            Color::new(0.0, 0.0, 0.0)
-        };
-
-        total_contribution += diffuse + specular;
+        total_contribution += calculate_diffuse_and_specular(
+            hit_record,
+            material,
+            &light_dir,
+            light_color,
+            light_intensity,
+            camera_pos,
+            material_color,
+        );
     }
 
     // Scale the contributions based on visibility - more visible samples means more light received
@@ -287,6 +271,36 @@ pub fn phong_lighting(
     color
 }
 
+/// Calculate diffuse and specular components for a single light direction
+fn calculate_diffuse_and_specular(
+    hit_record: &HitRecord,
+    material: &Material,
+    light_dir: &Unit<Vec3>,
+    light_color: &Color,
+    light_intensity: f64,
+    camera_pos: &Point,
+    material_color: &Color,
+) -> Color {
+    // Diffuse component
+    let diffuse_strength = hit_record.normal.dot(light_dir).max(0.0);
+    let diffuse = material.diffuse
+        * diffuse_strength
+        * light_intensity
+        * light_color.component_mul(material_color);
+
+    // Specular component (Phong model)
+    let specular = if diffuse_strength > 0.0 {
+        let view_dir = Unit::new_normalize(*camera_pos - hit_record.point);
+        let reflect_dir = reflect(&(-light_dir.as_ref()), &hit_record.normal);
+        let spec_strength = view_dir.dot(&reflect_dir).max(0.0).powf(material.shininess);
+        material.specular * spec_strength * light_intensity * light_color
+    } else {
+        Color::new(0.0, 0.0, 0.0)
+    };
+
+    diffuse + specular
+}
+
 /// Reflect a vector around a normal
 fn reflect(incident: &Vec3, normal: &Unit<Vec3>) -> Unit<Vec3> {
     let reflected = incident - 2.0 * incident.dot(normal) * normal.as_ref();
@@ -347,6 +361,89 @@ pub fn ray_color(
     )
 }
 
+/// Internal ray tracing parameters to reduce function argument count
+struct RayTraceParams<'a> {
+    world: &'a World,
+    lights: &'a [Light],
+    ambient: &'a AmbientIllumination,
+    fog: &'a Option<Fog>,
+    camera_pos: &'a Point,
+    background_color: Color,
+    materials: &'a std::collections::HashMap<usize, Material>,
+    camera: Option<&'a crate::camera::Camera>,
+    seed: u64,
+}
+
+/// Internal function that handles the core ray tracing logic
+/// Returns (color, Option<depth>, Option<normal>)
+fn trace_ray_internal(
+    ray: &Ray,
+    params: &RayTraceParams,
+    max_depth: i32,
+) -> (Color, Option<f64>, Option<Vec3>) {
+    if max_depth <= 0 {
+        return (Color::new(0.0, 0.0, 0.0), None, None);
+    }
+
+    if let Some(hit) = params.world.hit(ray, 0.001, f64::INFINITY) {
+        // Calculate camera-space depth and normal for outline detection
+        let camera_space_depth = (hit.point - *params.camera_pos).magnitude();
+        let world_normal = *hit.normal.as_ref();
+
+        // Get material for this object using the material index from the hit record
+        let material = params
+            .materials
+            .get(&hit.material_index)
+            .cloned()
+            .unwrap_or_else(Material::default);
+
+        // Calculate lighting
+        let mut color = phong_lighting(
+            &hit,
+            &material,
+            params.lights,
+            params.ambient,
+            params.camera_pos,
+            params.world,
+            params.seed,
+        );
+
+        // Apply fog based on distance from camera
+        color = apply_fog(color, params.fog, camera_space_depth);
+
+        // Handle reflections if material has reflectivity
+        if let Some(reflectivity) = material.reflectivity {
+            if reflectivity > 0.0 && max_depth > 1 {
+                let view_dir = Unit::new_normalize(*params.camera_pos - hit.point);
+                let reflect_dir = reflect(&(-view_dir.as_ref()), &hit.normal);
+                let reflect_ray = Ray::new(
+                    hit.point + 0.001 * hit.normal.as_ref(),
+                    *reflect_dir.as_ref(),
+                );
+
+                // For reflected rays, we only care about color, not depth/normal data
+                let (reflected_color, _, _) =
+                    trace_ray_internal(&reflect_ray, params, max_depth - 1);
+
+                color = color * (1.0 - reflectivity) + reflected_color * reflectivity;
+            }
+        }
+
+        (color, Some(camera_space_depth), Some(world_normal))
+    } else {
+        // Background pixel - check for grid background
+        let background = if let Some(camera) = params.camera {
+            camera
+                .get_grid_color(ray)
+                .unwrap_or(params.background_color)
+        } else {
+            params.background_color
+        };
+
+        (background, None, None)
+    }
+}
+
 /// Ray color calculation that also captures depth and normal data for outline detection
 #[allow(clippy::too_many_arguments)]
 pub fn ray_color_with_data(
@@ -362,74 +459,18 @@ pub fn ray_color_with_data(
     camera: Option<&crate::camera::Camera>,
     seed: u64,
 ) -> (Color, Option<f64>, Option<Vec3>) {
-    if max_depth <= 0 {
-        return (Color::new(0.0, 0.0, 0.0), None, None);
-    }
-
-    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        // Calculate camera-space depth
-        let camera_space_depth = (hit.point - *camera_pos).magnitude();
-
-        // Get the surface normal in world space
-        let world_normal = *hit.normal.as_ref();
-
-        // Get material for this object using the material index from the hit record
-        let material = materials
-            .get(&hit.material_index)
-            .cloned()
-            .unwrap_or_else(Material::default);
-
-        // Calculate lighting (reuse existing lighting logic)
-        let mut color = phong_lighting(&hit, &material, lights, ambient, camera_pos, world, seed);
-
-        // Apply fog based on distance from camera
-        let distance = (hit.point - *camera_pos).magnitude();
-        color = apply_fog(color, fog, distance);
-
-        // Handle reflections if material has reflectivity
-        if let Some(reflectivity) = material.reflectivity {
-            if reflectivity > 0.0 && max_depth > 1 {
-                let view_dir = Unit::new_normalize(*camera_pos - hit.point);
-                let reflect_dir = reflect(&(-view_dir.as_ref()), &hit.normal);
-                let reflect_ray = Ray::new(
-                    hit.point + 0.001 * hit.normal.as_ref(),
-                    *reflect_dir.as_ref(),
-                );
-
-                // For reflected rays, we only care about color, not depth/normal data
-                let (reflected_color, _, _) = ray_color_with_data(
-                    &reflect_ray,
-                    world,
-                    lights,
-                    ambient,
-                    fog,
-                    camera_pos,
-                    background_color,
-                    materials,
-                    max_depth - 1,
-                    camera,
-                    seed,
-                );
-
-                color = color * (1.0 - reflectivity) + reflected_color * reflectivity;
-            }
-        }
-
-        (color, Some(camera_space_depth), Some(world_normal))
-    } else {
-        // Background pixel - check for grid background
-        let background = if let Some(camera) = camera {
-            if let Some(grid_color) = camera.get_grid_color(ray) {
-                grid_color
-            } else {
-                background_color
-            }
-        } else {
-            background_color
-        };
-
-        (background, None, None)
-    }
+    let params = RayTraceParams {
+        world,
+        lights,
+        ambient,
+        fog,
+        camera_pos,
+        background_color,
+        materials,
+        camera,
+        seed,
+    };
+    trace_ray_internal(ray, &params, max_depth)
 }
 
 /// Main ray color calculation with optional camera for grid background
@@ -447,62 +488,18 @@ pub fn ray_color_with_camera(
     camera: Option<&crate::camera::Camera>,
     seed: u64,
 ) -> Color {
-    if max_depth <= 0 {
-        return Color::new(0.0, 0.0, 0.0);
-    }
-
-    if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
-        // Get material for this object using the material index from the hit record
-        let material = materials
-            .get(&hit.material_index)
-            .cloned()
-            .unwrap_or_else(Material::default);
-
-        // Calculate lighting
-        let mut color = phong_lighting(&hit, &material, lights, ambient, camera_pos, world, seed);
-
-        // Apply fog based on distance from camera
-        let distance = (hit.point - *camera_pos).magnitude();
-        color = apply_fog(color, fog, distance);
-
-        // Handle reflections if material has reflectivity
-        if let Some(reflectivity) = material.reflectivity {
-            if reflectivity > 0.0 && max_depth > 1 {
-                let view_dir = Unit::new_normalize(*camera_pos - hit.point);
-                let reflect_dir = reflect(&(-view_dir.as_ref()), &hit.normal);
-                let reflect_ray = Ray::new(
-                    hit.point + 0.001 * hit.normal.as_ref(),
-                    *reflect_dir.as_ref(),
-                );
-
-                let reflected_color = ray_color_with_camera(
-                    &reflect_ray,
-                    world,
-                    lights,
-                    ambient,
-                    fog,
-                    camera_pos,
-                    background_color,
-                    materials,
-                    max_depth - 1,
-                    camera,
-                    seed,
-                );
-
-                color = color * (1.0 - reflectivity) + reflected_color * reflectivity;
-            }
-        }
-
-        color
-    } else {
-        // Ray missed all objects - check for grid background if camera is orthographic
-        if let Some(camera) = camera {
-            if let Some(grid_color) = camera.get_grid_color(ray) {
-                return grid_color;
-            }
-        }
-        background_color
-    }
+    let params = RayTraceParams {
+        world,
+        lights,
+        ambient,
+        fog,
+        camera_pos,
+        background_color,
+        materials,
+        camera,
+        seed,
+    };
+    trace_ray_internal(ray, &params, max_depth).0
 }
 
 #[cfg(test)]

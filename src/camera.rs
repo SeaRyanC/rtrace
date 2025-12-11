@@ -64,6 +64,7 @@ impl Camera {
     }
 
     /// Create orthographic camera
+    #[allow(clippy::too_many_arguments)]
     fn create_orthographic(
         origin: Point,
         u: Unit<Vec3>,
@@ -100,6 +101,7 @@ impl Camera {
     }
 
     /// Create perspective camera
+    #[allow(clippy::too_many_arguments)]
     fn create_perspective(
         origin: Point,
         u: Unit<Vec3>,
@@ -221,67 +223,46 @@ impl Camera {
 
         let half_thickness = grid_thickness / 2.0;
 
-        // For orthographic rays, we need to find intersections with the origin planes
-        // and check if we're close to grid lines
+        /// Helper to check if a ray intersects a plane and hits a grid line
+        fn check_plane_intersection(
+            ray: &Ray,
+            axis: usize, // 0=x, 1=y, 2=z - the axis perpendicular to the plane
+            grid_pitch: f64,
+            half_thickness: f64,
+        ) -> bool {
+            if ray.direction[axis].abs() > 1e-10 {
+                let t = -ray.origin[axis] / ray.direction[axis];
+                if t > 0.0 {
+                    let intersection_point = ray.origin + t * ray.direction.as_ref();
 
-        // Check intersection with XY plane (z = 0)
-        if ray.direction.z.abs() > 1e-10 {
-            let t = -ray.origin.z / ray.direction.z;
-            if t > 0.0 {
-                let intersection_point = ray.origin + t * ray.direction.as_ref();
-                let x = intersection_point.x;
-                let y = intersection_point.y;
+                    // Get the two axes that define the plane
+                    let (axis1, axis2) = match axis {
+                        0 => (1, 2), // YZ plane (x=0)
+                        1 => (0, 2), // XZ plane (y=0)
+                        _ => (0, 1), // XY plane (z=0)
+                    };
 
-                // Check if we're on a grid line
-                let x_mod = (x / grid_pitch).fract().abs();
-                let y_mod = (y / grid_pitch).fract().abs();
+                    let coord1 = intersection_point[axis1];
+                    let coord2 = intersection_point[axis2];
 
-                let x_grid_dist = (x_mod * grid_pitch).min((1.0 - x_mod) * grid_pitch);
-                let y_grid_dist = (y_mod * grid_pitch).min((1.0 - y_mod) * grid_pitch);
+                    let mod1 = (coord1 / grid_pitch).fract().abs();
+                    let mod2 = (coord2 / grid_pitch).fract().abs();
 
-                if x_grid_dist <= half_thickness || y_grid_dist <= half_thickness {
-                    return Some(*grid_color);
+                    let dist1 = (mod1 * grid_pitch).min((1.0 - mod1) * grid_pitch);
+                    let dist2 = (mod2 * grid_pitch).min((1.0 - mod2) * grid_pitch);
+
+                    if dist1 <= half_thickness || dist2 <= half_thickness {
+                        return true;
+                    }
                 }
             }
+            false
         }
 
-        // Check intersection with XZ plane (y = 0)
-        if ray.direction.y.abs() > 1e-10 {
-            let t = -ray.origin.y / ray.direction.y;
-            if t > 0.0 {
-                let intersection_point = ray.origin + t * ray.direction.as_ref();
-                let x = intersection_point.x;
-                let z = intersection_point.z;
-
-                let x_mod = (x / grid_pitch).fract().abs();
-                let z_mod = (z / grid_pitch).fract().abs();
-
-                let x_grid_dist = (x_mod * grid_pitch).min((1.0 - x_mod) * grid_pitch);
-                let z_grid_dist = (z_mod * grid_pitch).min((1.0 - z_mod) * grid_pitch);
-
-                if x_grid_dist <= half_thickness || z_grid_dist <= half_thickness {
-                    return Some(*grid_color);
-                }
-            }
-        }
-
-        // Check intersection with YZ plane (x = 0)
-        if ray.direction.x.abs() > 1e-10 {
-            let t = -ray.origin.x / ray.direction.x;
-            if t > 0.0 {
-                let intersection_point = ray.origin + t * ray.direction.as_ref();
-                let y = intersection_point.y;
-                let z = intersection_point.z;
-
-                let y_mod = (y / grid_pitch).fract().abs();
-                let z_mod = (z / grid_pitch).fract().abs();
-
-                let y_grid_dist = (y_mod * grid_pitch).min((1.0 - y_mod) * grid_pitch);
-                let z_grid_dist = (z_mod * grid_pitch).min((1.0 - z_mod) * grid_pitch);
-
-                if y_grid_dist <= half_thickness || z_grid_dist <= half_thickness {
-                    return Some(*grid_color);
-                }
+        // Check all three origin planes (XY, XZ, YZ)
+        for axis in 0..3 {
+            if check_plane_intersection(ray, axis, grid_pitch, half_thickness) {
+                return Some(*grid_color);
             }
         }
 

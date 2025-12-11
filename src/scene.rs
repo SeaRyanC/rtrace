@@ -113,55 +113,53 @@ pub enum Transform {
 }
 
 impl Transform {
+    /// Helper function to parse 3 comma-separated f64 values from a parameter string
+    fn parse_xyz_params(params: &str, transform_name: &str) -> Result<(f64, f64, f64), String> {
+        let values: Result<Vec<f64>, _> =
+            params.split(',').map(|v| v.trim().parse::<f64>()).collect();
+        match values
+            .map_err(|e| format!("Invalid {} parameters: {}", transform_name, e))?
+            .as_slice()
+        {
+            [x, y, z] => Ok((*x, *y, *z)),
+            _ => Err(format!(
+                "{} transform requires exactly 3 parameters (x, y, z)",
+                transform_name
+            )),
+        }
+    }
+
     /// Parse a transform string like "rotate(0, 0, 180)" or "translate(15, 0, 0)"
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Result<Transform, String> {
         let s = s.trim();
 
-        if let Some(params) = s.strip_prefix("rotate(") {
-            let params = params
-                .strip_suffix(")")
-                .ok_or("Missing closing parenthesis in rotate transform")?;
-            let values: Result<Vec<f64>, _> =
-                params.split(',').map(|v| v.trim().parse::<f64>()).collect();
-            match values
-                .map_err(|e| format!("Invalid rotate parameters: {}", e))?
-                .as_slice()
-            {
-                [x, y, z] => Ok(Transform::Rotate(*x, *y, *z)),
-                _ => Err("Rotate transform requires exactly 3 parameters (x, y, z)".to_string()),
+        // Define transform types and their corresponding constructors
+        #[allow(clippy::type_complexity)]
+        let transforms: [(&str, fn(f64, f64, f64) -> Transform); 3] = [
+            ("rotate(", Transform::Rotate),
+            ("translate(", Transform::Translate),
+            ("scale(", Transform::Scale),
+        ];
+
+        for (prefix, constructor) in transforms {
+            if let Some(params) = s.strip_prefix(prefix) {
+                let transform_name = prefix.trim_end_matches('(');
+                let params = params.strip_suffix(")").ok_or_else(|| {
+                    format!(
+                        "Missing closing parenthesis in {} transform",
+                        transform_name
+                    )
+                })?;
+                let (x, y, z) = Self::parse_xyz_params(params, transform_name)?;
+                return Ok(constructor(x, y, z));
             }
-        } else if let Some(params) = s.strip_prefix("translate(") {
-            let params = params
-                .strip_suffix(")")
-                .ok_or("Missing closing parenthesis in translate transform")?;
-            let values: Result<Vec<f64>, _> =
-                params.split(',').map(|v| v.trim().parse::<f64>()).collect();
-            match values
-                .map_err(|e| format!("Invalid translate parameters: {}", e))?
-                .as_slice()
-            {
-                [x, y, z] => Ok(Transform::Translate(*x, *y, *z)),
-                _ => Err("Translate transform requires exactly 3 parameters (x, y, z)".to_string()),
-            }
-        } else if let Some(params) = s.strip_prefix("scale(") {
-            let params = params
-                .strip_suffix(")")
-                .ok_or("Missing closing parenthesis in scale transform")?;
-            let values: Result<Vec<f64>, _> =
-                params.split(',').map(|v| v.trim().parse::<f64>()).collect();
-            match values
-                .map_err(|e| format!("Invalid scale parameters: {}", e))?
-                .as_slice()
-            {
-                [x, y, z] => Ok(Transform::Scale(*x, *y, *z)),
-                _ => Err("Scale transform requires exactly 3 parameters (x, y, z)".to_string()),
-            }
-        } else {
-            Err(format!(
-                "Unknown transform type. Expected rotate(), translate(), or scale(), got: {}",
-                s
-            ))
         }
+
+        Err(format!(
+            "Unknown transform type. Expected rotate(), translate(), or scale(), got: {}",
+            s
+        ))
     }
 
     /// Convert this transform to a 4x4 transformation matrix
@@ -575,9 +573,9 @@ impl Scene {
                             );
 
                             // For radius, we need to consider scaling - use the maximum scale component
-                            let scale_x = (transform_matrix.column(0).xyz().magnitude()) as f64;
-                            let scale_y = (transform_matrix.column(1).xyz().magnitude()) as f64;
-                            let scale_z = (transform_matrix.column(2).xyz().magnitude()) as f64;
+                            let scale_x = transform_matrix.column(0).xyz().magnitude();
+                            let scale_y = transform_matrix.column(1).xyz().magnitude();
+                            let scale_z = transform_matrix.column(2).xyz().magnitude();
                             let max_scale = scale_x.max(scale_y).max(scale_z);
                             effective_radius *= max_scale;
                         }

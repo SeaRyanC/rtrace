@@ -78,23 +78,13 @@ impl Rasterizer {
                     transform,
                 } => {
                     let color = hex_to_color(&material.color)?;
-                    let mut sphere_tris = tessellate_sphere(
+                    let sphere_tris = tessellate_sphere(
                         Point::new(center[0], center[1], center[2]),
                         *radius,
                         color,
                         material.clone(),
                     );
-
-                    // Apply transforms if present
-                    if let Some(transform_strings) = transform {
-                        if let Ok(transform_matrix) =
-                            crate::scene::parse_transforms(transform_strings)
-                        {
-                            apply_transform_to_triangles(&mut sphere_tris, &transform_matrix);
-                        }
-                    }
-
-                    triangles.extend(sphere_tris);
+                    apply_transforms_and_collect(&mut triangles, sphere_tris, transform);
                 }
                 Object::Cube {
                     center,
@@ -103,23 +93,13 @@ impl Rasterizer {
                     transform,
                 } => {
                     let color = hex_to_color(&material.color)?;
-                    let mut cube_tris = tessellate_cube(
+                    let cube_tris = tessellate_cube(
                         Point::new(center[0], center[1], center[2]),
                         Vec3::new(size[0], size[1], size[2]),
                         color,
                         material.clone(),
                     );
-
-                    // Apply transforms if present
-                    if let Some(transform_strings) = transform {
-                        if let Ok(transform_matrix) =
-                            crate::scene::parse_transforms(transform_strings)
-                        {
-                            apply_transform_to_triangles(&mut cube_tris, &transform_matrix);
-                        }
-                    }
-
-                    triangles.extend(cube_tris);
+                    apply_transforms_and_collect(&mut triangles, cube_tris, transform);
                 }
                 Object::Plane {
                     point,
@@ -128,23 +108,13 @@ impl Rasterizer {
                     transform,
                 } => {
                     let color = hex_to_color(&material.color)?;
-                    let mut plane_tris = tessellate_plane(
+                    let plane_tris = tessellate_plane(
                         Point::new(point[0], point[1], point[2]),
                         Vec3::new(normal[0], normal[1], normal[2]),
                         color,
                         material.clone(),
                     );
-
-                    // Apply transforms if present
-                    if let Some(transform_strings) = transform {
-                        if let Ok(transform_matrix) =
-                            crate::scene::parse_transforms(transform_strings)
-                        {
-                            apply_transform_to_triangles(&mut plane_tris, &transform_matrix);
-                        }
-                    }
-
-                    triangles.extend(plane_tris);
+                    apply_transforms_and_collect(&mut triangles, plane_tris, transform);
                 }
                 Object::Mesh {
                     mesh_data,
@@ -154,19 +124,9 @@ impl Rasterizer {
                 } => {
                     if let Some(mesh) = mesh_data {
                         let color = hex_to_color(&material.color)?;
-                        let mut mesh_tris =
+                        let mesh_tris =
                             convert_mesh_to_world_triangles(mesh, color, material.clone());
-
-                        // Apply transforms if present
-                        if let Some(transform_strings) = transform {
-                            if let Ok(transform_matrix) =
-                                crate::scene::parse_transforms(transform_strings)
-                            {
-                                apply_transform_to_triangles(&mut mesh_tris, &transform_matrix);
-                            }
-                        }
-
-                        triangles.extend(mesh_tris);
+                        apply_transforms_and_collect(&mut triangles, mesh_tris, transform);
                     }
                 }
             }
@@ -297,6 +257,7 @@ impl Rasterizer {
     }
 
     /// Rasterize a single triangle using basic scanline algorithm
+    #[allow(clippy::too_many_arguments)]
     fn rasterize_triangle(
         &self,
         tri: &WorldTriangle,
@@ -461,6 +422,20 @@ fn apply_transform_to_triangles(triangles: &mut [WorldTriangle], transform: &Mat
             .normalize();
         }
     }
+}
+
+/// Apply optional transforms to triangles and extend the collection
+fn apply_transforms_and_collect(
+    triangles: &mut Vec<WorldTriangle>,
+    mut new_triangles: Vec<WorldTriangle>,
+    transform: &Option<Vec<String>>,
+) {
+    if let Some(transform_strings) = transform {
+        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+            apply_transform_to_triangles(&mut new_triangles, &transform_matrix);
+        }
+    }
+    triangles.extend(new_triangles);
 }
 
 /// Convert mesh to world triangles
