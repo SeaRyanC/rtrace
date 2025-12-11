@@ -1,0 +1,83 @@
+{
+  "camera": {
+    "kind": "perspective",
+    "position": [8, -12, 6],
+    "target": [0, 0, 0],
+    "up": [0, 0, 1],
+    "width": 10,
+    "height": 10,
+    "fov": 45
+  },
+  "objects": [
+    {
+      "kind": "plane",
+      "point": [0, 0, -1],
+      "normal": [0, 0, 1],
+      "material": {
+        "color": "#CCCCCC",
+        "ambient": 0.2,
+        "diffuse": 0.6,
+        "specular": 0.1,
+        "shininess": 10
+      }
+    },
+    {
+      "kind": "sphere",
+      "center": [-3, 0, 1],
+      "radius": 1.5,
+      "material": {
+        "color": "#FF4444",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "cube",
+      "center": [0, 0, 1],
+      "size": [2, 2, 2],
+      "material": {
+        "color": "#44FF44",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.3,
+        "shininess": 32
+      }
+    },
+    {
+      "kind": "mesh",
+      "filename": "icosahedron.stl",
+      "material": {
+        "color": "#4444FF",
+        "ambient": 0.1,
+        "diffuse": 0.8,
+        "specular": 0.4,
+        "shininess": 32
+      },
+      "transform": [
+        "translate(3, 0, 1)",
+        "scale(0.7, 0.7, 0.7)"
+      ]
+    }
+  ],
+  "lights": [
+    {
+      "position": [5, -8, 10],
+      "color": "#FFFFFF",
+      "intensity": 1.0
+    },
+    {
+      "position": [-5, -5, 8],
+      "color": "#FFFFFF",
+      "intensity": 0.6
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.15
+    },
+    "background_color": "#002244"
+  }
+}

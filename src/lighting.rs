@@ -369,10 +369,10 @@ pub fn ray_color_with_data(
     if let Some(hit) = world.hit(ray, 0.001, f64::INFINITY) {
         // Calculate camera-space depth
         let camera_space_depth = (hit.point - *camera_pos).magnitude();
-        
+
         // Get the surface normal in world space
         let world_normal = *hit.normal.as_ref();
-        
+
         // Get material for this object using the material index from the hit record
         let material = materials
             .get(&hit.material_index)
@@ -427,7 +427,7 @@ pub fn ray_color_with_data(
         } else {
             background_color
         };
-        
+
         (background, None, None)
     }
 }

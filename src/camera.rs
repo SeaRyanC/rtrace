@@ -166,6 +166,42 @@ impl Camera {
         }
     }
 
+    /// Project a 3D point to 2D screen coordinates
+    /// Returns (u, v) in [0, 1] range and the depth from camera
+    pub fn project_point(&self, point: &Point) -> (nalgebra::Point2<f64>, f64) {
+        if self.is_perspective {
+            // For perspective projection
+            let view_vec = point - self.origin;
+            let depth = view_vec.dot(self.view_direction.as_ref());
+
+            if depth <= 0.0 {
+                // Point is behind the camera
+                return (nalgebra::Point2::new(-1.0, -1.0), depth);
+            }
+
+            // Project onto the view plane at focal_length
+            // The viewport is defined at focal_length distance, so we scale the offset by focal_length/depth
+            let point_on_plane = self.origin + view_vec * (self.focal_length / depth);
+            let offset = point_on_plane - self.lower_left_corner;
+
+            // Convert to UV coordinates
+            let u = offset.dot(&self.horizontal) / self.horizontal.magnitude_squared();
+            let v = offset.dot(&self.vertical) / self.vertical.magnitude_squared();
+
+            (nalgebra::Point2::new(u, v), depth)
+        } else {
+            // For orthographic projection
+            let offset = point - self.lower_left_corner;
+            let u = offset.dot(&self.horizontal) / self.horizontal.magnitude_squared();
+            let v = offset.dot(&self.vertical) / self.vertical.magnitude_squared();
+
+            // Depth is the distance along the view direction
+            let depth = (point - self.origin).dot(self.view_direction.as_ref());
+
+            (nalgebra::Point2::new(u, v), depth)
+        }
+    }
+
     /// Check if an orthographic camera ray intersects with grid lines
     /// Returns the grid color if the ray hits a grid line, None otherwise
     pub fn get_grid_color(&self, ray: &Ray) -> Option<crate::scene::Color> {
