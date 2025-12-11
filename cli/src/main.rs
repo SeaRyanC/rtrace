@@ -41,6 +41,12 @@ struct Args {
     movie: bool,
 }
 
+/// Number of frames in the movie (one per degree of rotation)
+const MOVIE_FRAMES: u32 = 360;
+
+/// Progress update interval (show progress every 10%)
+const PROGRESS_INTERVAL: u32 = MOVIE_FRAMES / 10;
+
 /// Render a 360-degree rotation movie of the scene
 fn render_movie(scene: &Scene, output_path: &str, width: u32, height: u32) {
     println!("Generating 360-degree rotation movie using rasterization...");
@@ -60,38 +66,45 @@ fn render_movie(scene: &Scene, output_path: &str, width: u32, height: u32) {
     let rasterizer = Rasterizer::new(width, height);
 
     // Render 360 frames (one per degree)
-    for angle in 0..360 {
+    for angle in 0..MOVIE_FRAMES {
         let mut rotated_scene = scene.clone();
         rotated_scene.rotate_objects_z(angle as f64);
 
         let frame_path = temp_dir.join(format!("frame_{:04}.png", angle));
-        if let Err(e) = rasterizer.render_to_file(&rotated_scene, frame_path.to_str().unwrap()) {
+        let frame_path_str = frame_path
+            .to_str()
+            .expect("Temporary path should be valid UTF-8");
+        if let Err(e) = rasterizer.render_to_file(&rotated_scene, frame_path_str) {
             eprintln!("Error rendering frame {}: {}", angle, e);
             std::process::exit(1);
         }
 
-        // Progress indicator
-        if angle % 36 == 0 {
+        // Progress indicator (every 10%)
+        if angle % PROGRESS_INTERVAL == 0 {
             println!(
-                "Rendered frame {}/360 ({:.0}%)",
+                "Rendered frame {}/{} ({:.0}%)",
                 angle,
-                (angle as f64 / 360.0) * 100.0
+                MOVIE_FRAMES,
+                (angle as f64 / MOVIE_FRAMES as f64) * 100.0
             );
         }
     }
-    println!("Rendered frame 360/360 (100%)");
+    println!("Rendered frame {0}/{0} (100%)", MOVIE_FRAMES);
 
     // Use ffmpeg to encode frames into WebM
     println!("Encoding frames to WebM...");
 
     let frame_pattern = temp_dir.join("frame_%04d.png");
+    let frame_pattern_str = frame_pattern
+        .to_str()
+        .expect("Temporary path should be valid UTF-8");
     let status = Command::new("ffmpeg")
         .args([
             "-y", // Overwrite output file if it exists
             "-framerate",
             "30",
             "-i",
-            frame_pattern.to_str().unwrap(),
+            frame_pattern_str,
             "-c:v",
             "libvpx-vp9",
             "-b:v",
