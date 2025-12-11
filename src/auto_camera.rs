@@ -32,16 +32,24 @@ impl AutoCamera {
         })
     }
 
-    /// Generate left camera (side view from negative Y direction, looking toward +Y)
-    fn generate_left_camera(center: Point, viewport_width: f64, viewport_height: f64) -> Camera {
-        // Position camera in negative Y direction to position camera far enough
+    /// Generate an orthographic camera at a given offset from center
+    fn generate_ortho_camera(
+        center: Point,
+        viewport_width: f64,
+        viewport_height: f64,
+        position_offset: [f64; 3],
+        up: [f64; 3],
+    ) -> Camera {
         let camera_distance = viewport_width * 2.0; // Far enough to avoid clipping
-
         Camera {
             kind: "ortho".to_string(),
-            position: [center.x, center.y - camera_distance, center.z],
+            position: [
+                center.x + position_offset[0] * camera_distance,
+                center.y + position_offset[1] * camera_distance,
+                center.z + position_offset[2] * camera_distance,
+            ],
             target: [center.x, center.y, center.z],
-            up: [0.0, 0.0, 1.0], // Z-up
+            up,
             width: viewport_width,
             height: viewport_height,
             fov: None,
@@ -49,44 +57,39 @@ impl AutoCamera {
             grid_color: None,
             grid_thickness: None,
         }
+    }
+
+    /// Generate left camera (side view from negative Y direction, looking toward +Y)
+    fn generate_left_camera(center: Point, viewport_width: f64, viewport_height: f64) -> Camera {
+        Self::generate_ortho_camera(
+            center,
+            viewport_width,
+            viewport_height,
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        )
     }
 
     /// Generate front camera (front view from negative X direction, looking toward +X)
     fn generate_front_camera(center: Point, viewport_width: f64, viewport_height: f64) -> Camera {
-        // Position camera in negative X direction to position camera far enough
-        let camera_distance = viewport_width * 2.0; // Far enough to avoid clipping
-
-        Camera {
-            kind: "ortho".to_string(),
-            position: [center.x - camera_distance, center.y, center.z],
-            target: [center.x, center.y, center.z],
-            up: [0.0, 0.0, 1.0], // Z-up
-            width: viewport_width,
-            height: viewport_height,
-            fov: None,
-            grid_pitch: None,
-            grid_color: None,
-            grid_thickness: None,
-        }
+        Self::generate_ortho_camera(
+            center,
+            viewport_width,
+            viewport_height,
+            [-1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+        )
     }
 
     /// Generate top camera (top-down view from positive Z direction, looking toward -Z)
     fn generate_top_camera(center: Point, viewport_width: f64, viewport_height: f64) -> Camera {
-        // Maximum extent in Z direction to position camera far enough
-        let camera_distance = viewport_width * 2.0; // Far enough to avoid clipping
-
-        Camera {
-            kind: "ortho".to_string(),
-            position: [center.x, center.y, center.z + camera_distance],
-            target: [center.x, center.y, center.z],
-            up: [0.0, 1.0, 0.0], // Y-forward for top view
-            width: viewport_width,
-            height: viewport_height,
-            fov: None,
-            grid_pitch: None,
-            grid_color: None,
-            grid_thickness: None,
-        }
+        Self::generate_ortho_camera(
+            center,
+            viewport_width,
+            viewport_height,
+            [0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0],
+        )
     }
 
     /// Generate perspective camera (located in positive X/Y/Z octant, looking down at 35° angle, 50° FOV)
