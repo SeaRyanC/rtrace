@@ -17,11 +17,7 @@ impl Ray {
         // Pre-compute inverse direction for fast AABB intersection tests.
         // Division by zero produces +/- infinity, which is handled correctly
         // by ray_intersects_bounds_fast() via is_infinite() checks.
-        let inv_direction = Vec3::new(
-            1.0 / direction.x,
-            1.0 / direction.y,
-            1.0 / direction.z,
-        );
+        let inv_direction = Vec3::new(1.0 / direction.x, 1.0 / direction.y, 1.0 / direction.z);
         Self {
             origin,
             direction,
@@ -639,12 +635,7 @@ impl MeshObject {
 
     /// Fast ray-triangle intersection for shadow rays (no normal computation)
     #[inline]
-    fn intersect_triangle_fast(
-        ray: &Ray,
-        triangle: &Triangle,
-        t_min: f64,
-        t_max: f64,
-    ) -> bool {
+    fn intersect_triangle_fast(ray: &Ray, triangle: &Triangle, t_min: f64, t_max: f64) -> bool {
         let edge1 = triangle.vertices[1] - triangle.vertices[0];
         let edge2 = triangle.vertices[2] - triangle.vertices[0];
         let h = ray.direction.cross(&edge2);
@@ -713,9 +704,11 @@ impl Intersectable for MeshObject {
 
         if self.use_kdtree {
             // Use k-d tree to find triangle candidates
-            self.mesh
-                .kdtree
-                .traverse(&ray.origin, ray.direction.as_ref(), &ray.inv_direction, |triangle_indices| {
+            self.mesh.kdtree.traverse(
+                &ray.origin,
+                ray.direction.as_ref(),
+                &ray.inv_direction,
+                |triangle_indices| {
                     for &triangle_idx in triangle_indices {
                         let triangle = &self.mesh.triangles[triangle_idx];
                         if let Some((t, normal, (u, v))) =
@@ -737,7 +730,8 @@ impl Intersectable for MeshObject {
                             }
                         }
                     }
-                });
+                },
+            );
         } else {
             // Brute force: test all triangles
             for triangle in self.mesh.triangles.iter() {

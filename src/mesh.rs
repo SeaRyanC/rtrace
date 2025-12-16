@@ -299,7 +299,13 @@ impl KdTree {
         F: FnMut(&[usize]),
     {
         if let Some(ref root) = self.root {
-            self.traverse_recursive(root, ray_origin, ray_direction, inv_direction, &mut callback);
+            self.traverse_recursive(
+                root,
+                ray_origin,
+                ray_direction,
+                inv_direction,
+                &mut callback,
+            );
         }
     }
 
@@ -316,7 +322,13 @@ impl KdTree {
         F: FnMut(&[usize]) -> bool,
     {
         if let Some(ref root) = self.root {
-            self.traverse_any_recursive(root, ray_origin, ray_direction, inv_direction, &mut callback)
+            self.traverse_any_recursive(
+                root,
+                ray_origin,
+                ray_direction,
+                inv_direction,
+                &mut callback,
+            )
         } else {
             false
         }
@@ -472,7 +484,13 @@ impl KdTree {
                 // If ray is parallel to the splitting plane, only traverse the side it's on
                 if dir.abs() < 1e-9 {
                     if origin_pos <= *split_pos {
-                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, inv_direction, callback);
+                        self.traverse_recursive(
+                            left.as_ref(),
+                            ray_origin,
+                            ray_direction,
+                            inv_direction,
+                            callback,
+                        );
                     } else {
                         self.traverse_recursive(
                             right.as_ref(),
@@ -492,7 +510,13 @@ impl KdTree {
                 // Always traverse the near child first, then the far child if the ray crosses the plane
                 if origin_pos <= *split_pos {
                     // Ray starts in left child region
-                    self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, inv_direction, callback);
+                    self.traverse_recursive(
+                        left.as_ref(),
+                        ray_origin,
+                        ray_direction,
+                        inv_direction,
+                        callback,
+                    );
                     if t_split >= 0.0 {
                         self.traverse_recursive(
                             right.as_ref(),
@@ -504,9 +528,21 @@ impl KdTree {
                     }
                 } else {
                     // Ray starts in right child region
-                    self.traverse_recursive(right.as_ref(), ray_origin, ray_direction, inv_direction, callback);
+                    self.traverse_recursive(
+                        right.as_ref(),
+                        ray_origin,
+                        ray_direction,
+                        inv_direction,
+                        callback,
+                    );
                     if t_split >= 0.0 {
-                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, inv_direction, callback);
+                        self.traverse_recursive(
+                            left.as_ref(),
+                            ray_origin,
+                            ray_direction,
+                            inv_direction,
+                            callback,
+                        );
                     }
                 }
             }
