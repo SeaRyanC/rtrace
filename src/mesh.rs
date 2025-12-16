@@ -88,19 +88,13 @@ impl KdTree {
 
             // Build the tree recursively
             tree.root = Some(tree.build_recursive(triangles, triangle_indices, bounds, 0));
-
-            // Debug: count leaf nodes
-            let (leaf_count, max_leaf_triangles) = tree.count_leaf_nodes();
-            println!(
-                "K-d tree built: {} leaf nodes, max triangles per leaf: {}",
-                leaf_count, max_leaf_triangles
-            );
         }
 
         tree
     }
 
     /// Count leaf nodes and maximum triangles per leaf (for debugging)
+    #[allow(dead_code)]
     fn count_leaf_nodes(&self) -> (usize, usize) {
         if let Some(ref root) = self.root {
             self.count_leaf_nodes_recursive(root)
@@ -110,6 +104,7 @@ impl KdTree {
     }
 
     #[allow(clippy::only_used_in_recursion)]
+    #[allow(dead_code)]
     fn count_leaf_nodes_recursive(&self, node: &KdNode) -> (usize, usize) {
         match node {
             KdNode::Leaf { triangles, .. } => (1, triangles.len()),
@@ -388,16 +383,16 @@ impl KdTree {
                     ) {
                         return true;
                     }
-                    if t_split >= 0.0 {
-                        if self.traverse_any_recursive(
+                    if t_split >= 0.0
+                        && self.traverse_any_recursive(
                             right.as_ref(),
                             ray_origin,
                             ray_direction,
                             inv_direction,
                             callback,
-                        ) {
-                            return true;
-                        }
+                        )
+                    {
+                        return true;
                     }
                 } else {
                     // Ray starts in right child region
@@ -410,16 +405,16 @@ impl KdTree {
                     ) {
                         return true;
                     }
-                    if t_split >= 0.0 {
-                        if self.traverse_any_recursive(
+                    if t_split >= 0.0
+                        && self.traverse_any_recursive(
                             left.as_ref(),
                             ray_origin,
                             ray_direction,
                             inv_direction,
                             callback,
-                        ) {
-                            return true;
-                        }
+                        )
+                    {
+                        return true;
                     }
                 }
                 false
