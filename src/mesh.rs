@@ -250,6 +250,15 @@ impl KdTree {
     }
 
     /// Fast check if a ray intersects a bounding box using pre-computed inverse direction
+    ///
+    /// Uses IEEE 754 floating-point properties for handling parallel rays:
+    /// - When direction[axis] = 0, inv_direction[axis] = ±infinity
+    /// - If origin is strictly inside the slab: t0 = -infinity, t1 = +infinity (correct)
+    /// - If origin is on the boundary: t0 or t1 = NaN (0 * infinity)
+    /// - If origin is outside: t0 or t1 points to invalid intersection
+    ///
+    /// f64::max/min return the other argument when one is NaN, so NaN is effectively
+    /// treated as "don't update bounds", which is correct for boundary cases.
     #[inline]
     fn ray_intersects_bounds_fast(
         ray_origin: &Point,
@@ -263,15 +272,13 @@ impl KdTree {
 
         for axis in 0..3 {
             let inv_dir = inv_direction[axis];
-            let mut t0 = (min[axis] - ray_origin[axis]) * inv_dir;
-            let mut t1 = (max[axis] - ray_origin[axis]) * inv_dir;
+            let t0 = (min[axis] - ray_origin[axis]) * inv_dir;
+            let t1 = (max[axis] - ray_origin[axis]) * inv_dir;
 
-            if inv_dir < 0.0 {
-                std::mem::swap(&mut t0, &mut t1);
-            }
+            let (t_near, t_far) = if inv_dir >= 0.0 { (t0, t1) } else { (t1, t0) };
 
-            t_min = t_min.max(t0);
-            t_max = t_max.min(t1);
+            t_min = t_min.max(t_near);
+            t_max = t_max.min(t_far);
 
             if t_min > t_max {
                 return false;

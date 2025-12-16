@@ -14,6 +14,9 @@ pub struct Ray {
 impl Ray {
     pub fn new(origin: Point, direction: Vec3) -> Self {
         let direction = Unit::new_normalize(direction);
+        // Pre-compute inverse direction for fast AABB intersection tests.
+        // Division by zero produces +/- infinity, which is handled correctly
+        // by ray_intersects_bounds_fast() via is_infinite() checks.
         let inv_direction = Vec3::new(
             1.0 / direction.x,
             1.0 / direction.y,
