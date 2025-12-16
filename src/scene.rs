@@ -705,4 +705,28 @@ impl Scene {
             None
         }
     }
+
+    /// Rotate all objects in the scene about the Z axis by the given angle in degrees.
+    /// This prepends a rotation transform to each object's existing transforms.
+    /// Camera and lights remain static.
+    pub fn rotate_objects_z(&mut self, angle_degrees: f64) {
+        let rotation_transform = format!("rotate(0, 0, {})", angle_degrees);
+
+        for object in &mut self.objects {
+            match object {
+                Object::Sphere { transform, .. }
+                | Object::Plane { transform, .. }
+                | Object::Cube { transform, .. }
+                | Object::Mesh { transform, .. } => {
+                    if let Some(transforms) = transform {
+                        // Prepend the rotation to existing transforms
+                        transforms.insert(0, rotation_transform.clone());
+                    } else {
+                        // Create new transform list with just the rotation
+                        *transform = Some(vec![rotation_transform.clone()]);
+                    }
+                }
+            }
+        }
+    }
 }

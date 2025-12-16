@@ -5,6 +5,7 @@ This comprehensive guide covers all features and options available in the rtrace
 ## Table of Contents
 
 1. [Command Line Interface](#command-line-interface)
+   - [Movie Generation](#movie-generation)
 2. [Scene Format Overview](#scene-format-overview)
 
 ### Scene Configuration
@@ -48,7 +49,7 @@ This comprehensive guide covers all features and options available in the rtrace
 
 ## Command Line Interface
 
-The rtrace CLI tool renders scenes from JSON files to PNG images.
+The rtrace CLI tool renders scenes from JSON files to PNG images or WebM movies.
 
 ### Usage
 
@@ -61,35 +62,57 @@ The rtrace CLI tool renders scenes from JSON files to PNG images.
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
 | `--input <INPUT>` | `-i` | Input JSON scene file (required) | - |
-| `--output <OUTPUT>` | `-o` | Output PNG image file (required) | - |
-| `--width <WIDTH>` | `-w` | Image width in pixels | 800 |
-| `--height <HEIGHT>` | `-H` | Image height in pixels | 600 |
+| `--output <OUTPUT>` | `-o` | Output file (PNG for images, WebM for movies) | - |
+| `--size <SIZE>` | `-s` | Image diagonal size in pixels (aspect ratio computed from camera settings) | 1000 |
 | `--max-depth <MAX_DEPTH>` | - | Maximum ray bounces for reflections | 10 |
-| `--samples <SAMPLES>` | - | Number of samples per pixel | Auto (5 for quincunx) |
-| `--anti-aliasing <MODE>` | - | Anti-aliasing mode: quincunx, stochastic, or no-jitter | quincunx |
+| `--samples <SAMPLES>` | - | Number of samples per pixel | 1 |
+| `--anti-aliasing <MODE>` | - | Anti-aliasing mode: quincunx, stochastic, or none | none |
+| `--rasterize` | - | Use rasterization instead of raytracing for fast preview | - |
+| `--movie` | - | Generate a 360° rotation movie (uses rasterization, outputs .webm) | - |
 | `--help` | `-h` | Print help information | - |
 | `--version` | `-V` | Print version information | - |
 
 ### Example Commands
 
 ```bash
-# Basic rendering (uses quincunx anti-aliasing by default)
+# Basic rendering
 ./target/release/rtrace-cli -i examples/simple_sphere.json -o output.png
 
-# Custom resolution
-./target/release/rtrace-cli -i scene.json -o high_res.png -w 1920 -H 1080
+# Custom resolution (diagonal size)
+./target/release/rtrace-cli -i scene.json -o high_res.png -s 2000
 
 # High reflection depth for mirror effects
 ./target/release/rtrace-cli -i mirror_scene.json -o mirrors.png --max-depth 20
 
-# Deterministic rendering (no anti-aliasing)
-./target/release/rtrace-cli -i scene.json -o deterministic.png --anti-aliasing no-jitter
+# Fast preview using rasterization
+./target/release/rtrace-cli -i scene.json -o preview.png --rasterize
 
 # Stochastic anti-aliasing with 4 samples
 ./target/release/rtrace-cli -i scene.json -o stochastic.png --anti-aliasing stochastic --samples 4
 
-# High-quality quincunx anti-aliasing (default, 5 samples)
+# High-quality quincunx anti-aliasing
 ./target/release/rtrace-cli -i scene.json -o smooth.png --anti-aliasing quincunx
+
+# Generate a 360° rotation movie
+./target/release/rtrace-cli -i scene.json -o rotation.webm --movie -s 500
+```
+
+### Movie Generation
+
+The `--movie` flag generates a smooth 360-degree rotation animation of your scene:
+
+- **Rotation**: The scene objects rotate about the Z axis in 1-degree increments
+- **Camera & Lights**: Camera position and light sources remain static
+- **Rendering**: Uses rasterization for fast frame generation
+- **Output**: Creates a WebM video file at 30 fps (12 seconds for a full rotation)
+
+**Example:** Rotating cat mesh
+
+![Cat Rotation Demo](images/movie-demo.webm)
+
+```bash
+# Generate the demo movie
+./target/release/rtrace-cli -i doc/scenes/movie-demo.json -o cat_rotation.webm --movie -s 400
 ```
 
 ---
