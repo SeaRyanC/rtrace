@@ -264,6 +264,119 @@ impl KdTree {
         }
     }
 
+    /// Traverse the k-d tree with early termination for shadow rays.
+    /// Returns true as soon as the callback returns true.
+    pub fn traverse_any<F>(&self, ray_origin: &Point, ray_direction: &Vec3, mut callback: F) -> bool
+    where
+        F: FnMut(&[usize]) -> bool,
+    {
+        if let Some(ref root) = self.root {
+            self.traverse_any_recursive(root, ray_origin, ray_direction, &mut callback)
+        } else {
+            false
+        }
+    }
+
+    /// Recursive traversal with early termination
+    #[allow(clippy::only_used_in_recursion)]
+    fn traverse_any_recursive<F>(
+        &self,
+        node: &KdNode,
+        ray_origin: &Point,
+        ray_direction: &Vec3,
+        callback: &mut F,
+    ) -> bool
+    where
+        F: FnMut(&[usize]) -> bool,
+    {
+        match node {
+            KdNode::Leaf { triangles, bounds } => {
+                // Check if ray intersects this leaf's bounds
+                if Self::ray_intersects_bounds(ray_origin, ray_direction, bounds) {
+                    callback(triangles)
+                } else {
+                    false
+                }
+            }
+            KdNode::Internal {
+                axis,
+                split_pos,
+                left,
+                right,
+                bounds: _,
+            } => {
+                let origin_pos = ray_origin[*axis];
+                let dir = ray_direction[*axis];
+
+                // If ray is parallel to the splitting plane, only traverse the side it's on
+                if dir.abs() < 1e-9 {
+                    if origin_pos <= *split_pos {
+                        return self.traverse_any_recursive(
+                            left.as_ref(),
+                            ray_origin,
+                            ray_direction,
+                            callback,
+                        );
+                    } else {
+                        return self.traverse_any_recursive(
+                            right.as_ref(),
+                            ray_origin,
+                            ray_direction,
+                            callback,
+                        );
+                    }
+                }
+
+                // Calculate where ray intersects the splitting plane
+                let t_split = (*split_pos - origin_pos) / dir;
+
+                // Traverse children in order based on ray direction
+                if origin_pos <= *split_pos {
+                    // Ray starts in left child region
+                    if self.traverse_any_recursive(
+                        left.as_ref(),
+                        ray_origin,
+                        ray_direction,
+                        callback,
+                    ) {
+                        return true;
+                    }
+                    if t_split >= 0.0 {
+                        if self.traverse_any_recursive(
+                            right.as_ref(),
+                            ray_origin,
+                            ray_direction,
+                            callback,
+                        ) {
+                            return true;
+                        }
+                    }
+                } else {
+                    // Ray starts in right child region
+                    if self.traverse_any_recursive(
+                        right.as_ref(),
+                        ray_origin,
+                        ray_direction,
+                        callback,
+                    ) {
+                        return true;
+                    }
+                    if t_split >= 0.0 {
+                        if self.traverse_any_recursive(
+                            left.as_ref(),
+                            ray_origin,
+                            ray_direction,
+                            callback,
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+                false
+            }
+        }
+    }
+
     /// Traverse the k-d tree with debug output
     pub fn traverse_debug<F>(&self, ray_origin: &Point, ray_direction: &Vec3, mut callback: F)
     where
