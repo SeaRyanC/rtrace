@@ -254,24 +254,67 @@ impl KdTree {
         t_max >= 0.0
     }
 
+    /// Fast check if a ray intersects a bounding box using pre-computed inverse direction
+    #[inline]
+    fn ray_intersects_bounds_fast(
+        ray_origin: &Point,
+        inv_direction: &Vec3,
+        bounds: &(Point, Point),
+    ) -> bool {
+        let (min, max) = bounds;
+
+        let mut t_min = f64::NEG_INFINITY;
+        let mut t_max = f64::INFINITY;
+
+        for axis in 0..3 {
+            let inv_dir = inv_direction[axis];
+            let mut t0 = (min[axis] - ray_origin[axis]) * inv_dir;
+            let mut t1 = (max[axis] - ray_origin[axis]) * inv_dir;
+
+            if inv_dir < 0.0 {
+                std::mem::swap(&mut t0, &mut t1);
+            }
+
+            t_min = t_min.max(t0);
+            t_max = t_max.min(t1);
+
+            if t_min > t_max {
+                return false;
+            }
+        }
+
+        t_max >= 0.0
+    }
+
     /// Traverse the k-d tree to find triangle candidates for ray intersection
-    pub fn traverse<F>(&self, ray_origin: &Point, ray_direction: &Vec3, mut callback: F)
-    where
+    pub fn traverse<F>(
+        &self,
+        ray_origin: &Point,
+        ray_direction: &Vec3,
+        inv_direction: &Vec3,
+        mut callback: F,
+    ) where
         F: FnMut(&[usize]),
     {
         if let Some(ref root) = self.root {
-            self.traverse_recursive(root, ray_origin, ray_direction, &mut callback);
+            self.traverse_recursive(root, ray_origin, ray_direction, inv_direction, &mut callback);
         }
     }
 
     /// Traverse the k-d tree with early termination for shadow rays.
     /// Returns true as soon as the callback returns true.
-    pub fn traverse_any<F>(&self, ray_origin: &Point, ray_direction: &Vec3, mut callback: F) -> bool
+    pub fn traverse_any<F>(
+        &self,
+        ray_origin: &Point,
+        ray_direction: &Vec3,
+        inv_direction: &Vec3,
+        mut callback: F,
+    ) -> bool
     where
         F: FnMut(&[usize]) -> bool,
     {
         if let Some(ref root) = self.root {
-            self.traverse_any_recursive(root, ray_origin, ray_direction, &mut callback)
+            self.traverse_any_recursive(root, ray_origin, ray_direction, inv_direction, &mut callback)
         } else {
             false
         }
@@ -284,6 +327,7 @@ impl KdTree {
         node: &KdNode,
         ray_origin: &Point,
         ray_direction: &Vec3,
+        inv_direction: &Vec3,
         callback: &mut F,
     ) -> bool
     where
@@ -291,8 +335,8 @@ impl KdTree {
     {
         match node {
             KdNode::Leaf { triangles, bounds } => {
-                // Check if ray intersects this leaf's bounds
-                if Self::ray_intersects_bounds(ray_origin, ray_direction, bounds) {
+                // Check if ray intersects this leaf's bounds using fast version
+                if Self::ray_intersects_bounds_fast(ray_origin, inv_direction, bounds) {
                     callback(triangles)
                 } else {
                     false
@@ -315,6 +359,7 @@ impl KdTree {
                             left.as_ref(),
                             ray_origin,
                             ray_direction,
+                            inv_direction,
                             callback,
                         );
                     } else {
@@ -322,6 +367,7 @@ impl KdTree {
                             right.as_ref(),
                             ray_origin,
                             ray_direction,
+                            inv_direction,
                             callback,
                         );
                     }
@@ -337,6 +383,7 @@ impl KdTree {
                         left.as_ref(),
                         ray_origin,
                         ray_direction,
+                        inv_direction,
                         callback,
                     ) {
                         return true;
@@ -346,6 +393,7 @@ impl KdTree {
                             right.as_ref(),
                             ray_origin,
                             ray_direction,
+                            inv_direction,
                             callback,
                         ) {
                             return true;
@@ -357,6 +405,7 @@ impl KdTree {
                         right.as_ref(),
                         ray_origin,
                         ray_direction,
+                        inv_direction,
                         callback,
                     ) {
                         return true;
@@ -366,6 +415,7 @@ impl KdTree {
                             left.as_ref(),
                             ray_origin,
                             ray_direction,
+                            inv_direction,
                             callback,
                         ) {
                             return true;
@@ -395,14 +445,15 @@ impl KdTree {
         node: &KdNode,
         ray_origin: &Point,
         ray_direction: &Vec3,
+        inv_direction: &Vec3,
         callback: &mut F,
     ) where
         F: FnMut(&[usize]),
     {
         match node {
             KdNode::Leaf { triangles, bounds } => {
-                // Check if ray intersects this leaf's bounds
-                if Self::ray_intersects_bounds(ray_origin, ray_direction, bounds) {
+                // Check if ray intersects this leaf's bounds using fast version
+                if Self::ray_intersects_bounds_fast(ray_origin, inv_direction, bounds) {
                     callback(triangles);
                 }
             }
@@ -419,12 +470,13 @@ impl KdTree {
                 // If ray is parallel to the splitting plane, only traverse the side it's on
                 if dir.abs() < 1e-9 {
                     if origin_pos <= *split_pos {
-                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, callback);
+                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, inv_direction, callback);
                     } else {
                         self.traverse_recursive(
                             right.as_ref(),
                             ray_origin,
                             ray_direction,
+                            inv_direction,
                             callback,
                         );
                     }
@@ -438,20 +490,21 @@ impl KdTree {
                 // Always traverse the near child first, then the far child if the ray crosses the plane
                 if origin_pos <= *split_pos {
                     // Ray starts in left child region
-                    self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, callback);
+                    self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, inv_direction, callback);
                     if t_split >= 0.0 {
                         self.traverse_recursive(
                             right.as_ref(),
                             ray_origin,
                             ray_direction,
+                            inv_direction,
                             callback,
                         );
                     }
                 } else {
                     // Ray starts in right child region
-                    self.traverse_recursive(right.as_ref(), ray_origin, ray_direction, callback);
+                    self.traverse_recursive(right.as_ref(), ray_origin, ray_direction, inv_direction, callback);
                     if t_split >= 0.0 {
-                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, callback);
+                        self.traverse_recursive(left.as_ref(), ray_origin, ray_direction, inv_direction, callback);
                     }
                 }
             }

@@ -7,13 +7,22 @@ use nalgebra::Unit;
 pub struct Ray {
     pub origin: Point,
     pub direction: Unit<Vec3>,
+    /// Pre-computed inverse direction for fast AABB intersection
+    pub inv_direction: Vec3,
 }
 
 impl Ray {
     pub fn new(origin: Point, direction: Vec3) -> Self {
+        let direction = Unit::new_normalize(direction);
+        let inv_direction = Vec3::new(
+            1.0 / direction.x,
+            1.0 / direction.y,
+            1.0 / direction.z,
+        );
         Self {
             origin,
-            direction: Unit::new_normalize(direction),
+            direction,
+            inv_direction,
         }
     }
 
@@ -669,7 +678,7 @@ impl MeshObject {
         let mut t_max_bound = t_max;
 
         for axis in 0..3 {
-            let inv_dir = 1.0 / ray.direction[axis];
+            let inv_dir = ray.inv_direction[axis];
             let mut t0 = (bounds_min[axis] - ray.origin[axis]) * inv_dir;
             let mut t1 = (bounds_max[axis] - ray.origin[axis]) * inv_dir;
 
@@ -703,7 +712,7 @@ impl Intersectable for MeshObject {
             // Use k-d tree to find triangle candidates
             self.mesh
                 .kdtree
-                .traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+                .traverse(&ray.origin, ray.direction.as_ref(), &ray.inv_direction, |triangle_indices| {
                     for &triangle_idx in triangle_indices {
                         let triangle = &self.mesh.triangles[triangle_idx];
                         if let Some((t, normal, (u, v))) =
@@ -768,6 +777,7 @@ impl Intersectable for MeshObject {
             self.mesh.kdtree.traverse_any(
                 &ray.origin,
                 ray.direction.as_ref(),
+                &ray.inv_direction,
                 |triangle_indices| {
                     for &triangle_idx in triangle_indices {
                         let triangle = &self.mesh.triangles[triangle_idx];
