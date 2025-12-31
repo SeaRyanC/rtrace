@@ -118,7 +118,8 @@ fn calculate_point_light_contribution(
     let light_distance = (*light_pos - hit_record.point).magnitude();
 
     // If there's an object between the hit point and the light, we're in shadow
-    if world.hit(&shadow_ray, 0.001, light_distance).is_some() {
+    // Use any_hit for early termination - we don't need the closest hit
+    if world.any_hit(&shadow_ray, 0.001, light_distance) {
         return Color::new(0.0, 0.0, 0.0);
     }
 
@@ -175,7 +176,8 @@ fn calculate_diffuse_light_contribution(
         );
 
         // If there's an object between the hit point and the light sample, skip this sample
-        if world.hit(&shadow_ray, 0.001, light_distance).is_some() {
+        // Use any_hit for early termination - we don't need the closest hit
+        if world.any_hit(&shadow_ray, 0.001, light_distance) {
             continue;
         }
 

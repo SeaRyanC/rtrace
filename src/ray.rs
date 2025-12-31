@@ -7,13 +7,21 @@ use nalgebra::Unit;
 pub struct Ray {
     pub origin: Point,
     pub direction: Unit<Vec3>,
+    /// Pre-computed inverse direction for fast AABB intersection
+    pub inv_direction: Vec3,
 }
 
 impl Ray {
     pub fn new(origin: Point, direction: Vec3) -> Self {
+        let direction = Unit::new_normalize(direction);
+        // Pre-compute inverse direction for fast AABB intersection tests.
+        // Division by zero produces +/- infinity, which is handled correctly
+        // by ray_intersects_bounds_fast() via is_infinite() checks.
+        let inv_direction = Vec3::new(1.0 / direction.x, 1.0 / direction.y, 1.0 / direction.z);
         Self {
             origin,
-            direction: Unit::new_normalize(direction),
+            direction,
+            inv_direction,
         }
     }
 
@@ -67,6 +75,11 @@ impl HitRecord {
 pub trait Intersectable {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
     fn material_index(&self) -> usize;
+    /// Check if the ray hits anything in the range (for shadow rays).
+    /// Default implementation uses hit(), but can be overridden for early termination.
+    fn any_hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
+        self.hit(ray, t_min, t_max).is_some()
+    }
 }
 
 /// Sphere primitive
@@ -620,6 +633,37 @@ impl MeshObject {
         }
     }
 
+    /// Fast ray-triangle intersection for shadow rays (no normal computation)
+    #[inline]
+    fn intersect_triangle_fast(ray: &Ray, triangle: &Triangle, t_min: f64, t_max: f64) -> bool {
+        let edge1 = triangle.vertices[1] - triangle.vertices[0];
+        let edge2 = triangle.vertices[2] - triangle.vertices[0];
+        let h = ray.direction.cross(&edge2);
+        let a = edge1.dot(&h);
+
+        if a > -1e-8 && a < 1e-8 {
+            return false; // Ray is parallel to triangle
+        }
+
+        let f = 1.0 / a;
+        let s = ray.origin - triangle.vertices[0];
+        let u = f * s.dot(&h);
+
+        if !(0.0..=1.0).contains(&u) {
+            return false;
+        }
+
+        let q = s.cross(&edge1);
+        let v = f * ray.direction.dot(&q);
+
+        if v < 0.0 || u + v > 1.0 {
+            return false;
+        }
+
+        let t = f * edge2.dot(&q);
+        t > t_min && t < t_max
+    }
+
     /// Fast bounding box intersection test
     fn intersect_bounds(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
         let (bounds_min, bounds_max) = self.mesh.bounds();
@@ -628,7 +672,7 @@ impl MeshObject {
         let mut t_max_bound = t_max;
 
         for axis in 0..3 {
-            let inv_dir = 1.0 / ray.direction[axis];
+            let inv_dir = ray.inv_direction[axis];
             let mut t0 = (bounds_min[axis] - ray.origin[axis]) * inv_dir;
             let mut t1 = (bounds_max[axis] - ray.origin[axis]) * inv_dir;
 
@@ -660,9 +704,11 @@ impl Intersectable for MeshObject {
 
         if self.use_kdtree {
             // Use k-d tree to find triangle candidates
-            self.mesh
-                .kdtree
-                .traverse(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
+            self.mesh.kdtree.traverse(
+                &ray.origin,
+                ray.direction.as_ref(),
+                &ray.inv_direction,
+                |triangle_indices| {
                     for &triangle_idx in triangle_indices {
                         let triangle = &self.mesh.triangles[triangle_idx];
                         if let Some((t, normal, (u, v))) =
@@ -684,7 +730,8 @@ impl Intersectable for MeshObject {
                             }
                         }
                     }
-                });
+                },
+            );
         } else {
             // Brute force: test all triangles
             for triangle in self.mesh.triangles.iter() {
@@ -714,6 +761,39 @@ impl Intersectable for MeshObject {
 
     fn material_index(&self) -> usize {
         self.material_index
+    }
+
+    fn any_hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
+        // Simple bounding box check first
+        if !self.intersect_bounds(ray, t_min, t_max) {
+            return false;
+        }
+
+        if self.use_kdtree {
+            // Use k-d tree with early termination
+            self.mesh.kdtree.traverse_any(
+                &ray.origin,
+                ray.direction.as_ref(),
+                &ray.inv_direction,
+                |triangle_indices| {
+                    for &triangle_idx in triangle_indices {
+                        let triangle = &self.mesh.triangles[triangle_idx];
+                        if Self::intersect_triangle_fast(ray, triangle, t_min, t_max) {
+                            return true;
+                        }
+                    }
+                    false
+                },
+            )
+        } else {
+            // Brute force with early termination
+            for triangle in self.mesh.triangles.iter() {
+                if Self::intersect_triangle_fast(ray, triangle, t_min, t_max) {
+                    return true;
+                }
+            }
+            false
+        }
     }
 }
 
@@ -746,5 +826,16 @@ impl World {
         }
 
         closest_hit
+    }
+
+    /// Check if the ray hits any object in the world (for shadow rays).
+    /// Returns early on first hit without finding the closest intersection.
+    pub fn any_hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
+        for object in &self.objects {
+            if object.any_hit(ray, t_min, t_max) {
+                return true;
+            }
+        }
+        false
     }
 }
