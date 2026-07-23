@@ -74,8 +74,11 @@ cargo build --release -p rtrace-cli
 - `-w, --width <WIDTH>`: Image width in pixels (default: 800)
 - `-H, --height <HEIGHT>`: Image height in pixels (default: 600)
 - `--max-depth <DEPTH>`: Maximum ray bounces for reflections (default: 10)
-- `--samples <SAMPLES>`: Number of samples per pixel for anti-aliasing
-- `--anti-aliasing <MODE>`: Anti-aliasing mode - `quincunx` (default), `stochastic`, or `no-jitter`
+- `--samples <SAMPLES>`: Number of samples per pixel for fixed anti-aliasing modes
+- `--anti-aliasing <MODE>`: Anti-aliasing mode — `quincunx`, `stochastic`, `dynamic`, or `none` (default: `none`)
+- `--min-samples <N>`: Minimum samples per pixel for `dynamic` mode (default: 4)
+- `--max-samples <N>`: Maximum samples per pixel for `dynamic` mode (default: 256)
+- `--tolerance <F>`: Target std-error tolerance for `dynamic` mode (default: 0.005)
 
 **Deterministic Rendering:**
 

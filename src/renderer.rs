@@ -21,6 +21,61 @@ pub enum AntiAliasingMode {
     Quincunx,
     /// Stochastic sampling - random jittered sampling
     Stochastic,
+    /// Dynamic adaptive sampling - takes initial samples then adds more until the estimated
+    /// standard error of the mean falls below `tolerance`, up to `max_samples`.
+    Dynamic {
+        /// Minimum number of samples to take before checking convergence (must be >= 2)
+        min_samples: u32,
+        /// Maximum number of samples to take regardless of convergence
+        max_samples: u32,
+        /// Target maximum standard error across RGB channels (e.g. 0.005 = 0.5% of full scale)
+        tolerance: f64,
+    },
+}
+
+/// Online mean and variance accumulator using Welford's algorithm, tracking each RGB channel.
+struct WelfordColorAccumulator {
+    n: u32,
+    mean: Color,
+    m2: Color, // running sum of squared deviations from the running mean
+}
+
+impl WelfordColorAccumulator {
+    fn new() -> Self {
+        Self {
+            n: 0,
+            mean: Color::new(0.0, 0.0, 0.0),
+            m2: Color::new(0.0, 0.0, 0.0),
+        }
+    }
+
+    fn update(&mut self, color: Color) {
+        self.n += 1;
+        let delta = color - self.mean;
+        self.mean += delta / self.n as f64;
+        let delta2 = color - self.mean;
+        self.m2.x += delta.x * delta2.x;
+        self.m2.y += delta.y * delta2.y;
+        self.m2.z += delta.z * delta2.z;
+    }
+
+    fn mean(&self) -> Color {
+        self.mean
+    }
+
+    /// Maximum standard error of the mean across RGB channels.
+    /// Returns infinity when fewer than 2 samples have been taken.
+    fn max_std_error(&self) -> f64 {
+        if self.n < 2 {
+            return f64::INFINITY;
+        }
+        let n = self.n as f64;
+        // std_error = sqrt(sample_variance / n) = sqrt(M2 / (n * (n-1)))
+        let se_r = (self.m2.x.max(0.0) / (n * (n - 1.0))).sqrt();
+        let se_g = (self.m2.y.max(0.0) / (n * (n - 1.0))).sqrt();
+        let se_b = (self.m2.z.max(0.0) / (n * (n - 1.0))).sqrt();
+        se_r.max(se_g).max(se_b)
+    }
 }
 
 /// Context for rendering operations
@@ -178,6 +233,10 @@ impl SamplingHelper {
                 // During rendering, use center-pixel sampling like None mode
                 (pixel_u, pixel_v)
             }
+            AntiAliasingMode::Dynamic { .. } => {
+                // Dynamic mode uses its own sampling loop and never calls this function
+                (pixel_u, pixel_v)
+            }
         }
     }
 
@@ -243,8 +302,19 @@ impl Renderer {
 
     pub fn render(&self, scene: &Scene) -> Result<RgbImage, Box<dyn std::error::Error>> {
         // Validate samples parameter
-        if self.samples == 0 {
+        if self.samples == 0 && !matches!(self.anti_aliasing_mode, AntiAliasingMode::Dynamic { .. }) {
             return Err("Samples must be greater than 0".into());
+        }
+        if let AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance } = &self.anti_aliasing_mode {
+            if *min_samples < 2 {
+                return Err("Dynamic mode min_samples must be at least 2".into());
+            }
+            if *max_samples < *min_samples {
+                return Err("Dynamic mode max_samples must be >= min_samples".into());
+            }
+            if *tolerance <= 0.0 {
+                return Err("Dynamic mode tolerance must be greater than 0".into());
+            }
         }
 
         // Create a renderer configuration that automatically applies scene outline settings
@@ -602,7 +672,6 @@ impl Renderer {
                     SamplingHelper::calculate_pixel_coords(x, y, render_width, render_height);
 
                 // Collect samples for this pixel
-                let mut total_color = Color::new(0.0, 0.0, 0.0);
                 let mut pixel_depth = None;
                 let mut pixel_normal = None;
 
@@ -615,52 +684,106 @@ impl Renderer {
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
                     .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
 
-                for sample in 0..self.samples {
-                    let (sample_u, sample_v) = SamplingHelper::calculate_sample_coords(
-                        &self.anti_aliasing_mode,
-                        self.samples,
-                        sample,
-                        pixel_u,
-                        pixel_v,
-                        pixel_width,
-                        pixel_height,
-                        &mut rng,
-                    );
+                let color = if let AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance } =
+                    &self.anti_aliasing_mode
+                {
+                    // Adaptive sampling: accumulate samples until the standard error of the mean
+                    // drops below `tolerance` or `max_samples` is reached.
+                    let mut acc = WelfordColorAccumulator::new();
+                    let mut sample_num = 0u32;
+                    loop {
+                        let jitter_u = rng.gen::<f64>() - 0.5;
+                        let jitter_v = rng.gen::<f64>() - 0.5;
+                        let sample_u = pixel_u + jitter_u * pixel_width;
+                        let sample_v = pixel_v + jitter_v * pixel_height;
+                        let ray = camera.get_ray(sample_u, sample_v);
+                        let sample_seed =
+                            SamplingHelper::create_sample_seed(pixel_seed, sample_num);
 
-                    let ray = camera.get_ray(sample_u, sample_v);
+                        let (sample_color, sample_depth, sample_normal) = ray_color_with_data(
+                            &ray,
+                            world,
+                            lights,
+                            render_context.ambient,
+                            render_context.fog,
+                            render_context.camera_pos,
+                            render_context.background_color,
+                            materials,
+                            self.max_depth,
+                            Some(camera),
+                            sample_seed,
+                        );
 
-                    // Create sample-specific seed for ray tracing consistency
-                    let sample_seed = SamplingHelper::create_sample_seed(pixel_seed, sample);
+                        acc.update(sample_color);
 
-                    let (sample_color, sample_depth, sample_normal) = ray_color_with_data(
-                        &ray,
-                        world,
-                        lights,
-                        render_context.ambient,
-                        render_context.fog,
-                        render_context.camera_pos,
-                        render_context.background_color,
-                        materials,
-                        self.max_depth,
-                        Some(camera),
-                        sample_seed,
-                    );
+                        if collect_outline_data {
+                            if let (Some(depth), Some(normal)) = (sample_depth, sample_normal) {
+                                if pixel_depth.is_none() || depth < pixel_depth.unwrap() {
+                                    pixel_depth = Some(depth);
+                                    pixel_normal = Some(normal);
+                                }
+                            }
+                        }
 
-                    total_color += sample_color;
+                        sample_num += 1;
+                        if sample_num >= *min_samples
+                            && (sample_num >= *max_samples
+                                || acc.max_std_error() <= *tolerance)
+                        {
+                            break;
+                        }
+                    }
+                    acc.mean()
+                } else {
+                    // Fixed-count sampling (None, Stochastic, Quincunx)
+                    let mut total_color = Color::new(0.0, 0.0, 0.0);
 
-                    // For outline detection, we want the closest depth and corresponding normal
-                    if collect_outline_data {
-                        if let (Some(depth), Some(normal)) = (sample_depth, sample_normal) {
-                            if pixel_depth.is_none() || depth < pixel_depth.unwrap() {
-                                pixel_depth = Some(depth);
-                                pixel_normal = Some(normal);
+                    for sample in 0..self.samples {
+                        let (sample_u, sample_v) = SamplingHelper::calculate_sample_coords(
+                            &self.anti_aliasing_mode,
+                            self.samples,
+                            sample,
+                            pixel_u,
+                            pixel_v,
+                            pixel_width,
+                            pixel_height,
+                            &mut rng,
+                        );
+
+                        let ray = camera.get_ray(sample_u, sample_v);
+
+                        // Create sample-specific seed for ray tracing consistency
+                        let sample_seed = SamplingHelper::create_sample_seed(pixel_seed, sample);
+
+                        let (sample_color, sample_depth, sample_normal) = ray_color_with_data(
+                            &ray,
+                            world,
+                            lights,
+                            render_context.ambient,
+                            render_context.fog,
+                            render_context.camera_pos,
+                            render_context.background_color,
+                            materials,
+                            self.max_depth,
+                            Some(camera),
+                            sample_seed,
+                        );
+
+                        total_color += sample_color;
+
+                        // For outline detection, we want the closest depth and corresponding normal
+                        if collect_outline_data {
+                            if let (Some(depth), Some(normal)) = (sample_depth, sample_normal) {
+                                if pixel_depth.is_none() || depth < pixel_depth.unwrap() {
+                                    pixel_depth = Some(depth);
+                                    pixel_normal = Some(normal);
+                                }
                             }
                         }
                     }
-                }
 
-                // Average the samples
-                let color = total_color / self.samples as f64;
+                    total_color / self.samples as f64
+                };
 
                 // Update progress tracking
                 progress_tracker.update_progress();
@@ -1390,6 +1513,111 @@ endsolid test";
             hit.point.y >= -8.0 && hit.point.y <= 8.0,
             "Intersection y should be in scaled bounds"
         );
+    }
+
+    #[test]
+    fn test_dynamic_sampling() {
+        let mut scene = Scene::default();
+
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+            transform: None,
+        });
+
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: None,
+        });
+
+        let mut renderer = Renderer::new(30, 30);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Dynamic {
+            min_samples: 4,
+            max_samples: 32,
+            tolerance: 0.01,
+        };
+        let result = renderer.render(&scene);
+        assert!(result.is_ok());
+
+        let img = result.unwrap();
+        assert_eq!(img.width(), 30);
+        assert_eq!(img.height(), 30);
+    }
+
+    #[test]
+    fn test_dynamic_sampling_deterministic() {
+        let mut scene = Scene::default();
+
+        scene.objects.push(Object::Sphere {
+            center: [0.0, 0.0, 0.0],
+            radius: 1.0,
+            material: Material::default(),
+            transform: None,
+        });
+
+        scene.lights.push(Light {
+            position: [2.0, 2.0, 2.0],
+            color: "#FFFFFF".to_string(),
+            intensity: 1.0,
+            diameter: Some(0.5),
+        });
+
+        let mut renderer = Renderer::new(20, 20);
+        renderer.anti_aliasing_mode = AntiAliasingMode::Dynamic {
+            min_samples: 4,
+            max_samples: 16,
+            tolerance: 0.01,
+        };
+        renderer.seed = Some(42);
+
+        let result1 = renderer.render(&scene).expect("First render failed");
+        let result2 = renderer.render(&scene).expect("Second render failed");
+
+        let pixels1: Vec<_> = result1.pixels().collect();
+        let pixels2: Vec<_> = result2.pixels().collect();
+
+        for (i, (&p1, &p2)) in pixels1.iter().zip(pixels2.iter()).enumerate() {
+            assert_eq!(
+                p1, p2,
+                "Dynamic pixel {} differs between renders: {:?} vs {:?}",
+                i, p1, p2
+            );
+        }
+    }
+
+    #[test]
+    fn test_dynamic_sampling_validation() {
+        let scene = Scene::default();
+
+        // min_samples < 2 should fail
+        let mut r = Renderer::new(10, 10);
+        r.anti_aliasing_mode = AntiAliasingMode::Dynamic {
+            min_samples: 1,
+            max_samples: 16,
+            tolerance: 0.01,
+        };
+        assert!(r.render(&scene).is_err());
+
+        // max_samples < min_samples should fail
+        let mut r = Renderer::new(10, 10);
+        r.anti_aliasing_mode = AntiAliasingMode::Dynamic {
+            min_samples: 8,
+            max_samples: 4,
+            tolerance: 0.01,
+        };
+        assert!(r.render(&scene).is_err());
+
+        // tolerance <= 0 should fail
+        let mut r = Renderer::new(10, 10);
+        r.anti_aliasing_mode = AntiAliasingMode::Dynamic {
+            min_samples: 4,
+            max_samples: 16,
+            tolerance: 0.0,
+        };
+        assert!(r.render(&scene).is_err());
     }
 }
 

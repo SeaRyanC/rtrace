@@ -65,8 +65,11 @@ The rtrace CLI tool renders scenes from JSON files to PNG images or WebM movies.
 | `--output <OUTPUT>` | `-o` | Output file (PNG for images, WebM for movies) | - |
 | `--size <SIZE>` | `-s` | Image diagonal size in pixels (aspect ratio computed from camera settings) | 1000 |
 | `--max-depth <MAX_DEPTH>` | - | Maximum ray bounces for reflections | 10 |
-| `--samples <SAMPLES>` | - | Number of samples per pixel | 1 |
-| `--anti-aliasing <MODE>` | - | Anti-aliasing mode: quincunx, stochastic, or none | none |
+| `--samples <SAMPLES>` | - | Number of samples per pixel (fixed modes) | 1 |
+| `--anti-aliasing <MODE>` | - | Anti-aliasing mode: `quincunx`, `stochastic`, `dynamic`, or `none` | none |
+| `--min-samples <N>` | - | Minimum samples per pixel for dynamic mode | 4 |
+| `--max-samples <N>` | - | Maximum samples per pixel for dynamic mode | 256 |
+| `--tolerance <F>` | - | Target standard-error tolerance for dynamic mode (fraction of [0,1]) | 0.005 |
 | `--rasterize` | - | Use rasterization instead of raytracing for fast preview | - |
 | `--movie` | - | Generate a 360° rotation movie (uses rasterization, outputs .webm) | - |
 | `--help` | `-h` | Print help information | - |
@@ -92,6 +95,12 @@ The rtrace CLI tool renders scenes from JSON files to PNG images or WebM movies.
 
 # High-quality quincunx anti-aliasing
 ./target/release/rtrace-cli -i scene.json -o smooth.png --anti-aliasing quincunx
+
+# Dynamic adaptive sampling (auto-adjusts per pixel until quality target is met)
+./target/release/rtrace-cli -i scene.json -o adaptive.png --anti-aliasing dynamic
+
+# Dynamic with custom quality target (tighter tolerance = more samples)
+./target/release/rtrace-cli -i scene.json -o adaptive_hq.png --anti-aliasing dynamic --tolerance 0.001 --max-samples 512
 
 # Generate a 360° rotation movie
 ./target/release/rtrace-cli -i scene.json -o rotation.webm --movie -s 500
@@ -732,10 +741,34 @@ Single sample per pixel with no anti-aliasing - fastest rendering but may show j
 ./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing no-jitter
 ```
 
+### Dynamic (Adaptive)
+
+Automatically adjusts the sample count per pixel based on statistical convergence. Cheap flat regions get few samples; complex edges, reflections, and soft shadows get as many as needed to reach the target quality.
+
+The renderer takes at least `--min-samples` samples, then keeps sampling until the **standard error of the mean** across all RGB channels drops below `--tolerance`, or `--max-samples` is reached.
+
+```bash
+# Adaptive sampling with defaults (min=4, max=256, tolerance=0.005)
+./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing dynamic
+
+# Tighter tolerance for higher quality (uses more samples where needed)
+./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing dynamic --tolerance 0.001 --max-samples 512
+
+# Quick preview with a loose tolerance
+./target/release/rtrace-cli -i scene.json -o output.png --anti-aliasing dynamic --min-samples 2 --max-samples 32 --tolerance 0.02
+```
+
+| Parameter | Flag | Default | Meaning |
+|-----------|------|---------|---------|
+| Min samples | `--min-samples` | 4 | Samples taken before convergence checking begins (must be ≥ 2) |
+| Max samples | `--max-samples` | 256 | Hard cap on samples per pixel |
+| Tolerance | `--tolerance` | 0.005 | Target standard error (0.005 = 0.5% of full [0,1] color scale) |
+
 **Performance Comparison:**
-- **No Jitter**: Fastest (1x), predictable results, may show aliasing
-- **Quincunx**: High quality (5x), predictable results
-- **Stochastic**: Flexible quality (1x to 16x+), randomized results
+- **None**: Fastest (1 sample/px), may show aliasing
+- **Quincunx**: Predictable quality (5 samples/px equivalent)
+- **Stochastic**: Fixed sample count, uniform cost per pixel
+- **Dynamic**: Spends samples where they matter — fast for simple areas, thorough on complex ones
 
 **Visual Comparison:**
 
@@ -1010,7 +1043,7 @@ All rendering is deterministic by default:
 # render1.png and render2.png are byte-for-byte identical
 ```
 
-This applies to all anti-aliasing modes, including stochastic sampling - even "random" sampling uses controlled randomness for predictable results.
+This applies to all anti-aliasing modes, including stochastic and dynamic sampling - even "random" sampling uses controlled randomness for predictable results.
 
 ---
 

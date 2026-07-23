@@ -27,9 +27,21 @@ struct Args {
     #[arg(long)]
     samples: Option<u32>,
 
-    /// Anti-aliasing mode: quincunx, stochastic, or none
+    /// Anti-aliasing mode: quincunx, stochastic, dynamic, or none
     #[arg(long, default_value = "none")]
     anti_aliasing: String,
+
+    /// Minimum samples per pixel for dynamic mode (default: 4)
+    #[arg(long)]
+    min_samples: Option<u32>,
+
+    /// Maximum samples per pixel for dynamic mode (default: 256)
+    #[arg(long)]
+    max_samples: Option<u32>,
+
+    /// Target standard-error tolerance for dynamic mode (default: 0.005)
+    #[arg(long)]
+    tolerance: Option<f64>,
 
     /// Use rasterization instead of raytracing for fast preview
     #[arg(long)]
@@ -204,8 +216,14 @@ fn main() {
         "quincunx" => AntiAliasingMode::Quincunx,
         "stochastic" => AntiAliasingMode::Stochastic,
         "none" => AntiAliasingMode::None,
+        "dynamic" => {
+            let min_samples = args.min_samples.unwrap_or(4);
+            let max_samples = args.max_samples.unwrap_or(256);
+            let tolerance = args.tolerance.unwrap_or(0.005);
+            AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance }
+        }
         _ => {
-            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, none", args.anti_aliasing);
+            eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, dynamic, none", args.anti_aliasing);
             std::process::exit(1);
         }
     };
@@ -248,15 +266,25 @@ fn main() {
         }
     }
 
-    let final_anti_aliasing_name = match renderer.anti_aliasing_mode {
-        AntiAliasingMode::Quincunx => "quincunx",
-        AntiAliasingMode::Stochastic => "stochastic",
-        AntiAliasingMode::None => "none",
+    let final_anti_aliasing_name = match &renderer.anti_aliasing_mode {
+        AntiAliasingMode::Quincunx => "quincunx".to_string(),
+        AntiAliasingMode::Stochastic => "stochastic".to_string(),
+        AntiAliasingMode::None => "none".to_string(),
+        AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance } => {
+            format!("dynamic (min={}, max={}, tol={:.4})", min_samples, max_samples, tolerance)
+        }
+    };
+
+    let samples_desc = match &renderer.anti_aliasing_mode {
+        AntiAliasingMode::Dynamic { min_samples, max_samples, .. } => {
+            format!("{}-{} adaptive", min_samples, max_samples)
+        }
+        _ => format!("{}", samples),
     };
 
     println!(
         "Rendering {}×{} image (diagonal {}) with {} anti-aliasing ({} samples)...",
-        width, height, args.size, final_anti_aliasing_name, samples
+        width, height, args.size, final_anti_aliasing_name, samples_desc
     );
 
     // Render and save
