@@ -1,13 +1,12 @@
 use image::{ImageBuffer, Rgb, RgbImage};
 use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::camera::Camera;
-use crate::lighting::ray_color_with_data;
+use crate::lighting::{ray_color_with_data, PreparedFog, PreparedLight, PreparedMaterial};
 use crate::outline::{apply_outline_detection, OutlineBuffers, OutlineConfig};
 use crate::ray::{Cube, MeshObject, Plane, Sphere, World};
 use crate::scene::{hex_to_color, Color, Object, Point, Scene, Vec3};
@@ -78,10 +77,12 @@ impl WelfordColorAccumulator {
     }
 }
 
-/// Context for rendering operations
+/// Context for rendering operations — all colors pre-parsed, no per-pixel allocation.
 struct RenderContext<'a> {
-    ambient: &'a crate::scene::AmbientIllumination,
-    fog: &'a Option<crate::scene::Fog>,
+    lights: &'a [PreparedLight],
+    ambient_color: Color,
+    ambient_intensity: f64,
+    fog: Option<PreparedFog>,
     camera_pos: &'a Point,
     background_color: Color,
 }
@@ -351,9 +352,9 @@ impl Renderer {
             scene.camera.position[2],
         );
 
-        // Build world with objects
+        // Build world with objects and prepared materials (indexed by object position)
         let mut world = World::new();
-        let mut materials = HashMap::new();
+        let mut prepared_materials: Vec<PreparedMaterial> = Vec::with_capacity(scene.objects.len());
 
         for (index, object) in scene.objects.iter().enumerate() {
             match object {
@@ -397,7 +398,7 @@ impl Renderer {
                         material_index: index,
                     });
                     world.add(sphere);
-                    materials.insert(index, material.clone());
+                    prepared_materials.push(PreparedMaterial::from_material(material));
                 }
                 Object::Plane {
                     point,
@@ -444,7 +445,7 @@ impl Renderer {
                         material_index: index,
                     });
                     world.add(plane);
-                    materials.insert(index, material.clone());
+                    prepared_materials.push(PreparedMaterial::from_material(material));
                 }
                 Object::Cube {
                     center,
@@ -476,7 +477,7 @@ impl Renderer {
                     };
 
                     world.add(cube);
-                    materials.insert(index, material.clone());
+                    prepared_materials.push(PreparedMaterial::from_material(material));
                 }
                 Object::Mesh {
                     mesh_data,
@@ -520,7 +521,7 @@ impl Renderer {
                             Box::new(MeshObject::new_brute_force(transformed_mesh, color, index))
                         };
                         world.add(mesh_object);
-                        materials.insert(index, material.clone());
+                        prepared_materials.push(PreparedMaterial::from_material(material));
                     }
                 }
             }
@@ -533,6 +534,30 @@ impl Renderer {
             Color::new(0.0, 0.0, 0.0)
         };
 
+        // Pre-build all scene data once — no more per-pixel String allocation or hex parsing.
+        let prepared_lights: Vec<PreparedLight> = scene
+            .lights
+            .iter()
+            .map(PreparedLight::from_light)
+            .collect();
+        let ambient = &scene.scene_settings.ambient_illumination;
+        let ambient_color = hex_to_color(&ambient.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
+        let ambient_intensity = ambient.intensity;
+        let prepared_fog = scene
+            .scene_settings
+            .fog
+            .as_ref()
+            .map(PreparedFog::from_fog);
+
+        let render_context = RenderContext {
+            lights: &prepared_lights,
+            ambient_color,
+            ambient_intensity,
+            fog: prepared_fog,
+            camera_pos: &camera_pos,
+            background_color,
+        };
+
         // Set up thread pool if specific thread count is requested
         if let Some(thread_count) = self.thread_count {
             let pool = rayon::ThreadPoolBuilder::new()
@@ -542,17 +567,14 @@ impl Renderer {
 
             // Use the thread pool for rendering
             let (image_data, outline_buffers) = pool.install(|| {
-                self.render_parallel(
+                self.render_pixels(
                     render_width,
                     render_height,
                     &world,
                     &camera,
-                    &scene.lights,
-                    &scene.scene_settings.ambient_illumination,
-                    &scene.scene_settings.fog,
-                    &camera_pos,
-                    background_color,
-                    &materials,
+                    &render_context,
+                    &prepared_materials,
+                    self.outline_config.is_some(),
                 )
             });
 
@@ -576,17 +598,14 @@ impl Renderer {
             Ok(image)
         } else {
             // Use default parallel rendering with all available cores
-            let (image_data, outline_buffers) = self.render_parallel(
+            let (image_data, outline_buffers) = self.render_pixels(
                 render_width,
                 render_height,
                 &world,
                 &camera,
-                &scene.lights,
-                &scene.scene_settings.ambient_illumination,
-                &scene.scene_settings.fog,
-                &camera_pos,
-                background_color,
-                &materials,
+                &render_context,
+                &prepared_materials,
+                self.outline_config.is_some(),
             );
 
             let total_time = render_start_time.elapsed();
@@ -610,39 +629,6 @@ impl Renderer {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn render_parallel(
-        &self,
-        render_width: u32,
-        render_height: u32,
-        world: &World,
-        camera: &Camera,
-        lights: &[crate::scene::Light],
-        ambient: &crate::scene::AmbientIllumination,
-        fog: &Option<crate::scene::Fog>,
-        camera_pos: &Point,
-        background_color: Color,
-        materials: &HashMap<usize, crate::scene::Material>,
-    ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
-        let render_context = RenderContext {
-            ambient,
-            fog,
-            camera_pos,
-            background_color,
-        };
-        let collect_outline_data = self.outline_config.is_some();
-        self.render_pixels(
-            render_width,
-            render_height,
-            world,
-            camera,
-            lights,
-            &render_context,
-            materials,
-            collect_outline_data,
-        )
-    }
-
     /// Unified pixel rendering function that handles both regular and outline-enabled rendering
     #[allow(clippy::too_many_arguments)]
     fn render_pixels(
@@ -651,9 +637,8 @@ impl Renderer {
         render_height: u32,
         world: &World,
         camera: &Camera,
-        lights: &[crate::scene::Light],
         render_context: &RenderContext,
-        materials: &HashMap<usize, crate::scene::Material>,
+        prepared_materials: &[PreparedMaterial],
         collect_outline_data: bool,
     ) -> (Vec<(u32, u32, Color)>, Option<OutlineBuffers>) {
         // Create a vector of all pixel coordinates
@@ -703,12 +688,13 @@ impl Renderer {
                         let (sample_color, sample_depth, sample_normal) = ray_color_with_data(
                             &ray,
                             world,
-                            lights,
-                            render_context.ambient,
-                            render_context.fog,
+                            render_context.lights,
+                            render_context.ambient_color,
+                            render_context.ambient_intensity,
+                            render_context.fog.as_ref(),
                             render_context.camera_pos,
                             render_context.background_color,
-                            materials,
+                            prepared_materials,
                             self.max_depth,
                             Some(camera),
                             sample_seed,
@@ -758,12 +744,13 @@ impl Renderer {
                         let (sample_color, sample_depth, sample_normal) = ray_color_with_data(
                             &ray,
                             world,
-                            lights,
-                            render_context.ambient,
-                            render_context.fog,
+                            render_context.lights,
+                            render_context.ambient_color,
+                            render_context.ambient_intensity,
+                            render_context.fog.as_ref(),
                             render_context.camera_pos,
                             render_context.background_color,
-                            materials,
+                            prepared_materials,
                             self.max_depth,
                             Some(camera),
                             sample_seed,

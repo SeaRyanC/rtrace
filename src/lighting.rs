@@ -1,53 +1,161 @@
 use crate::ray::{HitRecord, Ray, World};
-use crate::scene::{
-    hex_to_color, AmbientIllumination, Color, Fog, Light, Material, Point, Texture, Vec3,
-};
+use crate::scene::{hex_to_color, Color, Fog, Light, Material, Point, Texture, Vec3};
 use nalgebra::Unit;
 use rand::{Rng, SeedableRng};
 
-/// Apply texture pattern and return the appropriate material properties
-fn apply_texture(texture: &Texture, u: f64, v: f64, base_material: &Material) -> Material {
-    match texture {
-        Texture::Grid {
-            line_color,
-            line_width,
-            cell_size,
-        } => {
-            let grid_color = hex_to_color(line_color).unwrap_or(Color::new(0.0, 0.0, 0.0));
-            let half_width = line_width / 2.0;
+// ---------------------------------------------------------------------------
+// Precomputed scene data – built once per render, used in the hot path.
+// All String fields from the JSON scene are resolved to Color (f64 triplets)
+// so the per-pixel path never allocates or parses hex strings.
+// ---------------------------------------------------------------------------
 
-            // Check if we're on a grid line
+/// Texture variant with all colors already parsed.
+pub enum PreparedTexture {
+    Grid {
+        line_color: Color,
+        line_width: f64,
+        cell_size: f64,
+    },
+    Checkerboard {
+        material_b: Box<PreparedMaterial>,
+    },
+}
+
+/// Material with all colors pre-parsed — no heap allocation in the hot path.
+pub struct PreparedMaterial {
+    pub color: Color,
+    pub ambient: f64,
+    pub diffuse: f64,
+    pub specular: f64,
+    pub shininess: f64,
+    pub reflectivity: Option<f64>,
+    pub texture: Option<PreparedTexture>,
+}
+
+impl Default for PreparedMaterial {
+    fn default() -> Self {
+        Self {
+            color: Color::new(1.0, 1.0, 1.0),
+            ambient: 0.1,
+            diffuse: 0.7,
+            specular: 0.3,
+            shininess: 32.0,
+            reflectivity: None,
+            texture: None,
+        }
+    }
+}
+
+impl PreparedMaterial {
+    pub fn from_material(m: &Material) -> Self {
+        Self {
+            color: hex_to_color(&m.color).unwrap_or(Color::new(1.0, 1.0, 1.0)),
+            ambient: m.ambient,
+            diffuse: m.diffuse,
+            specular: m.specular,
+            shininess: m.shininess,
+            reflectivity: m.reflectivity,
+            texture: m.texture.as_ref().map(PreparedTexture::from_texture),
+        }
+    }
+}
+
+impl PreparedTexture {
+    fn from_texture(t: &Texture) -> Self {
+        match t {
+            Texture::Grid { line_color, line_width, cell_size } => Self::Grid {
+                line_color: hex_to_color(line_color).unwrap_or(Color::new(0.0, 0.0, 0.0)),
+                line_width: *line_width,
+                cell_size: *cell_size,
+            },
+            Texture::Checkerboard { material_b } => Self::Checkerboard {
+                material_b: Box::new(PreparedMaterial::from_material(material_b)),
+            },
+        }
+    }
+}
+
+/// Light with position and color already converted — no hex parsing in the hot path.
+pub struct PreparedLight {
+    pub position: Point,
+    pub color: Color,
+    pub intensity: f64,
+    pub diameter: Option<f64>,
+}
+
+impl PreparedLight {
+    pub fn from_light(l: &Light) -> Self {
+        Self {
+            position: Point::new(l.position[0], l.position[1], l.position[2]),
+            color: hex_to_color(&l.color).unwrap_or(Color::new(1.0, 1.0, 1.0)),
+            intensity: l.intensity,
+            diameter: l.diameter,
+        }
+    }
+}
+
+/// Fog with color already parsed.
+pub struct PreparedFog {
+    pub color: Color,
+    pub start: f64,
+    pub end: f64,
+    pub density: f64,
+}
+
+impl PreparedFog {
+    pub fn from_fog(f: &Fog) -> Self {
+        Self {
+            color: hex_to_color(&f.color).unwrap_or(Color::new(0.5, 0.5, 0.5)),
+            start: f.start,
+            end: f.end,
+            density: f.density,
+        }
+    }
+}
+
+/// Resolve the effective material and surface color, applying any texture.
+/// Returns `(&PreparedMaterial, Color)` — borrows, zero allocation.
+/// - Grid: base material properties, color overridden by grid line color when on a line.
+/// - Checkerboard: alternates between base material and material_b (full material switch).
+#[inline]
+fn effective_material_and_color(
+    material: &PreparedMaterial,
+    texture_coords: Option<(f64, f64)>,
+) -> (&PreparedMaterial, Color) {
+    if let Some(texture) = &material.texture {
+        if let Some((u, v)) = texture_coords {
+            return apply_prepared_texture(texture, u, v, material);
+        }
+    }
+    (material, material.color)
+}
+
+/// Returns `(&PreparedMaterial, effective_color)` for the given texture + UV.
+#[inline]
+fn apply_prepared_texture<'a>(
+    texture: &'a PreparedTexture,
+    u: f64,
+    v: f64,
+    base: &'a PreparedMaterial,
+) -> (&'a PreparedMaterial, Color) {
+    match texture {
+        PreparedTexture::Grid { line_color, line_width, cell_size } => {
+            let half_width = line_width / 2.0;
             let u_mod = (u / cell_size).fract().abs();
             let v_mod = (v / cell_size).fract().abs();
-
             let on_u_line = u_mod <= half_width || u_mod >= (1.0 - half_width);
             let on_v_line = v_mod <= half_width || v_mod >= (1.0 - half_width);
-
-            if on_u_line || on_v_line {
-                // Create a new material with grid color but same properties
-                Material {
-                    color: format!(
-                        "#{:02X}{:02X}{:02X}",
-                        (grid_color.x * 255.0) as u8,
-                        (grid_color.y * 255.0) as u8,
-                        (grid_color.z * 255.0) as u8
-                    ),
-                    ..base_material.clone()
-                }
-            } else {
-                base_material.clone()
-            }
+            // Grid only changes surface color; material shading properties stay the same
+            let color = if on_u_line || on_v_line { *line_color } else { base.color };
+            (base, color)
         }
-        Texture::Checkerboard { material_b } => {
-            // Use 1x1 world units for checkerboard pattern
+        PreparedTexture::Checkerboard { material_b } => {
             let checker_u = u.floor() as i32;
             let checker_v = v.floor() as i32;
-
-            // Use base material for primary squares (even), material_b for alternate squares (odd)
             if (checker_u + checker_v) % 2 == 0 {
-                base_material.clone()
+                (base, base.color)
             } else {
-                *material_b.clone()
+                (material_b, material_b.color)
             }
         }
     }
@@ -100,7 +208,7 @@ fn sample_disk_light_point<R: Rng>(
 #[allow(clippy::too_many_arguments)]
 fn calculate_point_light_contribution(
     hit_record: &HitRecord,
-    material: &Material,
+    material: &PreparedMaterial,
     light_pos: &Point,
     light_color: &Color,
     light_intensity: f64,
@@ -138,7 +246,7 @@ fn calculate_point_light_contribution(
 #[allow(clippy::too_many_arguments)]
 fn calculate_diffuse_light_contribution(
     hit_record: &HitRecord,
-    material: &Material,
+    material: &PreparedMaterial,
     light_center: &Point,
     light_color: &Color,
     light_intensity: f64,
@@ -202,50 +310,34 @@ fn calculate_diffuse_light_contribution(
     }
 }
 
-/// Phong lighting calculation
+/// Phong lighting calculation using precomputed scene data (no heap allocation).
+#[allow(clippy::too_many_arguments)]
 pub fn phong_lighting(
     hit_record: &HitRecord,
-    material: &Material,
-    lights: &[Light],
-    ambient: &AmbientIllumination,
+    material: &PreparedMaterial,
+    lights: &[PreparedLight],
+    ambient_color: Color,
+    ambient_intensity: f64,
     camera_pos: &Point,
     world: &World,
     seed: u64,
 ) -> Color {
-    // Determine the effective material (possibly modified by texture)
-    let effective_material = if let Some(texture) = &material.texture {
-        if let Some((u, v)) = hit_record.texture_coords {
-            apply_texture(texture, u, v, material)
-        } else {
-            material.clone()
-        }
-    } else {
-        material.clone()
-    };
-
-    // Get effective material color
-    let material_color =
-        hex_to_color(&effective_material.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
+    // Resolve texture — returns borrowed material + surface color; zero allocation.
+    let (effective_mat, material_color) =
+        effective_material_and_color(material, hit_record.texture_coords);
 
     // Start with ambient lighting
-    let ambient_color = hex_to_color(&ambient.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
-    let mut color = effective_material.ambient
-        * ambient.intensity
-        * ambient_color.component_mul(&material_color);
+    let mut color =
+        effective_mat.ambient * ambient_intensity * ambient_color.component_mul(&material_color);
 
     // Add contribution from each light source
     for light in lights {
-        let light_pos = Point::new(light.position[0], light.position[1], light.position[2]);
-        let light_color = hex_to_color(&light.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
-
-        // Handle diffuse (area) lights vs point lights
         let light_contribution = if let Some(diameter) = light.diameter {
-            // Diffuse light - sample multiple points on the disk
             calculate_diffuse_light_contribution(
                 hit_record,
-                &effective_material,
-                &light_pos,
-                &light_color,
+                effective_mat,
+                &light.position,
+                &light.color,
                 light.intensity,
                 diameter,
                 camera_pos,
@@ -254,12 +346,11 @@ pub fn phong_lighting(
                 seed,
             )
         } else {
-            // Point light - use single shadow ray
             calculate_point_light_contribution(
                 hit_record,
-                &effective_material,
-                &light_pos,
-                &light_color,
+                effective_mat,
+                &light.position,
+                &light.color,
                 light.intensity,
                 camera_pos,
                 world,
@@ -276,7 +367,7 @@ pub fn phong_lighting(
 /// Calculate diffuse and specular components for a single light direction
 fn calculate_diffuse_and_specular(
     hit_record: &HitRecord,
-    material: &Material,
+    material: &PreparedMaterial,
     light_dir: &Unit<Vec3>,
     light_color: &Color,
     light_intensity: f64,
@@ -310,10 +401,8 @@ fn reflect(incident: &Vec3, normal: &Unit<Vec3>) -> Unit<Vec3> {
 }
 
 /// Apply atmospheric fog to a color based on distance
-pub fn apply_fog(color: Color, fog: &Option<Fog>, distance: f64) -> Color {
+pub fn apply_fog(color: Color, fog: Option<&PreparedFog>, distance: f64) -> Color {
     if let Some(fog_settings) = fog {
-        let fog_color = hex_to_color(&fog_settings.color).unwrap_or(Color::new(0.5, 0.5, 0.5));
-
         // Linear fog falloff
         let fog_factor = if distance <= fog_settings.start {
             0.0
@@ -328,50 +417,22 @@ pub fn apply_fog(color: Color, fog: &Option<Fog>, distance: f64) -> Color {
         let fog_factor = fog_factor.clamp(0.0, 1.0);
 
         // Blend original color with fog color
-        color * (1.0 - fog_factor) + fog_color * fog_factor
+        color * (1.0 - fog_factor) + fog_settings.color * fog_factor
     } else {
         color
     }
 }
 
-/// Main ray color calculation
-#[allow(clippy::too_many_arguments)]
-pub fn ray_color(
-    ray: &Ray,
-    world: &World,
-    lights: &[Light],
-    ambient: &AmbientIllumination,
-    fog: &Option<Fog>,
-    camera_pos: &Point,
-    background_color: Color,
-    materials: &std::collections::HashMap<usize, Material>,
-    max_depth: i32,
-    seed: u64,
-) -> Color {
-    ray_color_with_camera(
-        ray,
-        world,
-        lights,
-        ambient,
-        fog,
-        camera_pos,
-        background_color,
-        materials,
-        max_depth,
-        None,
-        seed,
-    )
-}
-
 /// Internal ray tracing parameters to reduce function argument count
 struct RayTraceParams<'a> {
     world: &'a World,
-    lights: &'a [Light],
-    ambient: &'a AmbientIllumination,
-    fog: &'a Option<Fog>,
+    lights: &'a [PreparedLight],
+    ambient_color: Color,
+    ambient_intensity: f64,
+    fog: Option<&'a PreparedFog>,
     camera_pos: &'a Point,
     background_color: Color,
-    materials: &'a std::collections::HashMap<usize, Material>,
+    materials: &'a [PreparedMaterial],
     camera: Option<&'a crate::camera::Camera>,
     seed: u64,
 }
@@ -392,19 +453,17 @@ fn trace_ray_internal(
         let camera_space_depth = (hit.point - *params.camera_pos).magnitude();
         let world_normal = *hit.normal.as_ref();
 
-        // Get material for this object using the material index from the hit record
-        let material = params
-            .materials
-            .get(&hit.material_index)
-            .cloned()
-            .unwrap_or_else(Material::default);
+        // Get material for this object — indexed lookup, no clone, no allocation.
+        let default_mat = PreparedMaterial::default();
+        let material = params.materials.get(hit.material_index).unwrap_or(&default_mat);
 
         // Calculate lighting
         let mut color = phong_lighting(
             &hit,
-            &material,
+            material,
             params.lights,
-            params.ambient,
+            params.ambient_color,
+            params.ambient_intensity,
             params.camera_pos,
             params.world,
             params.seed,
@@ -446,17 +505,19 @@ fn trace_ray_internal(
     }
 }
 
-/// Ray color calculation that also captures depth and normal data for outline detection
+/// Ray color calculation that also captures depth and normal data for outline detection.
+/// Accepts precomputed scene data to avoid per-pixel allocations.
 #[allow(clippy::too_many_arguments)]
 pub fn ray_color_with_data(
     ray: &Ray,
     world: &World,
-    lights: &[Light],
-    ambient: &AmbientIllumination,
-    fog: &Option<Fog>,
+    lights: &[PreparedLight],
+    ambient_color: Color,
+    ambient_intensity: f64,
+    fog: Option<&PreparedFog>,
     camera_pos: &Point,
     background_color: Color,
-    materials: &std::collections::HashMap<usize, Material>,
+    materials: &[PreparedMaterial],
     max_depth: i32,
     camera: Option<&crate::camera::Camera>,
     seed: u64,
@@ -464,7 +525,8 @@ pub fn ray_color_with_data(
     let params = RayTraceParams {
         world,
         lights,
-        ambient,
+        ambient_color,
+        ambient_intensity,
         fog,
         camera_pos,
         background_color,
@@ -475,33 +537,67 @@ pub fn ray_color_with_data(
     trace_ray_internal(ray, &params, max_depth)
 }
 
-/// Main ray color calculation with optional camera for grid background
+/// Main ray color calculation (convenience wrapper).
 #[allow(clippy::too_many_arguments)]
-pub fn ray_color_with_camera(
+pub fn ray_color(
     ray: &Ray,
     world: &World,
-    lights: &[Light],
-    ambient: &AmbientIllumination,
-    fog: &Option<Fog>,
+    lights: &[PreparedLight],
+    ambient_color: Color,
+    ambient_intensity: f64,
+    fog: Option<&PreparedFog>,
     camera_pos: &Point,
     background_color: Color,
-    materials: &std::collections::HashMap<usize, Material>,
+    materials: &[PreparedMaterial],
     max_depth: i32,
-    camera: Option<&crate::camera::Camera>,
     seed: u64,
 ) -> Color {
-    let params = RayTraceParams {
+    ray_color_with_data(
+        ray,
         world,
         lights,
-        ambient,
+        ambient_color,
+        ambient_intensity,
         fog,
         camera_pos,
         background_color,
         materials,
+        max_depth,
+        None,
+        seed,
+    ).0
+}
+
+/// Main ray color calculation with optional camera for grid background.
+#[allow(clippy::too_many_arguments)]
+pub fn ray_color_with_camera(
+    ray: &Ray,
+    world: &World,
+    lights: &[PreparedLight],
+    ambient_color: Color,
+    ambient_intensity: f64,
+    fog: Option<&PreparedFog>,
+    camera_pos: &Point,
+    background_color: Color,
+    materials: &[PreparedMaterial],
+    max_depth: i32,
+    camera: Option<&crate::camera::Camera>,
+    seed: u64,
+) -> Color {
+    ray_color_with_data(
+        ray,
+        world,
+        lights,
+        ambient_color,
+        ambient_intensity,
+        fog,
+        camera_pos,
+        background_color,
+        materials,
+        max_depth,
         camera,
         seed,
-    };
-    trace_ray_internal(ray, &params, max_depth).0
+    ).0
 }
 
 #[cfg(test)]
@@ -582,91 +678,91 @@ mod tests {
 
     #[test]
     fn test_checkerboard_texture() {
-        // Create a secondary material with different properties
-        let material_b = Material {
-            color: "#0000FF".to_string(),
-            ambient: 0.2,
-            diffuse: 0.6,
-            specular: 0.4,
-            shininess: 16.0,
-            reflectivity: None,
-            texture: None,
-        };
-
-        let texture = Texture::Checkerboard {
-            material_b: Box::new(material_b.clone()),
-        };
-
-        let base_material = Material {
+        use crate::scene::Material;
+        // Build prepared materials for checkerboard
+        let mat_a = Material {
             color: "#FF0000".to_string(),
             ambient: 0.1,
             diffuse: 0.8,
             specular: 0.2,
             shininess: 32.0,
             reflectivity: None,
-            texture: None,
+            texture: Some(Texture::Checkerboard {
+                material_b: Box::new(Material {
+                    color: "#0000FF".to_string(),
+                    ambient: 0.2,
+                    diffuse: 0.6,
+                    specular: 0.4,
+                    shininess: 16.0,
+                    reflectivity: None,
+                    texture: None,
+                }),
+            }),
         };
+        let prepared = PreparedMaterial::from_material(&mat_a);
 
-        // Test checkerboard pattern - should alternate between base_material and material_b
         // At (0.0, 0.0): floor(0) + floor(0) = 0, 0 % 2 = 0 -> base_material (red)
-        let result = apply_texture(&texture, 0.0, 0.0, &base_material);
-        assert_eq!(result.color, "#FF0000");
-        assert_eq!(result.shininess, 32.0); // Should use base material properties
-        assert_eq!(result.ambient, 0.1);
-        assert_eq!(result.diffuse, 0.8);
+        let (mat, color) = effective_material_and_color(&prepared, Some((0.0, 0.0)));
+        assert!((color.x - 1.0).abs() < 1e-3); // red
+        assert!(color.y.abs() < 1e-3);
+        assert!((mat.shininess - 32.0).abs() < 1e-6);
+        assert!((mat.ambient - 0.1).abs() < 1e-6);
+        assert!((mat.diffuse - 0.8).abs() < 1e-6);
 
         // At (1.0, 0.0): floor(1) + floor(0) = 1, 1 % 2 = 1 -> material_b (blue)
-        let result = apply_texture(&texture, 1.0, 0.0, &base_material);
-        assert_eq!(result.color, "#0000FF");
-        assert_eq!(result.shininess, 16.0); // Should use material_b properties
-        assert_eq!(result.ambient, 0.2);
-        assert_eq!(result.diffuse, 0.6);
+        let (mat, color) = effective_material_and_color(&prepared, Some((1.0, 0.0)));
+        assert!(color.x.abs() < 1e-3); // blue
+        assert!((color.z - 1.0).abs() < 1e-3);
+        assert!((mat.shininess - 16.0).abs() < 1e-6);
+        assert!((mat.ambient - 0.2).abs() < 1e-6);
+        assert!((mat.diffuse - 0.6).abs() < 1e-6);
 
-        // At (0.0, 1.0): floor(0) + floor(1) = 1, 1 % 2 = 1 -> material_b (blue)
-        let result = apply_texture(&texture, 0.0, 1.0, &base_material);
-        assert_eq!(result.color, "#0000FF");
-        assert_eq!(result.shininess, 16.0);
+        // At (0.0, 1.0): floor(0) + floor(1) = 1 -> material_b (blue)
+        let (mat, color) = effective_material_and_color(&prepared, Some((0.0, 1.0)));
+        assert!(color.x.abs() < 1e-3);
+        assert!((mat.shininess - 16.0).abs() < 1e-6);
 
         // At (1.0, 1.0): floor(1) + floor(1) = 2, 2 % 2 = 0 -> base_material (red)
-        let result = apply_texture(&texture, 1.0, 1.0, &base_material);
-        assert_eq!(result.color, "#FF0000");
-        assert_eq!(result.shininess, 32.0);
+        let (mat, color) = effective_material_and_color(&prepared, Some((1.0, 1.0)));
+        assert!((color.x - 1.0).abs() < 1e-3);
+        assert!((mat.shininess - 32.0).abs() < 1e-6);
 
-        // Test with fractional coordinates
-        // At (0.7, 0.3): floor(0.7) + floor(0.3) = 0 + 0 = 0, 0 % 2 = 0 -> base_material
-        let result = apply_texture(&texture, 0.7, 0.3, &base_material);
-        assert_eq!(result.color, "#FF0000");
+        // At (0.7, 0.3): floor(0.7) + floor(0.3) = 0 -> base_material
+        let (_mat, color) = effective_material_and_color(&prepared, Some((0.7, 0.3)));
+        assert!((color.x - 1.0).abs() < 1e-3);
 
-        // At (1.2, 0.8): floor(1.2) + floor(0.8) = 1 + 0 = 1, 1 % 2 = 1 -> material_b
-        let result = apply_texture(&texture, 1.2, 0.8, &base_material);
-        assert_eq!(result.color, "#0000FF");
+        // At (1.2, 0.8): floor(1.2) + floor(0.8) = 1 -> material_b
+        let (_mat, color) = effective_material_and_color(&prepared, Some((1.2, 0.8)));
+        assert!(color.x.abs() < 1e-3);
     }
 
     #[test]
     fn test_grid_texture_backwards_compatibility() {
-        let texture = Texture::Grid {
-            line_color: "#FF0000".to_string(),
-            line_width: 0.1,
-            cell_size: 1.0,
-        };
-
-        let base_material = Material {
+        use crate::scene::Material;
+        let mat = Material {
             color: "#FFFFFF".to_string(),
             ambient: 0.2,
             diffuse: 0.8,
             specular: 0.1,
             shininess: 10.0,
             reflectivity: None,
-            texture: None,
+            texture: Some(Texture::Grid {
+                line_color: "#FF0000".to_string(),
+                line_width: 0.1,
+                cell_size: 1.0,
+            }),
         };
+        let prepared = PreparedMaterial::from_material(&mat);
 
-        // Test that grid texture still works
-        // At (0.0, 0.0) we should be on a grid line
-        let result = apply_texture(&texture, 0.0, 0.0, &base_material);
-        assert_eq!(result.color, "#FF0000"); // Should be grid line color
+        // At (0.0, 0.0) we should be on a grid line -> red
+        let (_m, color) = effective_material_and_color(&prepared, Some((0.0, 0.0)));
+        assert!((color.x - 1.0).abs() < 1e-3); // red
+        assert!(color.y.abs() < 1e-3);
 
-        // At (0.5, 0.5) we should NOT be on a grid line
-        let result = apply_texture(&texture, 0.5, 0.5, &base_material);
-        assert_eq!(result.color, "#FFFFFF"); // Should be base material color
+        // At (0.5, 0.5) we should NOT be on a grid line -> white
+        let (_m, color) = effective_material_and_color(&prepared, Some((0.5, 0.5)));
+        assert!((color.x - 1.0).abs() < 1e-3); // white
+        assert!((color.y - 1.0).abs() < 1e-3);
+        assert!((color.z - 1.0).abs() < 1e-3);
     }
 }

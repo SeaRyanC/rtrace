@@ -25,6 +25,11 @@ nalgebra = "0.33"
 rayon = "1.8"
 rand = "0.8"
 
+[profile.release]
+opt-level = 3
+lto = "thin"        # cross-crate inlining for hot-path functions
+codegen-units = 1   # single codegen unit for maximum optimization
+
 [[bin]]
 name = "test_kdtree_consistency"
 path = "tools/test_kdtree_consistency.rs"
@@ -36,3 +41,7 @@ path = "tools/debug_kdtree.rs"
 [[bin]]
 name = "bench_render"
 path = "tools/bench_render.rs"
+
+[[bin]]
+name = "bench_complex"
+path = "tools/bench_complex.rs"

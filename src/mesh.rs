@@ -93,9 +93,45 @@ impl BvhNode {
         self.tri_count > 0
     }
 
-    /// Ray–AABB slab test. Returns the `t_near` value on a hit, or `None` on a
-    /// miss. Uses `best_t` as the upper bound so farther nodes are culled early.
+    /// Ray–AABB slab test in f32. Takes pre-converted f32 ray parameters to avoid
+    /// f32→f64 widening in the traversal hot path. Returns `t_near` on a hit.
     #[inline]
+    pub fn intersect_aabb_f32(
+        &self,
+        origin_f32: &[f32; 3],
+        inv_dir_f32: &[f32; 3],
+        t_min: f32,
+        best_t: f32,
+    ) -> Option<f32> {
+        let mut t_near = t_min;
+        let mut t_far = best_t;
+
+        // All arithmetic in f32 — avoids f32→f64 widening, LLVM can vectorise.
+        let tx0 = (self.aabb_min[0] - origin_f32[0]) * inv_dir_f32[0];
+        let tx1 = (self.aabb_max[0] - origin_f32[0]) * inv_dir_f32[0];
+        t_near = t_near.max(tx0.min(tx1));
+        t_far = t_far.min(tx0.max(tx1));
+
+        let ty0 = (self.aabb_min[1] - origin_f32[1]) * inv_dir_f32[1];
+        let ty1 = (self.aabb_max[1] - origin_f32[1]) * inv_dir_f32[1];
+        t_near = t_near.max(ty0.min(ty1));
+        t_far = t_far.min(ty0.max(ty1));
+
+        let tz0 = (self.aabb_min[2] - origin_f32[2]) * inv_dir_f32[2];
+        let tz1 = (self.aabb_max[2] - origin_f32[2]) * inv_dir_f32[2];
+        t_near = t_near.max(tz0.min(tz1));
+        t_far = t_far.min(tz0.max(tz1));
+
+        if t_near <= t_far {
+            Some(t_near)
+        } else {
+            None
+        }
+    }
+
+    /// Ray–AABB slab test (f64, kept for reference). Returns `t_near` on a hit.
+    #[inline]
+    #[allow(dead_code)]
     pub fn intersect_aabb(&self, origin: &[f64; 3], inv_dir: &[f64; 3], t_min: f64, best_t: f64) -> Option<f64> {
         let mut t_near = t_min;
         let mut t_far = best_t;
@@ -576,6 +612,13 @@ impl Bvh {
             return None;
         }
 
+        // Convert ray params to f32 once for the AABB slab tests.
+        // AABB bounds are already f32, so f32 arithmetic avoids widening conversions
+        // and gives the compiler more room to autovectorise.
+        let origin_f32 = [origin[0] as f32, origin[1] as f32, origin[2] as f32];
+        let inv_dir_f32 = [inv_dir[0] as f32, inv_dir[1] as f32, inv_dir[2] as f32];
+        let t_min_f32 = t_min as f32;
+
         let mut best_t = t_max;
         let mut best: Option<(f64, usize, [f64; 3], f64, f64)> = None;
 
@@ -590,8 +633,8 @@ impl Bvh {
             let node_idx = stack[top] as usize;
             let node = &self.nodes[node_idx];
 
-            // Re-test with the current (possibly tightened) best_t.
-            if node.intersect_aabb(origin, inv_dir, t_min, best_t).is_none() {
+            // Re-test with the current (possibly tightened) best_t in f32.
+            if node.intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, best_t as f32).is_none() {
                 continue;
             }
 
@@ -611,8 +654,8 @@ impl Bvh {
                 let left_idx = node_idx + 1;
                 let right_idx = node.right_or_first as usize;
 
-                let t_left = self.nodes[left_idx].intersect_aabb(origin, inv_dir, t_min, best_t);
-                let t_right = self.nodes[right_idx].intersect_aabb(origin, inv_dir, t_min, best_t);
+                let t_left = self.nodes[left_idx].intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, best_t as f32);
+                let t_right = self.nodes[right_idx].intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, best_t as f32);
 
                 // Push far child first so the near child is popped (processed) first.
                 match (t_left, t_right) {
@@ -659,6 +702,12 @@ impl Bvh {
             return false;
         }
 
+        // Convert to f32 for AABB tests — all AABB bounds are already f32.
+        let origin_f32 = [origin[0] as f32, origin[1] as f32, origin[2] as f32];
+        let inv_dir_f32 = [inv_dir[0] as f32, inv_dir[1] as f32, inv_dir[2] as f32];
+        let t_min_f32 = t_min as f32;
+        let t_max_f32 = t_max as f32;
+
         let mut stack = [0u32; 64];
         let mut top = 0usize;
         stack[top] = 0;
@@ -669,7 +718,7 @@ impl Bvh {
             let node_idx = stack[top] as usize;
             let node = &self.nodes[node_idx];
 
-            if node.intersect_aabb(origin, inv_dir, t_min, t_max).is_none() {
+            if node.intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, t_max_f32).is_none() {
                 continue;
             }
 
