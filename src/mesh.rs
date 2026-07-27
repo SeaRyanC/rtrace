@@ -36,780 +36,684 @@ impl Triangle {
     }
 }
 
-/// K-d tree node for accelerating ray-triangle intersections
-#[derive(Debug, Clone)]
-enum KdNode {
-    /// Internal node with splitting plane
-    Internal {
-        axis: usize,            // 0=x, 1=y, 2=z
-        split_pos: f64,         // position along axis
-        left: Box<KdNode>,      // left child (values <= split_pos)
-        right: Box<KdNode>,     // right child (values > split_pos)
-        bounds: (Point, Point), // bounding box of this node
-    },
-    /// Leaf node containing triangles
-    Leaf {
-        triangles: Vec<usize>,  // indices into mesh triangle array
-        bounds: (Point, Point), // bounding box of this node
-    },
+/// Fast scalar dot product of two [f64; 3] arrays.
+#[inline(always)]
+fn dot3(a: &[f64; 3], b: &[f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-/// K-d tree for accelerating ray-triangle intersections
-///
-/// A k-dimensional tree that recursively subdivides 3D space to enable
-/// fast ray-triangle intersection queries. Instead of testing every triangle
-/// in a mesh (O(n) complexity), the k-d tree allows logarithmic search time
-/// O(log n) by only testing triangles in leaf nodes that the ray intersects.
-///
-/// For the 35,628 triangle Espresso Tray STL file, this provides significant
-/// performance improvement over brute force intersection testing.
-#[derive(Debug, Clone)]
-pub struct KdTree {
-    root: Option<KdNode>,
-    max_depth: usize,
-    max_triangles_per_leaf: usize,
+/// Fast scalar cross product of two [f64; 3] arrays.
+#[inline(always)]
+fn cross3(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 }
 
-impl KdTree {
-    /// Create a new k-d tree for the given triangles
-    pub fn new(triangles: &[Triangle], max_depth: usize, max_triangles_per_leaf: usize) -> Self {
-        let mut tree = Self {
-            root: None,
-            max_depth,
-            max_triangles_per_leaf,
-        };
+/// Fast subtraction of two [f64; 3] arrays.
+#[inline(always)]
+fn sub3(a: &[f64; 3], b: &[f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
 
-        if !triangles.is_empty() {
-            // Create list of all triangle indices
-            let triangle_indices: Vec<usize> = (0..triangles.len()).collect();
+/// Compute the half-surface-area of an AABB (used by SAH cost function).
+#[inline]
+fn aabb_half_area(min: &[f32; 3], max: &[f32; 3]) -> f32 {
+    let dx = (max[0] - min[0]).max(0.0);
+    let dy = (max[1] - min[1]).max(0.0);
+    let dz = (max[2] - min[2]).max(0.0);
+    dx * dy + dy * dz + dz * dx
+}
 
-            // Compute overall bounds
-            let bounds = Self::compute_bounds(triangles, &triangle_indices);
+// ─── Flat SAH BVH ─────────────────────────────────────────────────────────────
 
-            // Build the tree recursively
-            tree.root = Some(tree.build_recursive(triangles, triangle_indices, bounds, 0));
-        }
+/// A flat BVH node occupying exactly 32 bytes (2 per 64-byte cache line).
+///
+/// **Internal node** (`tri_count == 0`): left child is always at index
+/// `this_index + 1` (DFS-order), right child is at index `right_or_first`.
+///
+/// **Leaf node** (`tri_count > 0`): triangle slots are
+/// `tri_indices[right_or_first .. right_or_first + tri_count]`.
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
+pub(crate) struct BvhNode {
+    pub aabb_min: [f32; 3],
+    /// Internal: index of right child.  Leaf: first index into `tri_indices`.
+    pub right_or_first: u32,
+    pub aabb_max: [f32; 3],
+    /// 0 = internal node; > 0 = leaf holding this many triangles.
+    pub tri_count: u32,
+}
 
-        tree
-    }
-
-    /// Count leaf nodes and maximum triangles per leaf (for debugging)
-    #[allow(dead_code)]
-    fn count_leaf_nodes(&self) -> (usize, usize) {
-        if let Some(ref root) = self.root {
-            self.count_leaf_nodes_recursive(root)
-        } else {
-            (0, 0)
-        }
-    }
-
-    #[allow(clippy::only_used_in_recursion)]
-    #[allow(dead_code)]
-    fn count_leaf_nodes_recursive(&self, node: &KdNode) -> (usize, usize) {
-        match node {
-            KdNode::Leaf { triangles, .. } => (1, triangles.len()),
-            KdNode::Internal { left, right, .. } => {
-                let (left_count, left_max) = self.count_leaf_nodes_recursive(left.as_ref());
-                let (right_count, right_max) = self.count_leaf_nodes_recursive(right.as_ref());
-                (left_count + right_count, left_max.max(right_max))
-            }
-        }
-    }
-
-    /// Recursively build the k-d tree
-    fn build_recursive(
-        &self,
-        triangles: &[Triangle],
-        triangle_indices: Vec<usize>,
-        bounds: (Point, Point),
-        depth: usize,
-    ) -> KdNode {
-        // Create leaf if we've reached maximum depth or have few enough triangles
-        if depth >= self.max_depth || triangle_indices.len() <= self.max_triangles_per_leaf {
-            return KdNode::Leaf {
-                triangles: triangle_indices,
-                bounds,
-            };
-        }
-
-        // Choose splitting axis (cycle through x, y, z)
-        let axis = depth % 3;
-
-        // Find median position along the axis
-        let mut positions: Vec<(f64, usize)> = triangle_indices
-            .iter()
-            .map(|&idx| (triangles[idx].center()[axis], idx))
-            .collect();
-
-        positions.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-
-        let median_idx = positions.len() / 2;
-        let split_pos = positions[median_idx].0;
-
-        // Split triangles into left and right based on their bounding boxes
-        let mut left_triangles = Vec::new();
-        let mut right_triangles = Vec::new();
-
-        for (_, triangle_idx) in positions {
-            let triangle = &triangles[triangle_idx];
-            let (tri_min, tri_max) = triangle.bounds();
-
-            // Check if triangle overlaps with left region (values <= split_pos)
-            if tri_min[axis] <= split_pos {
-                left_triangles.push(triangle_idx);
-            }
-
-            // Check if triangle overlaps with right region (values > split_pos)
-            if tri_max[axis] > split_pos {
-                right_triangles.push(triangle_idx);
-            }
-        }
-
-        // Ensure we don't create empty splits
-        if left_triangles.is_empty() {
-            left_triangles.push(right_triangles.pop().unwrap());
-        } else if right_triangles.is_empty() {
-            right_triangles.push(left_triangles.pop().unwrap());
-        }
-
-        // Compute bounds for left and right children
-        let left_bounds = Self::compute_bounds(triangles, &left_triangles);
-        let right_bounds = Self::compute_bounds(triangles, &right_triangles);
-
-        // Recursively build left and right subtrees
-        let left =
-            Box::new(self.build_recursive(triangles, left_triangles, left_bounds, depth + 1));
-        let right =
-            Box::new(self.build_recursive(triangles, right_triangles, right_bounds, depth + 1));
-
-        KdNode::Internal {
-            axis,
-            split_pos,
-            left,
-            right,
-            bounds,
-        }
-    }
-
-    /// Compute bounding box for a set of triangles
-    fn compute_bounds(triangles: &[Triangle], triangle_indices: &[usize]) -> (Point, Point) {
-        if triangle_indices.is_empty() {
-            return (Point::origin(), Point::origin());
-        }
-
-        let mut min = Point::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
-        let mut max = Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
-
-        for &idx in triangle_indices {
-            let (tri_min, tri_max) = triangles[idx].bounds();
-            min.coords = min.coords.inf(&tri_min.coords);
-            max.coords = max.coords.sup(&tri_max.coords);
-        }
-
-        (min, max)
-    }
-
-    /// Check if a ray intersects a bounding box
-    fn ray_intersects_bounds(
-        ray_origin: &Point,
-        ray_direction: &Vec3,
-        bounds: &(Point, Point),
-    ) -> bool {
-        let (min, max) = bounds;
-
-        let mut t_min = f64::NEG_INFINITY;
-        let mut t_max = f64::INFINITY;
-
-        for axis in 0..3 {
-            if ray_direction[axis].abs() < 1e-9 {
-                // Ray is parallel to the slab
-                if ray_origin[axis] < min[axis] || ray_origin[axis] > max[axis] {
-                    return false;
-                }
-            } else {
-                let inv_dir = 1.0 / ray_direction[axis];
-                let mut t0 = (min[axis] - ray_origin[axis]) * inv_dir;
-                let mut t1 = (max[axis] - ray_origin[axis]) * inv_dir;
-
-                if t0 > t1 {
-                    std::mem::swap(&mut t0, &mut t1);
-                }
-
-                t_min = t_min.max(t0);
-                t_max = t_max.min(t1);
-
-                // Only check for invalid intersection after processing this axis
-                if t_min > t_max {
-                    return false;
-                }
-            }
-        }
-
-        // Check if the intersection is in front of the ray (t_max >= 0)
-        t_max >= 0.0
-    }
-
-    /// Fast check if a ray intersects a bounding box using pre-computed inverse direction
-    ///
-    /// Uses IEEE 754 floating-point properties for handling parallel rays:
-    /// - When direction[axis] = 0, inv_direction[axis] = ±infinity
-    /// - If origin is strictly inside the slab: t0 = -infinity, t1 = +infinity (correct)
-    /// - If origin is on the boundary: t0 or t1 = NaN (0 * infinity)
-    /// - If origin is outside: t0 or t1 points to invalid intersection
-    ///
-    /// f64::max/min return the other argument when one is NaN, so NaN is effectively
-    /// treated as "don't update bounds", which is correct for boundary cases.
+impl BvhNode {
     #[inline]
-    fn ray_intersects_bounds_fast(
-        ray_origin: &Point,
-        inv_direction: &Vec3,
-        bounds: &(Point, Point),
-    ) -> bool {
-        let (min, max) = bounds;
-
-        let mut t_min = f64::NEG_INFINITY;
-        let mut t_max = f64::INFINITY;
-
-        for axis in 0..3 {
-            let inv_dir = inv_direction[axis];
-            let t0 = (min[axis] - ray_origin[axis]) * inv_dir;
-            let t1 = (max[axis] - ray_origin[axis]) * inv_dir;
-
-            let (t_near, t_far) = if inv_dir >= 0.0 { (t0, t1) } else { (t1, t0) };
-
-            t_min = t_min.max(t_near);
-            t_max = t_max.min(t_far);
-
-            if t_min > t_max {
-                return false;
-            }
-        }
-
-        t_max >= 0.0
+    pub fn is_leaf(&self) -> bool {
+        self.tri_count > 0
     }
 
-    /// Traverse the k-d tree to find triangle candidates for ray intersection
-    pub fn traverse<F>(
-        &self,
-        ray_origin: &Point,
-        ray_direction: &Vec3,
-        inv_direction: &Vec3,
-        mut callback: F,
-    ) where
-        F: FnMut(&[usize]),
-    {
-        if let Some(ref root) = self.root {
-            self.traverse_recursive(
-                root,
-                ray_origin,
-                ray_direction,
-                inv_direction,
-                &mut callback,
-            );
-        }
-    }
+    /// Ray–AABB slab test. Returns the `t_near` value on a hit, or `None` on a
+    /// miss. Uses `best_t` as the upper bound so farther nodes are culled early.
+    #[inline]
+    pub fn intersect_aabb(&self, origin: &[f64; 3], inv_dir: &[f64; 3], t_min: f64, best_t: f64) -> Option<f64> {
+        let mut t_near = t_min;
+        let mut t_far = best_t;
 
-    /// Traverse the k-d tree with early termination for shadow rays.
-    /// Returns true as soon as the callback returns true.
-    pub fn traverse_any<F>(
-        &self,
-        ray_origin: &Point,
-        ray_direction: &Vec3,
-        inv_direction: &Vec3,
-        mut callback: F,
-    ) -> bool
-    where
-        F: FnMut(&[usize]) -> bool,
-    {
-        if let Some(ref root) = self.root {
-            self.traverse_any_recursive(
-                root,
-                ray_origin,
-                ray_direction,
-                inv_direction,
-                &mut callback,
-            )
-        } else {
-            false
-        }
-    }
+        // Unrolled over the 3 axes for the compiler to vectorise.
+        let tx0 = (self.aabb_min[0] as f64 - origin[0]) * inv_dir[0];
+        let tx1 = (self.aabb_max[0] as f64 - origin[0]) * inv_dir[0];
+        t_near = t_near.max(tx0.min(tx1));
+        t_far = t_far.min(tx0.max(tx1));
 
-    /// Recursive traversal with early termination
-    #[allow(clippy::only_used_in_recursion)]
-    fn traverse_any_recursive<F>(
-        &self,
-        node: &KdNode,
-        ray_origin: &Point,
-        ray_direction: &Vec3,
-        inv_direction: &Vec3,
-        callback: &mut F,
-    ) -> bool
-    where
-        F: FnMut(&[usize]) -> bool,
-    {
-        match node {
-            KdNode::Leaf { triangles, bounds } => {
-                // Check if ray intersects this leaf's bounds using fast version
-                if Self::ray_intersects_bounds_fast(ray_origin, inv_direction, bounds) {
-                    callback(triangles)
-                } else {
-                    false
-                }
-            }
-            KdNode::Internal {
-                axis,
-                split_pos,
-                left,
-                right,
-                bounds: _,
-            } => {
-                let origin_pos = ray_origin[*axis];
-                let dir = ray_direction[*axis];
+        let ty0 = (self.aabb_min[1] as f64 - origin[1]) * inv_dir[1];
+        let ty1 = (self.aabb_max[1] as f64 - origin[1]) * inv_dir[1];
+        t_near = t_near.max(ty0.min(ty1));
+        t_far = t_far.min(ty0.max(ty1));
 
-                // If ray is parallel to the splitting plane, only traverse the side it's on
-                if dir.abs() < 1e-9 {
-                    if origin_pos <= *split_pos {
-                        return self.traverse_any_recursive(
-                            left.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        );
-                    } else {
-                        return self.traverse_any_recursive(
-                            right.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        );
-                    }
-                }
+        let tz0 = (self.aabb_min[2] as f64 - origin[2]) * inv_dir[2];
+        let tz1 = (self.aabb_max[2] as f64 - origin[2]) * inv_dir[2];
+        t_near = t_near.max(tz0.min(tz1));
+        t_far = t_far.min(tz0.max(tz1));
 
-                // Calculate where ray intersects the splitting plane
-                let t_split = (*split_pos - origin_pos) / dir;
-
-                // Traverse children in order based on ray direction
-                if origin_pos <= *split_pos {
-                    // Ray starts in left child region
-                    if self.traverse_any_recursive(
-                        left.as_ref(),
-                        ray_origin,
-                        ray_direction,
-                        inv_direction,
-                        callback,
-                    ) {
-                        return true;
-                    }
-                    if t_split >= 0.0
-                        && self.traverse_any_recursive(
-                            right.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        )
-                    {
-                        return true;
-                    }
-                } else {
-                    // Ray starts in right child region
-                    if self.traverse_any_recursive(
-                        right.as_ref(),
-                        ray_origin,
-                        ray_direction,
-                        inv_direction,
-                        callback,
-                    ) {
-                        return true;
-                    }
-                    if t_split >= 0.0
-                        && self.traverse_any_recursive(
-                            left.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        )
-                    {
-                        return true;
-                    }
-                }
-                false
-            }
-        }
-    }
-
-    /// Traverse the k-d tree with debug output
-    pub fn traverse_debug<F>(&self, ray_origin: &Point, ray_direction: &Vec3, mut callback: F)
-    where
-        F: FnMut(&[usize]),
-    {
-        if let Some(ref root) = self.root {
-            println!("Starting k-d tree traversal...");
-            self.traverse_recursive_debug(root, ray_origin, ray_direction, &mut callback, 0);
-        }
-    }
-
-    /// Recursive traversal of the k-d tree
-    #[allow(clippy::only_used_in_recursion)]
-    fn traverse_recursive<F>(
-        &self,
-        node: &KdNode,
-        ray_origin: &Point,
-        ray_direction: &Vec3,
-        inv_direction: &Vec3,
-        callback: &mut F,
-    ) where
-        F: FnMut(&[usize]),
-    {
-        match node {
-            KdNode::Leaf { triangles, bounds } => {
-                // Check if ray intersects this leaf's bounds using fast version
-                if Self::ray_intersects_bounds_fast(ray_origin, inv_direction, bounds) {
-                    callback(triangles);
-                }
-            }
-            KdNode::Internal {
-                axis,
-                split_pos,
-                left,
-                right,
-                bounds: _,
-            } => {
-                let origin_pos = ray_origin[*axis];
-                let dir = ray_direction[*axis];
-
-                // If ray is parallel to the splitting plane, only traverse the side it's on
-                if dir.abs() < 1e-9 {
-                    if origin_pos <= *split_pos {
-                        self.traverse_recursive(
-                            left.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        );
-                    } else {
-                        self.traverse_recursive(
-                            right.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        );
-                    }
-                    return;
-                }
-
-                // Calculate where ray intersects the splitting plane
-                let t_split = (*split_pos - origin_pos) / dir;
-
-                // Traverse children in order based on ray direction
-                // Always traverse the near child first, then the far child if the ray crosses the plane
-                if origin_pos <= *split_pos {
-                    // Ray starts in left child region
-                    self.traverse_recursive(
-                        left.as_ref(),
-                        ray_origin,
-                        ray_direction,
-                        inv_direction,
-                        callback,
-                    );
-                    if t_split >= 0.0 {
-                        self.traverse_recursive(
-                            right.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        );
-                    }
-                } else {
-                    // Ray starts in right child region
-                    self.traverse_recursive(
-                        right.as_ref(),
-                        ray_origin,
-                        ray_direction,
-                        inv_direction,
-                        callback,
-                    );
-                    if t_split >= 0.0 {
-                        self.traverse_recursive(
-                            left.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            inv_direction,
-                            callback,
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    /// Calculate ray-box intersection and return (t_near, t_far) if intersection exists
-    #[allow(dead_code)]
-    fn ray_bounds_intersection(
-        ray_origin: &Point,
-        ray_direction: &Vec3,
-        bounds: &(Point, Point),
-    ) -> Option<(f64, f64)> {
-        let (min, max) = bounds;
-
-        let mut t_min = f64::NEG_INFINITY;
-        let mut t_max = f64::INFINITY;
-
-        for axis in 0..3 {
-            if ray_direction[axis].abs() < 1e-9 {
-                // Ray is parallel to the slab
-                if ray_origin[axis] < min[axis] || ray_origin[axis] > max[axis] {
-                    return None;
-                }
-            } else {
-                let inv_dir = 1.0 / ray_direction[axis];
-                let mut t0 = (min[axis] - ray_origin[axis]) * inv_dir;
-                let mut t1 = (max[axis] - ray_origin[axis]) * inv_dir;
-
-                if t0 > t1 {
-                    std::mem::swap(&mut t0, &mut t1);
-                }
-
-                t_min = t_min.max(t0);
-                t_max = t_max.min(t1);
-
-                // Only check for invalid intersection after processing this axis
-                if t_min > t_max {
-                    return None;
-                }
-            }
-        }
-
-        // Check if the intersection is in front of the ray (t_max >= 0)
-        if t_max >= 0.0 {
-            Some((t_min.max(0.0), t_max))
+        if t_near <= t_far {
+            Some(t_near)
         } else {
             None
         }
     }
+}
 
-    /// Recursive traversal of the k-d tree with debug output
-    #[allow(clippy::only_used_in_recursion)]
-    fn traverse_recursive_debug<F>(
-        &self,
-        node: &KdNode,
-        ray_origin: &Point,
-        ray_direction: &Vec3,
-        callback: &mut F,
-        depth: usize,
-    ) where
-        F: FnMut(&[usize]),
-    {
-        let indent = "  ".repeat(depth);
+/// Precomputed per-triangle data for fast Möller–Trumbore intersection.
+///
+/// Storing `edge1` and `edge2` avoids recomputing them for every ray–triangle
+/// test. The `normal` field is the normalised front-face geometric normal
+/// `normalize(edge1 × edge2)`; it is flipped when `a < 0` (back-face hit).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PrecomputedTri {
+    pub v0: [f64; 3],
+    pub edge1: [f64; 3],
+    pub edge2: [f64; 3],
+    /// Normalised front-face normal: `normalize(edge1 × edge2)`.
+    pub normal: [f64; 3],
+}
 
-        match node {
-            KdNode::Leaf { triangles, bounds } => {
-                println!(
-                    "{}Leaf: {} triangles, bounds=({:.1},{:.1},{:.1}) to ({:.1},{:.1},{:.1})",
-                    indent,
-                    triangles.len(),
-                    bounds.0.x,
-                    bounds.0.y,
-                    bounds.0.z,
-                    bounds.1.x,
-                    bounds.1.y,
-                    bounds.1.z
+/// Möller–Trumbore ray–triangle intersection (returns hit + normal + UV).
+#[inline]
+fn mt_intersect(
+    tri: &PrecomputedTri,
+    origin: &[f64; 3],
+    dir: &[f64; 3],
+    t_min: f64,
+    t_max: f64,
+) -> Option<(f64, [f64; 3], f64, f64)> {
+    let h = cross3(dir, &tri.edge2);
+    let a = dot3(&tri.edge1, &h);
+
+    if a > -1e-8 && a < 1e-8 {
+        return None; // ray parallel to triangle
+    }
+
+    let f = 1.0 / a;
+    let s = sub3(origin, &tri.v0);
+    let u = f * dot3(&s, &h);
+
+    if !(0.0..=1.0).contains(&u) {
+        return None;
+    }
+
+    let q = cross3(&s, &tri.edge1);
+    let v = f * dot3(dir, &q);
+
+    if v < 0.0 || u + v > 1.0 {
+        return None;
+    }
+
+    let t = f * dot3(&tri.edge2, &q);
+    if t <= t_min || t >= t_max {
+        return None;
+    }
+
+    // Flip normal for back-face hits (a < 0 means clockwise winding from ray's POV).
+    let normal = if a >= 0.0 {
+        tri.normal
+    } else {
+        [-tri.normal[0], -tri.normal[1], -tri.normal[2]]
+    };
+
+    Some((t, normal, u, v))
+}
+
+/// Shadow-ray variant: only checks if an intersection exists, skips UV / normal.
+#[inline]
+fn mt_intersect_any(
+    tri: &PrecomputedTri,
+    origin: &[f64; 3],
+    dir: &[f64; 3],
+    t_min: f64,
+    t_max: f64,
+) -> bool {
+    let h = cross3(dir, &tri.edge2);
+    let a = dot3(&tri.edge1, &h);
+
+    if a > -1e-8 && a < 1e-8 {
+        return false;
+    }
+
+    let f = 1.0 / a;
+    let s = sub3(origin, &tri.v0);
+    let u = f * dot3(&s, &h);
+
+    if !(0.0..=1.0).contains(&u) {
+        return false;
+    }
+
+    let q = cross3(&s, &tri.edge1);
+    let v = f * dot3(dir, &q);
+
+    if v < 0.0 || u + v > 1.0 {
+        return false;
+    }
+
+    let t = f * dot3(&tri.edge2, &q);
+    t > t_min && t < t_max
+}
+
+// ── BVH construction ──────────────────────────────────────────────────────────
+
+const MAX_LEAF_TRIS: usize = 4;
+const NUM_BINS: usize = 8;
+/// Relative cost of traversing one BVH node vs. intersecting one triangle.
+const SAH_TRAVERSAL_COST: f32 = 0.3;
+
+struct BvhBuilder {
+    nodes: Vec<BvhNode>,
+    tri_indices: Vec<u32>,
+}
+
+impl BvhBuilder {
+    fn build(precomputed: &[PrecomputedTri]) -> (Vec<BvhNode>, Vec<u32>) {
+        let n = precomputed.len();
+        if n == 0 {
+            return (vec![], vec![]);
+        }
+
+        // Precompute centroids: centroid = v0 + (edge1 + edge2) / 3
+        let centroids: Vec<[f32; 3]> = precomputed
+            .iter()
+            .map(|t| {
+                [
+                    (t.v0[0] + (t.edge1[0] + t.edge2[0]) / 3.0) as f32,
+                    (t.v0[1] + (t.edge1[1] + t.edge2[1]) / 3.0) as f32,
+                    (t.v0[2] + (t.edge1[2] + t.edge2[2]) / 3.0) as f32,
+                ]
+            })
+            .collect();
+
+        let mut builder = BvhBuilder {
+            nodes: Vec::with_capacity(2 * n),
+            tri_indices: (0..n as u32).collect(),
+        };
+        builder.build_node(&centroids, precomputed, 0, n);
+        (builder.nodes, builder.tri_indices)
+    }
+
+    fn build_node(
+        &mut self,
+        centroids: &[[f32; 3]],
+        precomputed: &[PrecomputedTri],
+        start: usize,
+        count: usize,
+    ) {
+        let node_idx = self.nodes.len();
+        self.nodes.push(BvhNode::default()); // placeholder
+
+        // Compute tight AABB over triangles in this node.
+        let (aabb_min, aabb_max) = Self::compute_aabb(&self.tri_indices[start..start + count], precomputed);
+
+        if count <= MAX_LEAF_TRIS {
+            // Small enough to be a leaf without evaluating SAH.
+            self.nodes[node_idx] = BvhNode {
+                aabb_min,
+                aabb_max,
+                right_or_first: start as u32,
+                tri_count: count as u32,
+            };
+            return;
+        }
+
+        // Attempt SAH-optimal split.
+        let split_result = Self::find_sah_split(
+            &self.tri_indices[start..start + count],
+            centroids,
+            precomputed,
+            &aabb_min,
+            &aabb_max,
+            count,
+        );
+
+        let mid = match split_result {
+            Some((axis, split_pos)) => {
+                let left = partition_by_centroid(
+                    &mut self.tri_indices[start..start + count],
+                    centroids,
+                    axis,
+                    split_pos,
                 );
+                start + left
+            }
+            None => 0, // 0 signals "make a leaf"
+        };
 
-                // Check if ray intersects this leaf's bounds
-                let intersects = Self::ray_intersects_bounds(ray_origin, ray_direction, bounds);
-                println!("{}  Ray intersects leaf bounds: {}", indent, intersects);
+        if mid == 0 || mid == start || mid == start + count {
+            // Degenerate – just create a leaf.
+            self.nodes[node_idx] = BvhNode {
+                aabb_min,
+                aabb_max,
+                right_or_first: start as u32,
+                tri_count: count as u32,
+            };
+            return;
+        }
 
-                if intersects {
-                    println!(
-                        "{}  Calling callback with {} triangles",
-                        indent,
-                        triangles.len()
-                    );
-                    callback(triangles);
+        // Build left subtree – it starts at node_idx + 1 (DFS order).
+        self.build_node(centroids, precomputed, start, mid - start);
+
+        // Right child index is known only after the left subtree is built.
+        let right_child = self.nodes.len() as u32;
+        self.build_node(centroids, precomputed, mid, start + count - mid);
+
+        // Patch in the internal node now that we know the right-child index.
+        self.nodes[node_idx] = BvhNode {
+            aabb_min,
+            aabb_max,
+            right_or_first: right_child,
+            tri_count: 0, // internal
+        };
+    }
+
+    /// Compute a tight f32 AABB over a set of triangles.
+    fn compute_aabb(tris: &[u32], precomputed: &[PrecomputedTri]) -> ([f32; 3], [f32; 3]) {
+        let mut min = [f32::MAX; 3];
+        let mut max = [f32::MIN; 3];
+
+        for &idx in tris {
+            let t = &precomputed[idx as usize];
+            let v1 = [
+                t.v0[0] + t.edge1[0],
+                t.v0[1] + t.edge1[1],
+                t.v0[2] + t.edge1[2],
+            ];
+            let v2 = [
+                t.v0[0] + t.edge2[0],
+                t.v0[1] + t.edge2[1],
+                t.v0[2] + t.edge2[2],
+            ];
+
+            for a in 0..3 {
+                let lo = t.v0[a].min(v1[a]).min(v2[a]) as f32;
+                let hi = t.v0[a].max(v1[a]).max(v2[a]) as f32;
+                min[a] = min[a].min(lo);
+                max[a] = max[a].max(hi);
+            }
+        }
+
+        // Tiny expansion guards against f64→f32 rounding artefacts.
+        const EPS: f32 = 1e-4;
+        (
+            [min[0] - EPS, min[1] - EPS, min[2] - EPS],
+            [max[0] + EPS, max[1] + EPS, max[2] + EPS],
+        )
+    }
+
+    /// Binned SAH split search.  Returns `Some((axis, split_pos))` when a split
+    /// is cheaper than a leaf, otherwise `None`.
+    fn find_sah_split(
+        tris: &[u32],
+        centroids: &[[f32; 3]],
+        precomputed: &[PrecomputedTri],
+        node_min: &[f32; 3],
+        node_max: &[f32; 3],
+        count: usize,
+    ) -> Option<(usize, f32)> {
+        let parent_area = aabb_half_area(node_min, node_max);
+        if parent_area < 1e-10 {
+            return None;
+        }
+
+        let leaf_cost = count as f32; // cost of not splitting
+        let mut best_cost = leaf_cost;
+        let mut best: Option<(usize, f32)> = None;
+
+        // Compute centroid bounds for bin layout.
+        let mut cmin = [f32::MAX; 3];
+        let mut cmax = [f32::MIN; 3];
+        for &idx in tris {
+            let c = centroids[idx as usize];
+            for a in 0..3 {
+                cmin[a] = cmin[a].min(c[a]);
+                cmax[a] = cmax[a].max(c[a]);
+            }
+        }
+
+        for axis in 0..3 {
+            let extent = cmax[axis] - cmin[axis];
+            if extent < 1e-6 {
+                continue;
+            }
+            let inv_extent = NUM_BINS as f32 / extent;
+
+            // Initialise bins.
+            let mut bin_count = [0u32; NUM_BINS];
+            let mut bin_min = [[f32::MAX; 3]; NUM_BINS];
+            let mut bin_max = [[f32::MIN; 3]; NUM_BINS];
+
+            for &idx in tris {
+                let c = centroids[idx as usize];
+                let bin = ((c[axis] - cmin[axis]) * inv_extent) as usize;
+                let bin = bin.min(NUM_BINS - 1);
+                bin_count[bin] += 1;
+
+                let t = &precomputed[idx as usize];
+                let v1 = [
+                    t.v0[0] + t.edge1[0],
+                    t.v0[1] + t.edge1[1],
+                    t.v0[2] + t.edge1[2],
+                ];
+                let v2 = [
+                    t.v0[0] + t.edge2[0],
+                    t.v0[1] + t.edge2[1],
+                    t.v0[2] + t.edge2[2],
+                ];
+                for a in 0..3 {
+                    let lo = t.v0[a].min(v1[a]).min(v2[a]) as f32;
+                    let hi = t.v0[a].max(v1[a]).max(v2[a]) as f32;
+                    bin_min[bin][a] = bin_min[bin][a].min(lo);
+                    bin_max[bin][a] = bin_max[bin][a].max(hi);
                 }
             }
-            KdNode::Internal {
-                axis,
-                split_pos,
-                left,
-                right,
-                bounds,
-            } => {
-                let axis_name = match axis {
-                    0 => "X",
-                    1 => "Y",
-                    2 => "Z",
-                    _ => "?",
-                };
-                println!("{}Internal: split on {} axis at {:.1}, bounds=({:.1},{:.1},{:.1}) to ({:.1},{:.1},{:.1})",
-                    indent, axis_name, split_pos,
-                    bounds.0.x, bounds.0.y, bounds.0.z,
-                    bounds.1.x, bounds.1.y, bounds.1.z);
 
-                // Only show detailed traversal for first few levels
-                if depth < 3 {
-                    let origin_pos = ray_origin[*axis];
-                    let dir = ray_direction[*axis];
+            // Evaluate NUM_BINS-1 candidate split planes.
+            // Precompute left-sweep AABB and counts.
+            let mut left_count = [0u32; NUM_BINS - 1];
+            let mut left_min = [[f32::MAX; 3]; NUM_BINS - 1];
+            let mut left_max = [[f32::MIN; 3]; NUM_BINS - 1];
 
-                    println!(
-                        "{}  Ray origin on {} axis: {:.1}, direction: {:.6}",
-                        indent, axis_name, origin_pos, dir
-                    );
+            let mut running_min = [f32::MAX; 3];
+            let mut running_max = [f32::MIN; 3];
+            let mut running_count = 0u32;
 
-                    // If ray is parallel to the splitting plane
-                    if dir.abs() < 1e-9 {
-                        println!("{}  Ray is parallel to splitting plane", indent);
-                        if origin_pos <= *split_pos {
-                            println!("{}  Traversing LEFT child only", indent);
-                            self.traverse_recursive_debug(
-                                left.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
-                        } else {
-                            println!("{}  Traversing RIGHT child only", indent);
-                            self.traverse_recursive_debug(
-                                right.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
-                        }
-                        return;
+            for b in 0..NUM_BINS - 1 {
+                running_count += bin_count[b];
+                if bin_count[b] > 0 {
+                    for a in 0..3 {
+                        running_min[a] = running_min[a].min(bin_min[b][a]);
+                        running_max[a] = running_max[a].max(bin_max[b][a]);
                     }
+                }
+                left_count[b] = running_count;
+                left_min[b] = running_min;
+                left_max[b] = running_max;
+            }
 
-                    // Calculate where ray intersects the splitting plane
-                    let t_split = (*split_pos - origin_pos) / dir;
-                    println!(
-                        "{}  t_split = ({:.1} - {:.1}) / {:.6} = {:.6}",
-                        indent, split_pos, origin_pos, dir, t_split
-                    );
+            // Right-sweep and evaluate.
+            let mut r_min = [f32::MAX; 3];
+            let mut r_max = [f32::MIN; 3];
+            let mut r_count = 0u32;
 
-                    // Traverse children based on ray origin position
-                    if origin_pos <= *split_pos {
-                        println!(
-                            "{}  Ray starts in LEFT region, traversing LEFT first",
-                            indent
-                        );
-                        self.traverse_recursive_debug(
-                            left.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            callback,
-                            depth + 1,
-                        );
-                        if t_split >= 0.0 {
-                            println!("{}  t_split >= 0, also traversing RIGHT", indent);
-                            self.traverse_recursive_debug(
-                                right.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
-                        } else {
-                            println!("{}  t_split < 0, NOT traversing RIGHT", indent);
-                        }
-                    } else {
-                        println!(
-                            "{}  Ray starts in RIGHT region, traversing RIGHT first",
-                            indent
-                        );
-                        self.traverse_recursive_debug(
-                            right.as_ref(),
-                            ray_origin,
-                            ray_direction,
-                            callback,
-                            depth + 1,
-                        );
-                        if t_split >= 0.0 {
-                            println!("{}  t_split >= 0, also traversing LEFT", indent);
-                            self.traverse_recursive_debug(
-                                left.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
-                        } else {
-                            println!("{}  t_split < 0, NOT traversing LEFT", indent);
-                        }
+            for b in (0..NUM_BINS - 1).rev() {
+                let rb = b + 1; // right bins start one past the split
+                r_count += bin_count[rb];
+                if bin_count[rb] > 0 {
+                    for a in 0..3 {
+                        r_min[a] = r_min[a].min(bin_min[rb][a]);
+                        r_max[a] = r_max[a].max(bin_max[rb][a]);
                     }
-                } else {
-                    // Just traverse without detailed output for deeper levels
-                    let origin_pos = ray_origin[*axis];
-                    let dir = ray_direction[*axis];
+                }
 
-                    if dir.abs() < 1e-9 {
-                        if origin_pos <= *split_pos {
-                            self.traverse_recursive_debug(
-                                left.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
+                if left_count[b] == 0 || r_count == 0 {
+                    continue;
+                }
+
+                let left_area = aabb_half_area(&left_min[b], &left_max[b]);
+                let right_area = aabb_half_area(&r_min, &r_max);
+                let cost = SAH_TRAVERSAL_COST
+                    + (left_area * left_count[b] as f32 + right_area * r_count as f32)
+                        / parent_area;
+
+                if cost < best_cost {
+                    best_cost = cost;
+                    // Split plane sits between bin b and b+1 in centroid space.
+                    let split_pos = cmin[axis] + (b + 1) as f32 / inv_extent;
+                    best = Some((axis, split_pos));
+                }
+            }
+        }
+
+        best
+    }
+}
+
+/// Unstable in-place partition of `tris` by centroid on `axis` relative to
+/// `split_pos`. Returns the number of elements placed in the left partition.
+fn partition_by_centroid(
+    tris: &mut [u32],
+    centroids: &[[f32; 3]],
+    axis: usize,
+    split_pos: f32,
+) -> usize {
+    let n = tris.len();
+    let mut l = 0;
+    let mut r = n;
+
+    while l < r {
+        if centroids[tris[l] as usize][axis] < split_pos {
+            l += 1;
+        } else {
+            r -= 1;
+            tris.swap(l, r);
+        }
+    }
+
+    l
+}
+
+/// Flat cache-friendly SAH BVH with iterative traversal.
+#[derive(Clone, Debug)]
+pub struct Bvh {
+    pub(crate) nodes: Vec<BvhNode>,
+    pub(crate) tri_indices: Vec<u32>,
+    pub(crate) precomputed: Vec<PrecomputedTri>,
+}
+
+impl Bvh {
+    /// Build a BVH from a slice of triangles.
+    pub fn new(triangles: &[Triangle]) -> Self {
+        let precomputed: Vec<PrecomputedTri> = triangles
+            .iter()
+            .map(|tri| {
+                let v0 = tri.vertices[0];
+                let v1 = tri.vertices[1];
+                let v2 = tri.vertices[2];
+                let edge1 = [v1.x - v0.x, v1.y - v0.y, v1.z - v0.z];
+                let edge2 = [v2.x - v0.x, v2.y - v0.y, v2.z - v0.z];
+                let raw_normal = cross3(&edge1, &edge2);
+                let len = dot3(&raw_normal, &raw_normal).sqrt().max(1e-30);
+                let normal = [
+                    raw_normal[0] / len,
+                    raw_normal[1] / len,
+                    raw_normal[2] / len,
+                ];
+                PrecomputedTri {
+                    v0: [v0.x, v0.y, v0.z],
+                    edge1,
+                    edge2,
+                    normal,
+                }
+            })
+            .collect();
+
+        let (nodes, tri_indices) = BvhBuilder::build(&precomputed);
+        Self {
+            nodes,
+            tri_indices,
+            precomputed,
+        }
+    }
+
+    /// Find the closest triangle intersection.
+    ///
+    /// Returns `(t, triangle_index, normal, u, v)` or `None`.
+    pub fn hit_closest(
+        &self,
+        origin: &[f64; 3],
+        dir: &[f64; 3],
+        inv_dir: &[f64; 3],
+        t_min: f64,
+        t_max: f64,
+    ) -> Option<(f64, usize, [f64; 3], f64, f64)> {
+        if self.nodes.is_empty() {
+            return None;
+        }
+
+        let mut best_t = t_max;
+        let mut best: Option<(f64, usize, [f64; 3], f64, f64)> = None;
+
+        // Explicit traversal stack (depth never exceeds ~50 for typical meshes).
+        let mut stack = [0u32; 64];
+        let mut top = 0usize;
+        stack[top] = 0;
+        top += 1;
+
+        while top > 0 {
+            top -= 1;
+            let node_idx = stack[top] as usize;
+            let node = &self.nodes[node_idx];
+
+            // Re-test with the current (possibly tightened) best_t.
+            if node.intersect_aabb(origin, inv_dir, t_min, best_t).is_none() {
+                continue;
+            }
+
+            if node.is_leaf() {
+                let first = node.right_or_first as usize;
+                let end = first + node.tri_count as usize;
+                for i in first..end {
+                    let tri_idx = self.tri_indices[i] as usize;
+                    if let Some((t, normal, u, v)) =
+                        mt_intersect(&self.precomputed[tri_idx], origin, dir, t_min, best_t)
+                    {
+                        best_t = t;
+                        best = Some((t, tri_idx, normal, u, v));
+                    }
+                }
+            } else {
+                let left_idx = node_idx + 1;
+                let right_idx = node.right_or_first as usize;
+
+                let t_left = self.nodes[left_idx].intersect_aabb(origin, inv_dir, t_min, best_t);
+                let t_right = self.nodes[right_idx].intersect_aabb(origin, inv_dir, t_min, best_t);
+
+                // Push far child first so the near child is popped (processed) first.
+                match (t_left, t_right) {
+                    (None, None) => {}
+                    (Some(_), None) => {
+                        stack[top] = left_idx as u32;
+                        top += 1;
+                    }
+                    (None, Some(_)) => {
+                        stack[top] = right_idx as u32;
+                        top += 1;
+                    }
+                    (Some(tl), Some(tr)) => {
+                        if tl <= tr {
+                            // left is nearer – push right (far) then left (near)
+                            stack[top] = right_idx as u32;
+                            top += 1;
+                            stack[top] = left_idx as u32;
+                            top += 1;
                         } else {
-                            self.traverse_recursive_debug(
-                                right.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
-                        }
-                    } else {
-                        let t_split = (*split_pos - origin_pos) / dir;
-                        if origin_pos <= *split_pos {
-                            self.traverse_recursive_debug(
-                                left.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
-                            if t_split >= 0.0 {
-                                self.traverse_recursive_debug(
-                                    right.as_ref(),
-                                    ray_origin,
-                                    ray_direction,
-                                    callback,
-                                    depth + 1,
-                                );
-                            }
-                        } else {
-                            self.traverse_recursive_debug(
-                                right.as_ref(),
-                                ray_origin,
-                                ray_direction,
-                                callback,
-                                depth + 1,
-                            );
-                            if t_split >= 0.0 {
-                                self.traverse_recursive_debug(
-                                    left.as_ref(),
-                                    ray_origin,
-                                    ray_direction,
-                                    callback,
-                                    depth + 1,
-                                );
-                            }
+                            stack[top] = left_idx as u32;
+                            top += 1;
+                            stack[top] = right_idx as u32;
+                            top += 1;
                         }
                     }
                 }
             }
         }
+
+        best
     }
+
+    /// Shadow-ray query: returns `true` as soon as any intersection is found.
+    pub fn hit_any(
+        &self,
+        origin: &[f64; 3],
+        dir: &[f64; 3],
+        inv_dir: &[f64; 3],
+        t_min: f64,
+        t_max: f64,
+    ) -> bool {
+        if self.nodes.is_empty() {
+            return false;
+        }
+
+        let mut stack = [0u32; 64];
+        let mut top = 0usize;
+        stack[top] = 0;
+        top += 1;
+
+        while top > 0 {
+            top -= 1;
+            let node_idx = stack[top] as usize;
+            let node = &self.nodes[node_idx];
+
+            if node.intersect_aabb(origin, inv_dir, t_min, t_max).is_none() {
+                continue;
+            }
+
+            if node.is_leaf() {
+                let first = node.right_or_first as usize;
+                let end = first + node.tri_count as usize;
+                for i in first..end {
+                    let tri_idx = self.tri_indices[i] as usize;
+                    if mt_intersect_any(&self.precomputed[tri_idx], origin, dir, t_min, t_max) {
+                        return true;
+                    }
+                }
+            } else {
+                // Order doesn't matter for shadow rays – just push both.
+                stack[top] = (node_idx + 1) as u32; // left
+                top += 1;
+                stack[top] = node.right_or_first; // right
+                top += 1;
+            }
+        }
+
+        false
+    }
+}
+
+/// Public wrappers so `ray.rs` can call the MT functions for the brute-force path.
+pub(crate) fn mt_intersect_pub(
+    tri: &PrecomputedTri,
+    origin: &[f64; 3],
+    dir: &[f64; 3],
+    t_min: f64,
+    t_max: f64,
+) -> Option<(f64, [f64; 3], f64, f64)> {
+    mt_intersect(tri, origin, dir, t_min, t_max)
+}
+
+pub(crate) fn mt_intersect_any_pub(
+    tri: &PrecomputedTri,
+    origin: &[f64; 3],
+    dir: &[f64; 3],
+    t_min: f64,
+    t_max: f64,
+) -> bool {
+    mt_intersect_any(tri, origin, dir, t_min, t_max)
 }
 
 /// Immutable mesh object containing triangles
@@ -818,7 +722,7 @@ pub struct Mesh {
     pub triangles: Vec<Triangle>,
     pub bounds_min: Point,
     pub bounds_max: Point,
-    pub kdtree: KdTree,
+    pub(crate) bvh: Bvh,
 }
 
 impl Mesh {
@@ -828,7 +732,11 @@ impl Mesh {
             triangles: Vec::new(),
             bounds_min: Point::new(f64::INFINITY, f64::INFINITY, f64::INFINITY),
             bounds_max: Point::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY),
-            kdtree: KdTree::new(&[], 16, 10), // Empty k-d tree
+            bvh: Bvh {
+                nodes: Vec::new(),
+                tri_indices: Vec::new(),
+                precomputed: Vec::new(),
+            },
         }
     }
 
@@ -1117,10 +1025,9 @@ impl Mesh {
         }
     }
 
-    /// Build k-d tree for accelerating ray intersections
+    /// Build the BVH acceleration structure for this mesh.
     pub fn build_kdtree(&mut self) {
-        // Use reasonable defaults: max depth 16, max 10 triangles per leaf
-        self.kdtree = KdTree::new(&self.triangles, 16, 10);
+        self.bvh = Bvh::new(&self.triangles);
     }
 
     /// Get the number of triangles in the mesh

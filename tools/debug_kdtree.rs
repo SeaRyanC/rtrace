@@ -122,19 +122,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Let's manually check what triangles the k-d tree visits
-    println!("\nTriangles visited by k-d tree (brief debug):");
-    let mut triangle_count = 0;
-    mesh.kdtree
-        .traverse_debug(&ray.origin, ray.direction.as_ref(), |triangle_indices| {
-            triangle_count += triangle_indices.len();
-            println!(
-                "  Leaf with {} triangles: {:?}",
-                triangle_indices.len(),
-                &triangle_indices[..triangle_indices.len().min(10)]
-            );
-        });
-    println!("Total triangles visited by k-d tree: {}", triangle_count);
+    // BVH node count
+    println!("\nBVH stats: {} nodes", mesh.triangle_count() * 2 - 1);
 
     // Let's check if the ray intersects the overall mesh bounds
     let (bounds_min, bounds_max) = mesh.bounds();
