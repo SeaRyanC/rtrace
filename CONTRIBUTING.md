@@ -82,6 +82,8 @@ cargo publish -p rtrace-cli
 
 The npm package is published by [`.github/workflows/npm-publish.yml`](.github/workflows/npm-publish.yml).
 It builds platform-qualified native addons on Linux, macOS, and Windows, assembles
-them into `dist/`, and then runs `npm publish`. Start it manually from GitHub or
-push a `v*` tag. A local `npm publish` only contains the native addon built on
-the current machine.
+them into `dist/`, and then runs `npm publish` using npm Trusted Publishing
+(GitHub Actions OIDC). Configure the npm package's trusted publisher to this
+repository, workflow (`npm-publish.yml`), and environment (`npm-publish`) before
+publishing. Start it manually from GitHub or push a `v*` tag. A local `npm
+publish` only contains the native addon built on the current machine.

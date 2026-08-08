@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -45,13 +45,15 @@ jobs:
     name: Publish package
     needs: build-native
     runs-on: ubuntu-latest
+    environment: npm-publish
     permissions:
       contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
       - uses: actions/download-artifact@v4
         with:
@@ -62,5 +64,3 @@ jobs:
       - run: npm run build:schema
       - run: npm run build:wrapper
       - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
