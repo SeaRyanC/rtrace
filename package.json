@@ -1,6 +1,6 @@
 {
-  "name": "rtrace",
-  "version": "0.1.0",
+  "name": "@searyanc/rtrace",
+  "version": "0.2.0",
   "description": "A minimal Rust library with Node.js bindings",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,6 +14,7 @@
   "scripts": {
     "build": "npx hereby build",
     "build:node": "npx hereby build:node",
+    "build:node:platform": "npx napi build --platform --release --cargo-cwd bindings/node dist",
     "build:schema": "npx hereby schema:compile",
     "build:wrapper": "npx hereby build:wrapper",
     "build:all": "npx hereby build:all",

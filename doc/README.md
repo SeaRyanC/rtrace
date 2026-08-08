@@ -2,6 +2,9 @@
 
 This comprehensive guide covers all features and options available in the rtrace ray tracer, including scene format reference, command-line usage, and visual examples.
 
+For repository setup, local builds, tests, linting, and documentation workflows,
+see [CONTRIBUTING.md](../CONTRIBUTING.md).
+
 ## Table of Contents
 
 1. [Command Line Interface](#command-line-interface)
@@ -1110,4 +1113,3 @@ This explicit metadata structure eliminates stride calculation errors and allows
 - Custom output formats beyond PNG
 - Integration with web-based image processing libraries
 - Batch processing and analysis workflows
-
