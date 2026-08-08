@@ -68,6 +68,7 @@ if (!platformKey) {
 module.exports = require(\`./index.\${platformKey}.node\`);
 `;
         writeFileSync('dist/index.js', jsWrapper);
+        writeFileSync('dist/rtrace.js', readFileSync('scripts/rtrace.js'));
         console.log('Created platform-aware dist/index.js wrapper');
 
         if (!readdirSync('dist').some(f => f.endsWith('.node'))) {

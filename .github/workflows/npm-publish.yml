@@ -33,11 +33,14 @@ jobs:
           targets: ${{ matrix.target }}
       - run: npm ci
       - run: npx napi build --platform --release --target ${{ matrix.target }} --cargo-cwd bindings/node dist
+      - run: cargo build --release -p rtrace-cli --target ${{ matrix.target }}
+      - run: node scripts/prepare-cli.mjs ${{ matrix.target }}
       - uses: actions/upload-artifact@v5
         with:
           name: native-${{ matrix.target }}
           path: |
             dist/*.node
+            dist/rtrace-${{ matrix.target }}*
             dist/index.d.ts
           if-no-files-found: error
 
