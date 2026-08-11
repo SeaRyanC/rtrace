@@ -1,5 +1,7 @@
-use crate::ray::{HitRecord, Ray, World};
-use crate::scene::{hex_to_color, Color, Fog, Light, Material, Point, Texture, Vec3};
+use crate::ray::{apply_perlin_surface_effects, HitRecord, PrimitiveKind, Ray, World};
+use crate::scene::{
+    hex_to_color, Color, Fog, Light, Material, Point, SurfacePerlinNoise, Texture, Vec3,
+};
 use nalgebra::Unit;
 use rand::{Rng, SeedableRng};
 
@@ -30,6 +32,7 @@ pub struct PreparedMaterial {
     pub shininess: f64,
     pub reflectivity: Option<f64>,
     pub texture: Option<PreparedTexture>,
+    pub planar_perlin: Option<SurfacePerlinNoise>,
 }
 
 impl Default for PreparedMaterial {
@@ -42,6 +45,7 @@ impl Default for PreparedMaterial {
             shininess: 32.0,
             reflectivity: None,
             texture: None,
+            planar_perlin: None,
         }
     }
 }
@@ -56,6 +60,7 @@ impl PreparedMaterial {
             shininess: m.shininess,
             reflectivity: m.reflectivity,
             texture: m.texture.as_ref().map(PreparedTexture::from_texture),
+            planar_perlin: m.planar_perlin.clone(),
         }
     }
 }
@@ -63,7 +68,11 @@ impl PreparedMaterial {
 impl PreparedTexture {
     fn from_texture(t: &Texture) -> Self {
         match t {
-            Texture::Grid { line_color, line_width, cell_size } => Self::Grid {
+            Texture::Grid {
+                line_color,
+                line_width,
+                cell_size,
+            } => Self::Grid {
                 line_color: hex_to_color(line_color).unwrap_or(Color::new(0.0, 0.0, 0.0)),
                 line_width: *line_width,
                 cell_size: *cell_size,
@@ -139,14 +148,22 @@ fn apply_prepared_texture<'a>(
     base: &'a PreparedMaterial,
 ) -> (&'a PreparedMaterial, Color) {
     match texture {
-        PreparedTexture::Grid { line_color, line_width, cell_size } => {
+        PreparedTexture::Grid {
+            line_color,
+            line_width,
+            cell_size,
+        } => {
             let half_width = line_width / 2.0;
             let u_mod = (u / cell_size).fract().abs();
             let v_mod = (v / cell_size).fract().abs();
             let on_u_line = u_mod <= half_width || u_mod >= (1.0 - half_width);
             let on_v_line = v_mod <= half_width || v_mod >= (1.0 - half_width);
             // Grid only changes surface color; material shading properties stay the same
-            let color = if on_u_line || on_v_line { *line_color } else { base.color };
+            let color = if on_u_line || on_v_line {
+                *line_color
+            } else {
+                base.color
+            };
             (base, color)
         }
         PreparedTexture::Checkerboard { material_b } => {
@@ -322,9 +339,30 @@ pub fn phong_lighting(
     world: &World,
     seed: u64,
 ) -> Color {
+    let mut shaded_hit = hit_record.clone();
+
+    if shaded_hit.primitive_kind == PrimitiveKind::Plane {
+        if let Some(perlin) = &material.planar_perlin {
+            let (u_axis, v_axis) = tangent_basis_from_normal(&shaded_hit.normal);
+            let u = shaded_hit.point.coords.dot(u_axis.as_ref());
+            let v = shaded_hit.point.coords.dot(v_axis.as_ref());
+            apply_perlin_surface_effects(
+                &mut shaded_hit.normal,
+                &mut shaded_hit.color_modulation,
+                perlin,
+                u,
+                v,
+                u_axis.as_ref(),
+                v_axis.as_ref(),
+                1.0,
+            );
+        }
+    }
+
     // Resolve texture — returns borrowed material + surface color; zero allocation.
     let (effective_mat, material_color) =
-        effective_material_and_color(material, hit_record.texture_coords);
+        effective_material_and_color(material, shaded_hit.texture_coords);
+    let material_color = material_color.component_mul(&shaded_hit.color_modulation);
 
     // Start with ambient lighting
     let mut color =
@@ -334,7 +372,7 @@ pub fn phong_lighting(
     for light in lights {
         let light_contribution = if let Some(diameter) = light.diameter {
             calculate_diffuse_light_contribution(
-                hit_record,
+                &shaded_hit,
                 effective_mat,
                 &light.position,
                 &light.color,
@@ -347,7 +385,7 @@ pub fn phong_lighting(
             )
         } else {
             calculate_point_light_contribution(
-                hit_record,
+                &shaded_hit,
                 effective_mat,
                 &light.position,
                 &light.color,
@@ -359,6 +397,17 @@ pub fn phong_lighting(
         };
 
         color += light_contribution;
+    }
+
+    fn tangent_basis_from_normal(normal: &Unit<Vec3>) -> (Unit<Vec3>, Unit<Vec3>) {
+        let helper = if normal.z.abs() < 0.9 {
+            Vec3::new(0.0, 0.0, 1.0)
+        } else {
+            Vec3::new(1.0, 0.0, 0.0)
+        };
+        let u = Unit::new_normalize(normal.cross(&helper));
+        let v = Unit::new_normalize(normal.cross(u.as_ref()));
+        (u, v)
     }
 
     color
@@ -455,7 +504,10 @@ fn trace_ray_internal(
 
         // Get material for this object — indexed lookup, no clone, no allocation.
         let default_mat = PreparedMaterial::default();
-        let material = params.materials.get(hit.material_index).unwrap_or(&default_mat);
+        let material = params
+            .materials
+            .get(hit.material_index)
+            .unwrap_or(&default_mat);
 
         // Calculate lighting
         let mut color = phong_lighting(
@@ -565,7 +617,8 @@ pub fn ray_color(
         max_depth,
         None,
         seed,
-    ).0
+    )
+    .0
 }
 
 /// Main ray color calculation with optional camera for grid background.
@@ -597,7 +650,8 @@ pub fn ray_color_with_camera(
         max_depth,
         camera,
         seed,
-    ).0
+    )
+    .0
 }
 
 #[cfg(test)]
@@ -687,6 +741,7 @@ mod tests {
             specular: 0.2,
             shininess: 32.0,
             reflectivity: None,
+            planar_perlin: None,
             texture: Some(Texture::Checkerboard {
                 material_b: Box::new(Material {
                     color: "#0000FF".to_string(),
@@ -695,6 +750,7 @@ mod tests {
                     specular: 0.4,
                     shininess: 16.0,
                     reflectivity: None,
+                    planar_perlin: None,
                     texture: None,
                 }),
             }),
@@ -746,6 +802,7 @@ mod tests {
             specular: 0.1,
             shininess: 10.0,
             reflectivity: None,
+            planar_perlin: None,
             texture: Some(Texture::Grid {
                 line_color: "#FF0000".to_string(),
                 line_width: 0.1,

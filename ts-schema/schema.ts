@@ -15,6 +15,15 @@ import { z } from "zod";
 // Utility schemas for common vector types
 const Vector3Schema = z.tuple([z.number(), z.number(), z.number()]);
 const HexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a valid hex color (e.g., #FFFFFF)");
+const SurfacePerlinNoiseSchema = z.object({
+  frequency: z.number().positive().default(8.0).describe("Base noise frequency"),
+  octaves: z.number().int().min(1).default(4).describe("Number of fBm octaves"),
+  persistence: z.number().positive().default(0.5).describe("fBm persistence"),
+  lacunarity: z.number().positive().default(2.0).describe("fBm lacunarity"),
+  seed: z.number().int().min(0).default(0).describe("Deterministic perlin seed"),
+  color_strength: z.number().default(0).describe("Color modulation strength"),
+  bump_strength: z.number().default(0).describe("Bump/normal modulation strength")
+});
 
 // Base material schema (without texture to avoid recursion)
 const BaseMaterialSchema = z.object({
@@ -34,6 +43,15 @@ const MaterialSchema: z.ZodSchema<{
   specular: number;
   shininess: number;
   reflectivity?: number;
+  planar_perlin?: {
+    frequency?: number;
+    octaves?: number;
+    persistence?: number;
+    lacunarity?: number;
+    seed?: number;
+    color_strength?: number;
+    bump_strength?: number;
+  };
   texture?: {
     type: "grid";
     line_color: string;
@@ -44,6 +62,7 @@ const MaterialSchema: z.ZodSchema<{
     material_b: any; // Use any to break recursion
   };
 }> = BaseMaterialSchema.extend({
+  planar_perlin: SurfacePerlinNoiseSchema.optional().describe("Optional procedural perlin for planar surfaces"),
   texture: z.union([
     z.object({
       type: z.literal("grid"),
@@ -90,7 +109,13 @@ const MeshObjectSchema = z.object({
   kind: z.literal("mesh"),
   filename: z.string().describe("Path to STL file (binary or ASCII format)"),
   material: MaterialSchema,
-  transform: TransformSchema
+  transform: TransformSchema,
+  print_direction: Vector3Schema.optional().describe("3D print direction vector (default [0,0,1])"),
+  layer_line_thickness: z.number().positive().optional().describe("Layer line spacing/thickness (default 0.3)"),
+  layer_jitter: z.number().min(0).optional().describe("Layer line normal jitter amount (default 0.05)"),
+  top_bottom_perlin: SurfacePerlinNoiseSchema.extend({
+    depth: z.number().positive().default(0.4).describe("Depth from top/bottom to apply build-plate artifacting")
+  }).optional().describe("Optional perlin artifacting for mesh top/bottom print surfaces")
 });
 
 const ObjectSchema = z.union([

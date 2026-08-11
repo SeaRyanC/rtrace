@@ -72,6 +72,7 @@ pub struct Material {
     pub shininess: f64,
     pub reflectivity: Option<f64>,
     pub texture: Option<Texture>,
+    pub planar_perlin: Option<SurfacePerlinNoise>,
 }
 
 impl Default for Material {
@@ -84,8 +85,76 @@ impl Default for Material {
             shininess: 32.0,
             reflectivity: None,
             texture: None,
+            planar_perlin: None,
         }
     }
+}
+
+/// Perlin settings for procedural surface variation.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SurfacePerlinNoise {
+    #[serde(default = "default_perlin_frequency")]
+    pub frequency: f64,
+    #[serde(default = "default_perlin_octaves")]
+    pub octaves: u32,
+    #[serde(default = "default_perlin_persistence")]
+    pub persistence: f64,
+    #[serde(default = "default_perlin_lacunarity")]
+    pub lacunarity: f64,
+    #[serde(default)]
+    pub seed: u64,
+    #[serde(default)]
+    pub color_strength: f64,
+    #[serde(default)]
+    pub bump_strength: f64,
+}
+
+impl Default for SurfacePerlinNoise {
+    fn default() -> Self {
+        Self {
+            frequency: default_perlin_frequency(),
+            octaves: default_perlin_octaves(),
+            persistence: default_perlin_persistence(),
+            lacunarity: default_perlin_lacunarity(),
+            seed: 0,
+            color_strength: 0.0,
+            bump_strength: 0.0,
+        }
+    }
+}
+
+/// Perlin settings for mesh top/bottom print-surface artifacting.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct MeshTopBottomPerlin {
+    #[serde(flatten)]
+    pub perlin: SurfacePerlinNoise,
+    #[serde(default = "default_top_bottom_depth")]
+    pub depth: f64,
+}
+
+fn default_perlin_frequency() -> f64 {
+    8.0
+}
+fn default_perlin_octaves() -> u32 {
+    4
+}
+fn default_perlin_persistence() -> f64 {
+    0.5
+}
+fn default_perlin_lacunarity() -> f64 {
+    2.0
+}
+fn default_top_bottom_depth() -> f64 {
+    0.4
+}
+fn default_print_direction() -> [f64; 3] {
+    [0.0, 0.0, 1.0]
+}
+fn default_layer_line_thickness() -> f64 {
+    0.3
+}
+fn default_layer_jitter() -> f64 {
+    0.05
 }
 
 /// Texture configuration
@@ -304,6 +373,60 @@ mod tests {
             result_point.z
         );
     }
+
+    #[test]
+    fn test_mesh_print_defaults_from_json() {
+        let json = r##"
+        {
+          "camera": {
+            "kind": "ortho",
+            "position": [0.0, -5.0, 2.0],
+            "target": [0.0, 0.0, 0.0],
+            "up": [0.0, 0.0, 1.0],
+            "width": 10.0,
+            "height": 10.0
+          },
+          "objects": [
+            {
+              "kind": "mesh",
+              "filename": "examples/plus.stl",
+              "material": {
+                "color": "#FFFFFF",
+                "ambient": 0.1,
+                "diffuse": 0.7,
+                "specular": 0.3,
+                "shininess": 32.0
+              }
+            }
+          ],
+          "lights": [],
+          "scene_settings": {
+            "ambient_illumination": {
+              "color": "#FFFFFF",
+              "intensity": 0.1
+            },
+            "background_color": "#000000"
+          }
+        }
+        "##;
+
+        let scene: Scene = serde_json::from_str(json).unwrap();
+        match &scene.objects[0] {
+            Object::Mesh {
+                print_direction,
+                layer_line_thickness,
+                layer_jitter,
+                top_bottom_perlin,
+                ..
+            } => {
+                assert_eq!(*print_direction, [0.0, 0.0, 1.0]);
+                assert!((*layer_line_thickness - 0.3).abs() < 1e-12);
+                assert!((*layer_jitter - 0.05).abs() < 1e-12);
+                assert!(top_bottom_perlin.is_none());
+            }
+            _ => panic!("Expected mesh object"),
+        }
+    }
 }
 
 /// Object types in the scene
@@ -336,6 +459,14 @@ pub enum Object {
         filename: String, // path to STL file
         material: Material,
         transform: Option<Vec<String>>,
+        #[serde(default = "default_print_direction")]
+        print_direction: [f64; 3],
+        #[serde(default = "default_layer_line_thickness")]
+        layer_line_thickness: f64,
+        #[serde(default = "default_layer_jitter")]
+        layer_jitter: f64,
+        #[serde(default)]
+        top_bottom_perlin: Option<MeshTopBottomPerlin>,
         #[serde(skip)]
         mesh_data: Option<crate::mesh::Mesh>, // loaded mesh data
     },

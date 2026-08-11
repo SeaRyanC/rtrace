@@ -2,6 +2,7 @@ pub mod auto_camera;
 pub mod camera;
 pub mod lighting;
 pub mod mesh;
+pub mod noise;
 pub mod outline;
 pub mod rasterizer;
 pub mod ray;
@@ -24,5 +25,6 @@ pub use outline::{OutlineBuffers, OutlineConfig};
 pub use rasterizer::Rasterizer;
 pub use renderer::{AntiAliasingMode, Renderer};
 pub use scene::{
-    AmbientIllumination, Camera, Fog, Light, Material, Object, Scene, SceneSettings, Texture,
+    AmbientIllumination, Camera, Fog, Light, Material, MeshTopBottomPerlin, Object, Scene,
+    SceneSettings, SurfacePerlinNoise, Texture,
 };

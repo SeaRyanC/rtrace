@@ -220,7 +220,11 @@ fn main() {
             let min_samples = args.min_samples.unwrap_or(4);
             let max_samples = args.max_samples.unwrap_or(256);
             let tolerance = args.tolerance.unwrap_or(0.005);
-            AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance }
+            AntiAliasingMode::Dynamic {
+                min_samples,
+                max_samples,
+                tolerance,
+            }
         }
         _ => {
             eprintln!("Error: Invalid anti-aliasing mode '{}'. Valid options are: quincunx, stochastic, dynamic, none", args.anti_aliasing);
@@ -270,13 +274,24 @@ fn main() {
         AntiAliasingMode::Quincunx => "quincunx".to_string(),
         AntiAliasingMode::Stochastic => "stochastic".to_string(),
         AntiAliasingMode::None => "none".to_string(),
-        AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance } => {
-            format!("dynamic (min={}, max={}, tol={:.4})", min_samples, max_samples, tolerance)
+        AntiAliasingMode::Dynamic {
+            min_samples,
+            max_samples,
+            tolerance,
+        } => {
+            format!(
+                "dynamic (min={}, max={}, tol={:.4})",
+                min_samples, max_samples, tolerance
+            )
         }
     };
 
     let samples_desc = match &renderer.anti_aliasing_mode {
-        AntiAliasingMode::Dynamic { min_samples, max_samples, .. } => {
+        AntiAliasingMode::Dynamic {
+            min_samples,
+            max_samples,
+            ..
+        } => {
             format!("{}-{} adaptive", min_samples, max_samples)
         }
         _ => format!("{}", samples),

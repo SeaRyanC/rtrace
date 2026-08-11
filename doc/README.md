@@ -298,9 +298,30 @@ Complex 3D models from STL files (ASCII or binary format), perfect for importing
 {
   "kind": "mesh",
   "filename": "models/example.stl",
-  "material": { /* material properties */ }
+  "material": { /* material properties */ },
+  "print_direction": [0, 0, 1],      // Optional, defaults to Z-up
+  "layer_line_thickness": 0.3,       // Optional, defaults to 0.3
+  "layer_jitter": 0.05,              // Optional, defaults to 0.05
+  "top_bottom_perlin": {             // Optional build-plate artifacting
+    "frequency": 14.0,
+    "octaves": 4,
+    "persistence": 0.5,
+    "lacunarity": 2.0,
+    "seed": 7,
+    "color_strength": 0.08,
+    "bump_strength": 0.18,
+    "depth": 0.4                     // Thickness from top/bottom surface
+  }
 }
 ```
+
+`layer_jitter` applies deterministic, layer-aware normal deflection to simulate printed layer lines.  
+`top_bottom_perlin` applies deterministic Perlin artifacting only near the top and bottom surfaces
+relative to `print_direction`.
+
+**Example:** Printed finish artifacting + textured tabletop
+
+![Print Artifacts Demo](images/print-artifacts-demo.png)
 
 **Example:** STL mesh model
 
@@ -487,6 +508,31 @@ Add mirror-like reflections to create realistic shiny surfaces:
 ### Textures
 
 Add patterns to surfaces. rtrace supports grid patterns and checkerboard patterns for planes:
+
+### Planar Perlin Noise
+
+Use deterministic Perlin noise on planes to break up perfectly smooth surfaces (for example, melamine-like tabletops):
+
+```jsonc
+{
+  "material": {
+    "color": "#E6E6E0",
+    "ambient": 0.2,
+    "diffuse": 0.7,
+    "specular": 0.15,
+    "shininess": 20,
+    "planar_perlin": {
+      "frequency": 10.0,
+      "octaves": 4,
+      "persistence": 0.5,
+      "lacunarity": 2.0,
+      "seed": 42,
+      "color_strength": 0.07,
+      "bump_strength": 0.2
+    }
+  }
+}
+```
 
 #### Grid Texture
 
@@ -1110,4 +1156,3 @@ This explicit metadata structure eliminates stride calculation errors and allows
 - Custom output formats beyond PNG
 - Integration with web-based image processing libraries
 - Batch processing and analysis workflows
-

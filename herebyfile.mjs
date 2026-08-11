@@ -3,16 +3,20 @@ import { spawn } from "child_process";
 import { promisify } from "util";
 import { readdir, access } from "fs/promises";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from "fs";
-import { extname, basename } from "path";
+import { extname, basename, join } from "path";
+import { tmpdir } from "os";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
 
+const cliPath = process.platform === 'win32'
+    ? '.\\target\\release\\rtrace-cli.exe'
+    : './target/release/rtrace-cli';
+
 // Helper function to execute shell commands
 function exec(command, options = {}) {
     return () => new Promise((resolve, reject) => {
-        const [cmd, ...args] = command.split(' ');
-        const child = spawn(cmd, args, {
+        const child = spawn(command, [], {
             stdio: 'inherit',
             shell: true,
             ...options
@@ -277,28 +281,28 @@ export const renderExampleSimple = task({
     name: "render:simple",
     description: "Render simple sphere example",
     dependencies: [buildCli],
-    run: exec("./target/release/rtrace-cli -i examples/simple_sphere.json -o simple_sphere_rendered.png -s 1000")
+    run: exec(`${cliPath} -i examples/simple_sphere.json -o simple_sphere_rendered.png -s 1000`)
 });
 
 export const renderExampleRadial = task({
     name: "render:radial", 
     description: "Render radial spheres example",
     dependencies: [buildCli],
-    run: exec("./target/release/rtrace-cli -i examples/radial_spheres.json -o radial_spheres_rendered.png -s 1000")
+    run: exec(`${cliPath} -i examples/radial_spheres.json -o radial_spheres_rendered.png -s 1000`)
 });
 
 export const renderExamplePlus = task({
     name: "render:plus",
     description: "Render plus perspective example", 
     dependencies: [buildCli],
-    run: exec("./target/release/rtrace-cli -i examples/plus_perspective.json -o plus_perspective_rendered.png -s 1000")
+    run: exec(`${cliPath} -i examples/plus_perspective.json -o plus_perspective_rendered.png -s 1000`)
 });
 
 export const renderExampleEspresso = task({
     name: "render:espresso",
     description: "Render espresso tray example",
     dependencies: [buildCli], 
-    run: exec("./target/release/rtrace-cli -i examples/espresso_tray_top.json -o espresso_tray_rendered.png -s 1000")
+    run: exec(`${cliPath} -i examples/espresso_tray_top.json -o espresso_tray_rendered.png -s 1000`)
 });
 
 export const renderAll = task({
@@ -392,7 +396,7 @@ async function createDocRenderTasks() {
         ).join('')}`;
         
         // Build command with base parameters
-        let command = `./target/release/rtrace-cli -i doc/scenes/${file} -o doc/images/${baseName}.png -s 500`;
+        let command = `${cliPath} -i doc/scenes/${file} -o doc/images/${baseName}.png -s 2400`;
         
         // Add metadata-based parameters if available
         const metadata = docSceneMetadata[file];
@@ -417,7 +421,7 @@ async function createDocRenderTasks() {
             word.charAt(0).toUpperCase() + word.slice(1)
         ).join('')}`;
         
-        const command = `./target/release/rtrace-cli -i doc/scenes/${special.scene} -o doc/images/${special.name}.png -s 500 ${special.params}`;
+        const command = `${cliPath} -i doc/scenes/${special.scene} -o doc/images/${special.name}.png -s 500 ${special.params}`;
         
         docRenderTasks[taskName] = task({
             name: `render:doc:${special.name}`,
@@ -434,29 +438,33 @@ async function createDocRenderTasks() {
             word.charAt(0).toUpperCase() + word.slice(1)
         ).join('')}`;
         
-        let command;
+        let run;
         if (outlineDemo.modifyScene) {
-            // For the no-outline variant, we need to use a scene without outline config
-            // We'll generate it on-the-fly by modifying the scene
+            // For the no-outline variant, modify the scene in JS directly to avoid
+            // platform-specific shell scripting issues (multiline node -e, /tmp paths).
             const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
-            command = `node -e "
-                const fs = require('fs');
-                const scene = JSON.parse(fs.readFileSync('${sceneBasePath}', 'utf8'));
+            const outlineName = outlineDemo.name;
+            const outlineParams = outlineDemo.params;
+            run = async () => {
+                const scene = JSON.parse(readFileSync(sceneBasePath, 'utf8'));
                 if (scene.scene_settings && scene.scene_settings.outline) {
                     delete scene.scene_settings.outline;
                 }
-                fs.writeFileSync('/tmp/${outlineDemo.name}.json', JSON.stringify(scene, null, 2));
-            " && ./target/release/rtrace-cli -i /tmp/${outlineDemo.name}.json -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+                const tmpFile = join(tmpdir(), `${outlineName}.json`);
+                writeFileSync(tmpFile, JSON.stringify(scene, null, 2));
+                await exec(`${cliPath} -i ${tmpFile} -o doc/images/${outlineName}.png -s 500 ${outlineParams}`)();
+            };
         } else {
             const sceneBasePath = outlineDemo.scene.includes('/') ? outlineDemo.scene : `examples/${outlineDemo.scene}`;
-            command = `./target/release/rtrace-cli -i ${sceneBasePath} -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+            const command = `${cliPath} -i ${sceneBasePath} -o doc/images/${outlineDemo.name}.png -s 500 ${outlineDemo.params}`;
+            run = exec(command);
         }
         
         docRenderTasks[taskName] = task({
             name: `render:doc:${outlineDemo.name}`,
             description: outlineDemo.description,
             dependencies: [buildCli],
-            run: exec(command)
+            run
         });
         docDependencies.push(docRenderTasks[taskName]);
     }
@@ -469,7 +477,7 @@ async function createDocRenderTasks() {
         
         const commands = scene.files.map(file => {
             const outputName = basename(file, '.json');
-            return `./target/release/rtrace-cli -i doc/scenes/${file} -o doc/images/${outputName}.png -s 500`;
+            return `${cliPath} -i doc/scenes/${file} -o doc/images/${outputName}.png -s 500`;
         }).join(' && ');
 
         docRenderTasks[taskName] = task({

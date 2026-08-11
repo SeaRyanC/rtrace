@@ -14,8 +14,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Loaded plus.stl with {} triangles", mesh.triangle_count());
 
     // Create two mesh objects: one with k-d tree, one without
-    let mesh_kdtree = MeshObject::new(mesh.clone(), Color::new(1.0, 1.0, 1.0), 0);
-    let mesh_brute_force = MeshObject::new_brute_force(mesh.clone(), Color::new(1.0, 1.0, 1.0), 0);
+    let mesh_kdtree = MeshObject::new(
+        mesh.clone(),
+        Color::new(1.0, 1.0, 1.0),
+        0,
+        [0.0, 0.0, 1.0],
+        0.3,
+        0.05,
+        None,
+    );
+    let mesh_brute_force = MeshObject::new_brute_force(
+        mesh.clone(),
+        Color::new(1.0, 1.0, 1.0),
+        0,
+        [0.0, 0.0, 1.0],
+        0.3,
+        0.05,
+        None,
+    );
 
     // Generate test rays, focusing on axis-aligned rays that are problematic
     let test_rays = generate_test_rays();

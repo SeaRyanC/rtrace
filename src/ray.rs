@@ -1,5 +1,6 @@
 use crate::mesh::Mesh;
-use crate::scene::{Color, Point, Vec3};
+use crate::noise;
+use crate::scene::{Color, MeshTopBottomPerlin, Point, SurfacePerlinNoise, Vec3};
 use nalgebra::Unit;
 
 /// A ray in 3D space
@@ -32,6 +33,15 @@ impl Ray {
 }
 
 /// Result of a ray-object intersection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrimitiveKind {
+    Sphere,
+    Plane,
+    Cube,
+    Mesh,
+}
+
+/// Result of a ray-object intersection
 #[derive(Debug, Clone)]
 pub struct HitRecord {
     pub point: Point,
@@ -41,6 +51,8 @@ pub struct HitRecord {
     pub material_color: Color,
     pub material_index: usize,
     pub texture_coords: Option<(f64, f64)>, // u, v coordinates for texturing
+    pub color_modulation: Color,
+    pub primitive_kind: PrimitiveKind,
 }
 
 impl HitRecord {
@@ -67,6 +79,8 @@ impl HitRecord {
             material_color,
             material_index,
             texture_coords: None,
+            color_modulation: Color::new(1.0, 1.0, 1.0),
+            primitive_kind: PrimitiveKind::Sphere,
         }
     }
 }
@@ -169,6 +183,7 @@ impl Intersectable for Plane {
             self.material_color,
             self.material_index,
         );
+        hit_record.primitive_kind = PrimitiveKind::Plane;
 
         // Calculate texture coordinates for the plane (simple projection)
         let u_axis = if self.normal.x.abs() > 0.9 {
@@ -451,6 +466,20 @@ mod tests {
         assert_eq!(min, Point::new(4.0, 2.0, 1.0)); // center - half_size
         assert_eq!(max, Point::new(6.0, 4.0, 3.0)); // center + half_size
     }
+
+    #[test]
+    fn test_layer_random_is_deterministic() {
+        let a = layer_random_signed(12, 0xAA55_1020);
+        let b = layer_random_signed(12, 0xAA55_1020);
+        assert!((a - b).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_adjacent_layers_are_decorrelated() {
+        let a = layer_random_signed(100, 0x13C7_4D89);
+        let b = layer_random_signed(101, 0x13C7_4D89);
+        assert!((a - b).abs() > 1e-6);
+    }
 }
 
 impl Intersectable for Cube {
@@ -531,14 +560,16 @@ impl Intersectable for Cube {
             normal_transform * normal
         };
 
-        Some(HitRecord::new(
+        let mut hit_record = HitRecord::new(
             world_hit_point,
             world_normal,
             t,
             ray,
             self.material_color,
             self.material_index,
-        ))
+        );
+        hit_record.primitive_kind = PrimitiveKind::Cube;
+        Some(hit_record)
     }
 
     fn material_index(&self) -> usize {
@@ -553,26 +584,113 @@ pub struct MeshObject {
     pub material_index: usize,
     /// When false, uses brute-force intersection (useful for validation).
     pub use_bvh: bool,
+    pub print_effects: MeshPrintEffects,
+}
+
+#[derive(Clone)]
+pub struct MeshPrintEffects {
+    pub print_direction: Unit<Vec3>,
+    pub layer_line_thickness: f64,
+    pub layer_jitter: f64,
+    pub top_bottom_perlin: Option<MeshTopBottomPerlin>,
+    pub print_u_axis: Unit<Vec3>,
+    pub print_v_axis: Unit<Vec3>,
+    pub min_projection: f64,
+    pub max_projection: f64,
 }
 
 impl MeshObject {
-    pub fn new(mesh: Mesh, material_color: Color, material_index: usize) -> Self {
+    pub fn new(
+        mesh: Mesh,
+        material_color: Color,
+        material_index: usize,
+        print_direction: [f64; 3],
+        layer_line_thickness: f64,
+        layer_jitter: f64,
+        top_bottom_perlin: Option<MeshTopBottomPerlin>,
+    ) -> Self {
+        let print_effects = MeshPrintEffects::from_mesh(
+            &mesh,
+            print_direction,
+            layer_line_thickness,
+            layer_jitter,
+            top_bottom_perlin,
+        );
         Self {
             mesh,
             material_color,
             material_index,
             use_bvh: true,
+            print_effects,
         }
     }
 
     /// Create a MeshObject that always uses brute-force intersection (for testing).
-    pub fn new_brute_force(mesh: Mesh, material_color: Color, material_index: usize) -> Self {
+    pub fn new_brute_force(
+        mesh: Mesh,
+        material_color: Color,
+        material_index: usize,
+        print_direction: [f64; 3],
+        layer_line_thickness: f64,
+        layer_jitter: f64,
+        top_bottom_perlin: Option<MeshTopBottomPerlin>,
+    ) -> Self {
+        let print_effects = MeshPrintEffects::from_mesh(
+            &mesh,
+            print_direction,
+            layer_line_thickness,
+            layer_jitter,
+            top_bottom_perlin,
+        );
         Self {
             mesh,
             material_color,
             material_index,
             use_bvh: false,
+            print_effects,
         }
+    }
+
+    fn apply_mesh_surface_effects(&self, hit: &mut HitRecord) {
+        hit.primitive_kind = PrimitiveKind::Mesh;
+        let effects = &self.print_effects;
+        let axis_coord = hit.point.coords.dot(effects.print_direction.as_ref());
+        let u = hit.point.coords.dot(effects.print_u_axis.as_ref());
+        let v = hit.point.coords.dot(effects.print_v_axis.as_ref());
+
+        let mut normal = hit.normal;
+        apply_layer_line_deflection(
+            &mut normal,
+            hit.normal,
+            &effects.print_direction,
+            effects.layer_line_thickness,
+            effects.layer_jitter,
+            axis_coord,
+            u,
+            v,
+        );
+
+        if let Some(top_bottom) = &effects.top_bottom_perlin {
+            let distance_to_bottom = axis_coord - effects.min_projection;
+            let distance_to_top = effects.max_projection - axis_coord;
+            let distance = distance_to_bottom.min(distance_to_top);
+            let depth = top_bottom.depth.max(1e-6);
+            if distance <= depth {
+                let blend = (1.0 - (distance / depth)).clamp(0.0, 1.0);
+                apply_perlin_surface_effects(
+                    &mut normal,
+                    &mut hit.color_modulation,
+                    &top_bottom.perlin,
+                    u,
+                    v,
+                    effects.print_u_axis.as_ref(),
+                    effects.print_v_axis.as_ref(),
+                    blend,
+                );
+            }
+        }
+
+        hit.normal = normal;
     }
 
     /// Build a HitRecord from a BVH hit result.
@@ -587,10 +705,198 @@ impl MeshObject {
     ) -> HitRecord {
         let point = ray.at(t);
         let normal = Vec3::new(normal_arr[0], normal_arr[1], normal_arr[2]);
-        let mut hit_record =
-            HitRecord::new(point, normal, t, ray, self.material_color, self.material_index);
+        let mut hit_record = HitRecord::new(
+            point,
+            normal,
+            t,
+            ray,
+            self.material_color,
+            self.material_index,
+        );
         hit_record.texture_coords = Some((u, v));
+        self.apply_mesh_surface_effects(&mut hit_record);
         hit_record
+    }
+}
+
+impl MeshPrintEffects {
+    fn from_mesh(
+        mesh: &Mesh,
+        print_direction: [f64; 3],
+        layer_line_thickness: f64,
+        layer_jitter: f64,
+        top_bottom_perlin: Option<MeshTopBottomPerlin>,
+    ) -> Self {
+        let mut dir = Vec3::new(print_direction[0], print_direction[1], print_direction[2]);
+        if dir.magnitude_squared() < 1e-12 {
+            dir = Vec3::new(0.0, 0.0, 1.0);
+        }
+        let print_direction = Unit::new_normalize(dir);
+        let (print_u_axis, print_v_axis) = tangent_basis_from_direction(&print_direction);
+
+        let mut min_projection = f64::INFINITY;
+        let mut max_projection = f64::NEG_INFINITY;
+
+        for tri in &mesh.triangles {
+            for v in &tri.vertices {
+                let projection = v.coords.dot(print_direction.as_ref());
+                min_projection = min_projection.min(projection);
+                max_projection = max_projection.max(projection);
+            }
+        }
+
+        if !min_projection.is_finite() || !max_projection.is_finite() {
+            min_projection = 0.0;
+            max_projection = 0.0;
+        }
+
+        Self {
+            print_direction,
+            layer_line_thickness: layer_line_thickness.max(1e-4),
+            layer_jitter: layer_jitter.max(0.0),
+            top_bottom_perlin,
+            print_u_axis,
+            print_v_axis,
+            min_projection,
+            max_projection,
+        }
+    }
+}
+
+fn tangent_basis_from_direction(direction: &Unit<Vec3>) -> (Unit<Vec3>, Unit<Vec3>) {
+    let helper = if direction.z.abs() < 0.9 {
+        Vec3::new(0.0, 0.0, 1.0)
+    } else {
+        Vec3::new(1.0, 0.0, 0.0)
+    };
+    let u = Unit::new_normalize(direction.cross(&helper));
+    let v = Unit::new_normalize(direction.cross(u.as_ref()));
+    (u, v)
+}
+
+#[inline]
+fn mix64(mut x: u64) -> u64 {
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58476D1CE4E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D049BB133111EB);
+    x ^ (x >> 31)
+}
+
+#[inline]
+fn layer_random_signed(layer_index: i64, salt: u64) -> f64 {
+    let bits = mix64((layer_index as u64) ^ salt);
+    let unit = bits as f64 / u64::MAX as f64; // [0, 1]
+    unit * 2.0 - 1.0 // [-1, 1]
+}
+
+fn apply_layer_line_deflection(
+    shading_normal: &mut Unit<Vec3>,
+    geometric_normal: Unit<Vec3>,
+    print_direction: &Unit<Vec3>,
+    layer_line_thickness: f64,
+    layer_jitter: f64,
+    axis_coord: f64,
+    u: f64,
+    v: f64,
+) {
+    if layer_jitter <= 0.0 {
+        return;
+    }
+
+    let layer_coord = axis_coord / layer_line_thickness;
+    let layer_index = layer_coord.floor() as i64;
+    let layer_pos = layer_coord.rem_euclid(1.0);
+
+    // Per-layer deterministic jitter: each layer gets an independent random offset.
+    let ridge_offset = layer_random_signed(layer_index, 0xA4C9_11D2_7F31_DA4B) * 0.22;
+    let shifted = (layer_pos + ridge_offset).rem_euclid(1.0);
+    let dist_to_boundary = shifted.min(1.0 - shifted);
+    let ridge_strength = (1.0 - (dist_to_boundary * 2.0)).clamp(0.0, 1.0);
+
+    let mut tangent = print_direction.cross(geometric_normal.as_ref());
+    if tangent.magnitude_squared() < 1e-12 {
+        let (u_axis, _) = tangent_basis_from_direction(print_direction);
+        tangent = *u_axis.as_ref();
+    } else {
+        tangent = tangent.normalize();
+    }
+
+    let layer_bias = layer_random_signed(layer_index, 0x8B7D_4F1A_61E2_4C93);
+    let layer_seed = mix64((layer_index as u64) ^ 0xC2B2_AE35_87F4_A9D1);
+    let micro_noise = noise::fbm2(
+        u * 2.5 + layer_bias * 1.3,
+        v * 2.5 - layer_bias * 0.9,
+        layer_seed,
+        2,
+        0.5,
+        2.0,
+    ) * 0.2;
+    let layer_noise = (layer_bias * 0.85 + micro_noise * 0.15).clamp(-1.0, 1.0);
+
+    let deflection = layer_jitter * ridge_strength * layer_noise * 0.35;
+    let candidate = Unit::new_normalize(*geometric_normal.as_ref() + tangent * deflection);
+    *shading_normal = if candidate.dot(geometric_normal.as_ref()) >= 0.0 {
+        candidate
+    } else {
+        Unit::new_normalize(-candidate.as_ref())
+    };
+}
+
+pub fn apply_perlin_surface_effects(
+    shading_normal: &mut Unit<Vec3>,
+    color_modulation: &mut Color,
+    perlin: &SurfacePerlinNoise,
+    u: f64,
+    v: f64,
+    tangent_u: &Vec3,
+    tangent_v: &Vec3,
+    blend: f64,
+) {
+    let freq = perlin.frequency.max(1e-6);
+    let octaves = perlin.octaves.max(1);
+    let persistence = perlin.persistence;
+    let lacunarity = perlin.lacunarity;
+    let base_noise = noise::fbm2(
+        u * freq,
+        v * freq,
+        perlin.seed,
+        octaves,
+        persistence,
+        lacunarity,
+    );
+
+    if perlin.color_strength != 0.0 {
+        let tint = (1.0 + base_noise * perlin.color_strength * blend).max(0.0);
+        *color_modulation = color_modulation.component_mul(&Color::new(tint, tint, tint));
+    }
+
+    if perlin.bump_strength != 0.0 {
+        let eps = 0.01;
+        let du = (noise::fbm2(
+            (u + eps) * freq,
+            v * freq,
+            perlin.seed,
+            octaves,
+            persistence,
+            lacunarity,
+        ) - base_noise)
+            / eps;
+        let dv = (noise::fbm2(
+            u * freq,
+            (v + eps) * freq,
+            perlin.seed,
+            octaves,
+            persistence,
+            lacunarity,
+        ) - base_noise)
+            / eps;
+
+        let bump = (*tangent_u * du + *tangent_v * dv) * (perlin.bump_strength * blend * 0.2);
+        let candidate = Unit::new_normalize(*shading_normal.as_ref() + bump);
+        if candidate.dot(shading_normal.as_ref()) >= 0.0 {
+            *shading_normal = candidate;
+        }
     }
 }
 
@@ -598,7 +904,11 @@ impl Intersectable for MeshObject {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
         let origin = [ray.origin.x, ray.origin.y, ray.origin.z];
         let dir = [ray.direction.x, ray.direction.y, ray.direction.z];
-        let inv = [ray.inv_direction.x, ray.inv_direction.y, ray.inv_direction.z];
+        let inv = [
+            ray.inv_direction.x,
+            ray.inv_direction.y,
+            ray.inv_direction.z,
+        ];
 
         if self.use_bvh {
             self.mesh
@@ -631,7 +941,11 @@ impl Intersectable for MeshObject {
     fn any_hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> bool {
         let origin = [ray.origin.x, ray.origin.y, ray.origin.z];
         let dir = [ray.direction.x, ray.direction.y, ray.direction.z];
-        let inv = [ray.inv_direction.x, ray.inv_direction.y, ray.inv_direction.z];
+        let inv = [
+            ray.inv_direction.x,
+            ray.inv_direction.y,
+            ray.inv_direction.z,
+        ];
 
         if self.use_bvh {
             self.mesh.bvh.hit_any(&origin, &dir, &inv, t_min, t_max)
@@ -646,7 +960,6 @@ impl Intersectable for MeshObject {
         }
     }
 }
-
 
 /// Collection of intersectable objects
 #[derive(Default)]

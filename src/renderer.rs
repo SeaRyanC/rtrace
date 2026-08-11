@@ -303,10 +303,16 @@ impl Renderer {
 
     pub fn render(&self, scene: &Scene) -> Result<RgbImage, Box<dyn std::error::Error>> {
         // Validate samples parameter
-        if self.samples == 0 && !matches!(self.anti_aliasing_mode, AntiAliasingMode::Dynamic { .. }) {
+        if self.samples == 0 && !matches!(self.anti_aliasing_mode, AntiAliasingMode::Dynamic { .. })
+        {
             return Err("Samples must be greater than 0".into());
         }
-        if let AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance } = &self.anti_aliasing_mode {
+        if let AntiAliasingMode::Dynamic {
+            min_samples,
+            max_samples,
+            tolerance,
+        } = &self.anti_aliasing_mode
+        {
             if *min_samples < 2 {
                 return Err("Dynamic mode min_samples must be at least 2".into());
             }
@@ -483,6 +489,10 @@ impl Renderer {
                     mesh_data,
                     material,
                     transform,
+                    print_direction,
+                    layer_line_thickness,
+                    layer_jitter,
+                    top_bottom_perlin,
                     ..
                 } => {
                     if let Some(mesh) = mesh_data {
@@ -516,9 +526,25 @@ impl Renderer {
 
                         let color = hex_to_color(&material.color)?;
                         let mesh_object = if self.use_kdtree {
-                            Box::new(MeshObject::new(transformed_mesh, color, index))
+                            Box::new(MeshObject::new(
+                                transformed_mesh,
+                                color,
+                                index,
+                                *print_direction,
+                                *layer_line_thickness,
+                                *layer_jitter,
+                                top_bottom_perlin.clone(),
+                            ))
                         } else {
-                            Box::new(MeshObject::new_brute_force(transformed_mesh, color, index))
+                            Box::new(MeshObject::new_brute_force(
+                                transformed_mesh,
+                                color,
+                                index,
+                                *print_direction,
+                                *layer_line_thickness,
+                                *layer_jitter,
+                                top_bottom_perlin.clone(),
+                            ))
                         };
                         world.add(mesh_object);
                         prepared_materials.push(PreparedMaterial::from_material(material));
@@ -535,19 +561,12 @@ impl Renderer {
         };
 
         // Pre-build all scene data once — no more per-pixel String allocation or hex parsing.
-        let prepared_lights: Vec<PreparedLight> = scene
-            .lights
-            .iter()
-            .map(PreparedLight::from_light)
-            .collect();
+        let prepared_lights: Vec<PreparedLight> =
+            scene.lights.iter().map(PreparedLight::from_light).collect();
         let ambient = &scene.scene_settings.ambient_illumination;
         let ambient_color = hex_to_color(&ambient.color).unwrap_or(Color::new(1.0, 1.0, 1.0));
         let ambient_intensity = ambient.intensity;
-        let prepared_fog = scene
-            .scene_settings
-            .fog
-            .as_ref()
-            .map(PreparedFog::from_fog);
+        let prepared_fog = scene.scene_settings.fog.as_ref().map(PreparedFog::from_fog);
 
         let render_context = RenderContext {
             lights: &prepared_lights,
@@ -669,8 +688,11 @@ impl Renderer {
                     .wrapping_add((x as u64).wrapping_mul(0x85EBCA6B))
                     .wrapping_add((y as u64).wrapping_mul(0xC2B2AE35));
 
-                let color = if let AntiAliasingMode::Dynamic { min_samples, max_samples, tolerance } =
-                    &self.anti_aliasing_mode
+                let color = if let AntiAliasingMode::Dynamic {
+                    min_samples,
+                    max_samples,
+                    tolerance,
+                } = &self.anti_aliasing_mode
                 {
                     // Adaptive sampling: accumulate samples until the standard error of the mean
                     // drops below `tolerance` or `max_samples` is reached.
@@ -713,8 +735,7 @@ impl Renderer {
 
                         sample_num += 1;
                         if sample_num >= *min_samples
-                            && (sample_num >= *max_samples
-                                || acc.max_std_error() <= *tolerance)
+                            && (sample_num >= *max_samples || acc.max_std_error() <= *tolerance)
                         {
                             break;
                         }
@@ -1220,6 +1241,7 @@ mod tests {
                 shininess: 1.0,
                 reflectivity: None,
                 texture: None,
+                planar_perlin: None,
             },
             transform: None,
         });
@@ -1469,7 +1491,15 @@ endsolid test";
 
         // Create mesh object and test ray intersection
         let material_color = Color::new(1.0, 0.0, 0.0);
-        let mesh_object = MeshObject::new(scaled_mesh, material_color, 0);
+        let mesh_object = MeshObject::new(
+            scaled_mesh,
+            material_color,
+            0,
+            [0.0, 0.0, 1.0],
+            0.3,
+            0.05,
+            None,
+        );
 
         // Create a ray that should hit the scaled mesh
         // After 8x scaling, triangle vertices are at (-8,-8,0), (8,-8,0), (0,8,0)

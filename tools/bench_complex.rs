@@ -4,7 +4,10 @@ use std::time::Instant;
 fn make_scene() -> Scene {
     let json = format!(
         r#"{{"camera":{{"kind":"perspective","position":[200,-200,150],"target":[0,0,40],"up":[0,0,1],"fov":45,"width":10,"height":7.5}},"objects":[{{"kind":"mesh","filename":"examples/Espresso Tray.stl","material":{{"color":"{cg}","ambient":0.1,"diffuse":0.8,"specular":0.5,"shininess":32}}}}],"lights":[{{"position":[200,-100,300],"color":"{cw}","intensity":1.0}},{{"position":[-100,200,200],"color":"{cl}","intensity":0.5}}],"scene_settings":{{"ambient_illumination":{{"color":"{cw}","intensity":0.2}},"background_color":"{cb}"}}}}"#,
-        cg = "#AAAAAA", cw = "#FFFFFF", cl = "#AAFFAA", cb = "#112233"
+        cg = "#AAAAAA",
+        cw = "#FFFFFF",
+        cl = "#AAFFAA",
+        cb = "#112233"
     );
     Scene::from_json_str(&json).expect("parse failed")
 }

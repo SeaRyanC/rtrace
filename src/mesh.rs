@@ -132,7 +132,13 @@ impl BvhNode {
     /// Ray–AABB slab test (f64, kept for reference). Returns `t_near` on a hit.
     #[inline]
     #[allow(dead_code)]
-    pub fn intersect_aabb(&self, origin: &[f64; 3], inv_dir: &[f64; 3], t_min: f64, best_t: f64) -> Option<f64> {
+    pub fn intersect_aabb(
+        &self,
+        origin: &[f64; 3],
+        inv_dir: &[f64; 3],
+        t_min: f64,
+        best_t: f64,
+    ) -> Option<f64> {
         let mut t_near = t_min;
         let mut t_far = best_t;
 
@@ -305,7 +311,8 @@ impl BvhBuilder {
         self.nodes.push(BvhNode::default()); // placeholder
 
         // Compute tight AABB over triangles in this node.
-        let (aabb_min, aabb_max) = Self::compute_aabb(&self.tri_indices[start..start + count], precomputed);
+        let (aabb_min, aabb_max) =
+            Self::compute_aabb(&self.tri_indices[start..start + count], precomputed);
 
         if count <= MAX_LEAF_TRIS {
             // Small enough to be a leaf without evaluating SAH.
@@ -634,7 +641,10 @@ impl Bvh {
             let node = &self.nodes[node_idx];
 
             // Re-test with the current (possibly tightened) best_t in f32.
-            if node.intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, best_t as f32).is_none() {
+            if node
+                .intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, best_t as f32)
+                .is_none()
+            {
                 continue;
             }
 
@@ -654,8 +664,18 @@ impl Bvh {
                 let left_idx = node_idx + 1;
                 let right_idx = node.right_or_first as usize;
 
-                let t_left = self.nodes[left_idx].intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, best_t as f32);
-                let t_right = self.nodes[right_idx].intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, best_t as f32);
+                let t_left = self.nodes[left_idx].intersect_aabb_f32(
+                    &origin_f32,
+                    &inv_dir_f32,
+                    t_min_f32,
+                    best_t as f32,
+                );
+                let t_right = self.nodes[right_idx].intersect_aabb_f32(
+                    &origin_f32,
+                    &inv_dir_f32,
+                    t_min_f32,
+                    best_t as f32,
+                );
 
                 // Push far child first so the near child is popped (processed) first.
                 match (t_left, t_right) {
@@ -718,7 +738,10 @@ impl Bvh {
             let node_idx = stack[top] as usize;
             let node = &self.nodes[node_idx];
 
-            if node.intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, t_max_f32).is_none() {
+            if node
+                .intersect_aabb_f32(&origin_f32, &inv_dir_f32, t_min_f32, t_max_f32)
+                .is_none()
+            {
                 continue;
             }
 
@@ -828,11 +851,27 @@ impl Mesh {
 
     /// Check if STL file is ASCII format by looking for ASCII markers
     fn is_ascii_stl(file: &mut File) -> Result<bool, Box<dyn std::error::Error>> {
+        // Check if the file size matches the binary STL formula (80 header + 4 count + N*50).
+        // If so, it's binary regardless of the "solid" header text.
+        let file_size = file.seek(SeekFrom::End(0))?;
+        file.seek(SeekFrom::Start(80))?;
+        let mut count_buf = [0u8; 4];
+        if file.read_exact(&mut count_buf).is_ok() {
+            let triangle_count = u32::from_le_bytes(count_buf) as u64;
+            if file_size == 84 + triangle_count * 50 {
+                return Ok(false);
+            }
+        }
+        file.seek(SeekFrom::Start(0))?;
+
         let reader = BufReader::new(file);
         let mut line_count = 0;
 
         for line in reader.lines() {
-            let line = line?;
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => return Ok(false), // binary data, not ASCII
+            };
             line_count += 1;
 
             if line_count > 10 {

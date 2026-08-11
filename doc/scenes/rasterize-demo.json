@@ -47,7 +47,7 @@
     },
     {
       "kind": "mesh",
-      "filename": "icosahedron.stl",
+      "filename": "../../examples/icosahedron.stl",
       "material": {
         "color": "#4444FF",
         "ambient": 0.1,
