@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "rtrace"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 description = "A minimal Rust library with Node.js and WASM bindings"
 license = "MIT"
@@ -24,6 +24,7 @@ image = "0.24"
 nalgebra = "0.33"
 rayon = "1.8"
 rand = "0.8"
+clap = "4.5.53"
 
 [profile.release]
 opt-level = 3

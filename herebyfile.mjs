@@ -52,16 +52,30 @@ function createWrappers() {
         ensureDir('dist');
         ensureDir('dist/schema');
 
-        // Find the .node file in dist/ and create index.js wrapper
-        const distFiles = readdirSync('dist');
-        const nodeFile = distFiles.find(f => f.endsWith('.node'));
+        // Select the native addon for the current runtime. The platform-qualified
+        // names allow one package to contain artifacts for several platforms.
+        const jsWrapper = `const { platform, arch } = process;
+const libc = platform === 'linux' && process.report?.getReport().header.glibcVersionRuntime ? 'gnu' : 'musl';
+const platformKey = {
+  'darwin-arm64': 'darwin-arm64',
+  'darwin-x64': 'darwin-x64',
+  'linux-arm64': \`linux-arm64-\${libc}\`,
+  'linux-x64': \`linux-x64-\${libc}\`,
+  'win32-arm64': 'win32-arm64-msvc',
+  'win32-x64': 'win32-x64-msvc',
+}[\`\${platform}-\${arch}\`];
 
-        if (nodeFile) {
-            // Create a JS wrapper that exports the native module
-            const jsWrapper = `module.exports = require('./${nodeFile}');`;
-            writeFileSync('dist/index.js', jsWrapper);
-            console.log('Created dist/index.js wrapper');
-        } else {
+if (!platformKey) {
+  throw new Error(\`Unsupported platform: \${platform}-\${arch}\`);
+}
+
+module.exports = require(\`./index.\${platformKey}.node\`);
+`;
+        writeFileSync('dist/index.js', jsWrapper);
+        writeFileSync('dist/rtrace.js', readFileSync('scripts/rtrace.js'));
+        console.log('Created platform-aware dist/index.js wrapper');
+
+        if (!readdirSync('dist').some(f => f.endsWith('.node'))) {
             throw new Error('No .node file found in dist/ directory');
         }
 
@@ -186,7 +200,7 @@ export const buildCli = task({
 export const buildNode = task({
     name: "build:node",
     description: "Build Node.js bindings", 
-    run: exec("npx napi build --release --cargo-cwd bindings/node dist")
+    run: exec("npx napi build --platform --release --cargo-cwd bindings/node dist")
 });
 
 export const buildWrapper = task({

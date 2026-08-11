@@ -24,8 +24,8 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
 
 |:---:|:---:|
 |--|--|
-| ![cg](showcase/crystal_garden.png) | ![as](showcase/architectural_study.png) |
-| ![da](showcase/dreamy_atmosphere.png) | ![tp](showcase/technical_precision.png) |
+| ![Radial spheres](examples/radial_spheres_800x600.png) | ![Espresso tray](examples/espresso_tray_perspective_fixed_800x600.png) |
+| ![Fog scene](examples/fog_scene_800x600.png) | ![Icosahedron](examples/icosahedron_perspective_800x600.png) |
 
 ## Project Structure
 
@@ -336,66 +336,10 @@ The `examples/` directory contains several demonstration scenes:
 
 Each example includes both the JSON scene file and rendered PNG output at 800x600 resolution.
 
-## Development
+## Contributing and local development
 
-### Prerequisites
-
-- [Rust](https://rustup.rs/) (latest stable)
-- [Node.js](https://nodejs.org/) (v16+) - only for Node.js bindings
-
-### Building
-
-```bash
-# Build all components
-cargo build --workspace
-
-# Build specific components
-cargo build -p rtrace           # Core library
-cargo build -p rtrace-cli       # CLI tool
-cargo build -p rtrace-node      # Node.js bindings
-```
-
-### Testing
-
-```bash
-# Run all tests
-cargo test --workspace
-
-# Test specific component
-cargo test -p rtrace
-```
-
-### Linting
-
-```bash
-# Check formatting
-cargo fmt --check
-
-# Run clippy
-cargo clippy --workspace -- -D warnings
-```
-
-## Package Distribution
-
-### Rust Crates
-
-```bash
-# Publish core library
-cargo publish -p rtrace
-
-# Publish CLI
-cargo publish -p rtrace-cli
-```
-
-### npm Package
-
-```bash
-# Build all bindings
-npm run build
-
-# Publish to npm
-npm publish
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, build, test, lint, documentation,
+and pull request instructions.
 
 ## Technical Details
 
@@ -431,35 +375,9 @@ The ray tracer supports:
 - Grid texture patterns for planes
 - Future-proofed design for triangle mesh support
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass: `cargo test --workspace`
-6. Format your code: `cargo fmt`
-7. Run clippy: `cargo clippy --workspace -- -D warnings`
-8. Submit a pull request
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## Troubleshooting
-
-### Common Issues
-
-**Build Errors:**
-- Ensure you have the latest stable Rust: `rustup update stable`
-- Clear build cache: `cargo clean`
-
-**Node.js Binding Issues:**
-- Make sure you have the correct Node.js version (v16+)
-- Rebuild bindings: `napi build --platform --release`
-
-### Getting Help
-
-- Open an issue on [GitHub](https://github.com/SeaRyanC/rtrace/issues)
-- Check existing issues for similar problems
+For questions or bug reports, [open an issue on GitHub](https://github.com/SeaRyanC/rtrace/issues).
 - Provide detailed error messages and system information
