@@ -5,6 +5,8 @@ export type MenuCommand =
   | "open"
   | "save"
   | "save-as"
+  | "close"
+  | "format"
   | "render"
   | "cancel-render"
   | "rasterize"

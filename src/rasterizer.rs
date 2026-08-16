@@ -34,11 +34,11 @@ pub struct Rasterizer {
 
 /// Tessellated triangle with world coordinates and material
 #[derive(Debug, Clone)]
-struct WorldTriangle {
+struct WorldTriangle<'a> {
     pub vertices: [Point; 3],
     pub normal: Vec3,
     pub color: Color,
-    pub material: Material,
+    pub material: &'a Material,
 }
 
 impl Rasterizer {
@@ -82,7 +82,7 @@ impl Rasterizer {
                         Point::new(center[0], center[1], center[2]),
                         *radius,
                         color,
-                        material.clone(),
+                        material,
                     );
                     apply_transforms_and_collect(&mut triangles, sphere_tris, transform);
                 }
@@ -97,7 +97,7 @@ impl Rasterizer {
                         Point::new(center[0], center[1], center[2]),
                         Vec3::new(size[0], size[1], size[2]),
                         color,
-                        material.clone(),
+                        material,
                     );
                     apply_transforms_and_collect(&mut triangles, cube_tris, transform);
                 }
@@ -112,7 +112,7 @@ impl Rasterizer {
                         Point::new(point[0], point[1], point[2]),
                         Vec3::new(normal[0], normal[1], normal[2]),
                         color,
-                        material.clone(),
+                        material,
                     );
                     apply_transforms_and_collect(&mut triangles, plane_tris, transform);
                 }
@@ -124,9 +124,13 @@ impl Rasterizer {
                 } => {
                     if let Some(mesh) = mesh_data {
                         let color = hex_to_color(&material.color)?;
-                        let mesh_tris =
-                            convert_mesh_to_world_triangles(mesh, color, material.clone());
-                        apply_transforms_and_collect(&mut triangles, mesh_tris, transform);
+                        append_mesh_world_triangles(
+                            &mut triangles,
+                            mesh,
+                            color,
+                            material,
+                            transform,
+                        );
                     }
                 }
             }
@@ -144,7 +148,7 @@ impl Rasterizer {
     /// Rasterize a list of triangles
     fn rasterize_triangles(
         &self,
-        triangles: &[WorldTriangle],
+        triangles: &[WorldTriangle<'_>],
         camera: &Camera,
         camera_pos: &Point,
         scene: &Scene,
@@ -258,14 +262,14 @@ impl Rasterizer {
 
     /// Rasterize a single triangle using basic scanline algorithm
     #[allow(clippy::too_many_arguments)]
-    fn rasterize_triangle(
+    fn rasterize_triangle<'a>(
         &self,
-        tri: &WorldTriangle,
+        tri: &WorldTriangle<'a>,
         camera: &Camera,
         depth_buffer: &mut [f64],
         position_buffer: &mut [Option<Point>],
         normal_buffer: &mut [Option<Vec3>],
-        material_buffer: &mut [Option<(Color, Material)>],
+        material_buffer: &mut [Option<(Color, &'a Material)>],
         camera_pos: &Point,
         is_perspective: bool,
     ) {
@@ -346,7 +350,7 @@ impl Rasterizer {
                                 + tri.vertices[2].coords * w2;
                             position_buffer[idx] = Some(Point::from(world_pos));
                             normal_buffer[idx] = Some(tri.normal);
-                            material_buffer[idx] = Some((tri.color, tri.material.clone()));
+                            material_buffer[idx] = Some((tri.color, tri.material));
                         }
                     }
                 }
@@ -403,7 +407,9 @@ fn barycentric(
 }
 
 /// Apply transform matrix to a list of triangles
-fn apply_transform_to_triangles(triangles: &mut [WorldTriangle], transform: &Matrix4<f64>) {
+fn apply_transform_to_triangles(triangles: &mut [WorldTriangle<'_>], transform: &Matrix4<f64>) {
+    let inverse_transpose = transform.try_inverse().map(|inverse| inverse.transpose());
+
     for tri in triangles {
         for vertex in &mut tri.vertices {
             let transformed = transform * vertex.to_homogeneous();
@@ -411,8 +417,7 @@ fn apply_transform_to_triangles(triangles: &mut [WorldTriangle], transform: &Mat
         }
 
         // Transform normal (use inverse transpose for normals)
-        if let Some(inverse) = transform.try_inverse() {
-            let inverse_transpose = inverse.transpose();
+        if let Some(inverse_transpose) = &inverse_transpose {
             let normal_homogeneous = inverse_transpose * tri.normal.to_homogeneous();
             tri.normal = Vec3::new(
                 normal_homogeneous.x,
@@ -425,9 +430,9 @@ fn apply_transform_to_triangles(triangles: &mut [WorldTriangle], transform: &Mat
 }
 
 /// Apply optional transforms to triangles and extend the collection
-fn apply_transforms_and_collect(
-    triangles: &mut Vec<WorldTriangle>,
-    mut new_triangles: Vec<WorldTriangle>,
+fn apply_transforms_and_collect<'a>(
+    triangles: &mut Vec<WorldTriangle<'a>>,
+    mut new_triangles: Vec<WorldTriangle<'a>>,
     transform: &Option<Vec<String>>,
 ) {
     if let Some(transform_strings) = transform {
@@ -438,21 +443,28 @@ fn apply_transforms_and_collect(
     triangles.extend(new_triangles);
 }
 
-/// Convert mesh to world triangles
-fn convert_mesh_to_world_triangles(
+/// Append mesh triangles directly to avoid a second full-size allocation for large meshes.
+fn append_mesh_world_triangles<'a>(
+    triangles: &mut Vec<WorldTriangle<'a>>,
     mesh: &Mesh,
     color: Color,
-    material: Material,
-) -> Vec<WorldTriangle> {
-    mesh.triangles
-        .iter()
-        .map(|tri| WorldTriangle {
-            vertices: tri.vertices,
-            normal: tri.normal,
-            color,
-            material: material.clone(),
-        })
-        .collect()
+    material: &'a Material,
+    transform: &Option<Vec<String>>,
+) {
+    let start = triangles.len();
+    triangles.reserve(mesh.triangles.len());
+    triangles.extend(mesh.triangles.iter().map(|tri| WorldTriangle {
+        vertices: tri.vertices,
+        normal: tri.normal,
+        color,
+        material,
+    }));
+
+    if let Some(transform_strings) = transform {
+        if let Ok(transform_matrix) = crate::scene::parse_transforms(transform_strings) {
+            apply_transform_to_triangles(&mut triangles[start..], &transform_matrix);
+        }
+    }
 }
 
 /// Tessellate a sphere into triangles
@@ -460,8 +472,8 @@ fn tessellate_sphere(
     center: Point,
     radius: f64,
     color: Color,
-    material: Material,
-) -> Vec<WorldTriangle> {
+    material: &Material,
+) -> Vec<WorldTriangle<'_>> {
     let mut triangles = Vec::new();
 
     // Use UV sphere tessellation with reasonable detail
@@ -489,7 +501,7 @@ fn tessellate_sphere(
                     vertices: [v00, v01, v10],
                     normal,
                     color,
-                    material: material.clone(),
+                    material,
                 });
             }
 
@@ -500,7 +512,7 @@ fn tessellate_sphere(
                     vertices: [v01, v11, v10],
                     normal,
                     color,
-                    material: material.clone(),
+                    material,
                 });
             }
         }
@@ -522,8 +534,8 @@ fn tessellate_cube(
     center: Point,
     size: Vec3,
     color: Color,
-    material: Material,
-) -> Vec<WorldTriangle> {
+    material: &Material,
+) -> Vec<WorldTriangle<'_>> {
     let mut triangles = Vec::new();
 
     let half_size = size / 2.0;
@@ -603,7 +615,7 @@ fn tessellate_cube(
             ],
             normal: *normal,
             color,
-            material: material.clone(),
+            material,
         });
     }
 
@@ -615,8 +627,8 @@ fn tessellate_plane(
     point: Point,
     normal: Vec3,
     color: Color,
-    material: Material,
-) -> Vec<WorldTriangle> {
+    material: &Material,
+) -> Vec<WorldTriangle<'_>> {
     let mut triangles = Vec::new();
 
     // Limit plane to 1000x1000 as specified
@@ -654,14 +666,14 @@ fn tessellate_plane(
                 vertices: [p00, p10, p01],
                 normal: normal_unit,
                 color,
-                material: material.clone(),
+                material,
             });
 
             triangles.push(WorldTriangle {
                 vertices: [p10, p11, p01],
                 normal: normal_unit,
                 color,
-                material: material.clone(),
+                material,
             });
         }
     }
@@ -686,7 +698,7 @@ mod tests {
         let radius = 1.0;
         let color = Color::new(1.0, 0.0, 0.0);
         let material = Material::default();
-        let triangles = tessellate_sphere(center, radius, color, material);
+        let triangles = tessellate_sphere(center, radius, color, &material);
 
         // Should generate some triangles
         assert!(!triangles.is_empty());
@@ -710,7 +722,7 @@ mod tests {
         let size = Vec3::new(2.0, 2.0, 2.0);
         let color = Color::new(0.0, 1.0, 0.0);
         let material = Material::default();
-        let triangles = tessellate_cube(center, size, color, material);
+        let triangles = tessellate_cube(center, size, color, &material);
 
         // Cube should have 12 triangles (2 per face, 6 faces)
         assert_eq!(triangles.len(), 12);
@@ -722,7 +734,7 @@ mod tests {
         let normal = Vec3::new(0.0, 0.0, 1.0);
         let color = Color::new(0.0, 0.0, 1.0);
         let material = Material::default();
-        let triangles = tessellate_plane(point, normal, color, material);
+        let triangles = tessellate_plane(point, normal, color, &material);
 
         // Should generate grid of triangles
         assert!(!triangles.is_empty());
@@ -742,5 +754,34 @@ mod tests {
         let (w0, w1, w2) = coords.unwrap();
         assert!(w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0);
         assert!((w0 + w1 + w2 - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn mesh_triangles_borrow_the_object_material() {
+        let mesh = Mesh::from_stl_bytes(
+            br"solid triangle
+facet normal 0 0 1
+outer loop
+vertex 0 0 0
+vertex 1 0 0
+vertex 0 1 0
+endloop
+endfacet
+endsolid triangle",
+        )
+        .unwrap();
+        let material = Material::default();
+        let mut triangles = Vec::new();
+
+        append_mesh_world_triangles(
+            &mut triangles,
+            &mesh,
+            Color::new(1.0, 1.0, 1.0),
+            &material,
+            &None,
+        );
+
+        assert_eq!(triangles.len(), 1);
+        assert!(std::ptr::eq(triangles[0].material, &material));
     }
 }

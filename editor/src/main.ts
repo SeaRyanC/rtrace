@@ -300,8 +300,31 @@ function createApplicationMenu(): void {
           accelerator: "CmdOrCtrl+Shift+S",
           click: () => sendMenuCommand("save-as"),
         },
+        {
+          label: "Close Tab",
+          accelerator: "CmdOrCtrl+W",
+          click: () => sendMenuCommand("close"),
+        },
         { type: "separator" },
         { role: "quit" },
+      ],
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+        { type: "separator" },
+        {
+          label: "Format JSON",
+          accelerator: "Shift+Alt+F",
+          click: () => sendMenuCommand("format"),
+        },
       ],
     },
     {

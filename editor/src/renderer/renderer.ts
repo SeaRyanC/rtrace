@@ -5,6 +5,8 @@ type MenuCommand =
   | "open"
   | "save"
   | "save-as"
+  | "close"
+  | "format"
   | "render"
   | "cancel-render"
   | "rasterize"
@@ -35,7 +37,15 @@ type RenderFinished = {
 };
 
 const SCHEMA_URI = "inmemory://rtrace/scene.schema.json";
-const SCENE_URI = "inmemory://rtrace/scene.json";
+const SCENE_URI_PREFIX = "inmemory://rtrace/scene-";
+
+type SceneTab = {
+  id: number;
+  path: string | null;
+  directory: string;
+  dirty: boolean;
+  model: import("monaco-editor").editor.ITextModel;
+};
 
 const starterScene = {
   camera: {
@@ -99,12 +109,15 @@ let monacoApi: MonacoApi;
 let editor: import("monaco-editor").editor.IStandaloneCodeEditor;
 let model: import("monaco-editor").editor.ITextModel;
 let appInfo: { workspaceRoot: string };
+let sceneSchema: unknown;
+let tabs: SceneTab[] = [];
+let activeTab: SceneTab | null = null;
+let nextTabId = 1;
 let currentPath: string | null = null;
 let baseDirectory = "";
 let currentMode: RenderMode = "raytracer";
 let renderInProgress = false;
 let pendingRender = false;
-let applyingContent = false;
 let renderTimer: number | undefined;
 
 const $ = <T extends HTMLElement>(id: string): T => {
@@ -126,6 +139,10 @@ function fileName(path: string | null): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
+function tabLabel(tab: SceneTab): string {
+  return tab.path ? fileName(tab.path) : `Untitled-${tab.id}`;
+}
+
 function setFileStatus(message: string): void {
   $("file-status").textContent = message;
 }
@@ -140,8 +157,153 @@ function updateTitle(): void {
 }
 
 function setDirty(dirty: boolean): void {
+  if (activeTab) {
+    activeTab.dirty = dirty;
+  }
   $("dirty-indicator").classList.toggle("visible", dirty);
+  renderTabBar();
   updateTitle();
+}
+
+function renderTabBar(): void {
+  const tabBar = $("tab-bar");
+  tabBar.replaceChildren();
+
+  for (const tab of tabs) {
+    const tabElement = document.createElement("div");
+    tabElement.className = "editor-tab";
+    tabElement.setAttribute("role", "tab");
+    tabElement.setAttribute("aria-selected", String(tab === activeTab));
+    tabElement.tabIndex = tab === activeTab ? 0 : -1;
+    if (tab === activeTab) {
+      tabElement.classList.add("active");
+    }
+    tabElement.addEventListener("click", () => {
+      activateTab(tab);
+      requestRender();
+    });
+    tabElement.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        activateTab(tab);
+        requestRender();
+      }
+    });
+
+    const label = document.createElement("span");
+    label.className = "tab-label";
+    label.textContent = tabLabel(tab);
+    label.title = tab.path ?? "Unsaved scene";
+    tabElement.append(label);
+
+    const dirty = document.createElement("span");
+    dirty.className = "tab-dirty";
+    dirty.textContent = "●";
+    dirty.hidden = !tab.dirty;
+    dirty.setAttribute("aria-label", "Unsaved changes");
+    tabElement.append(dirty);
+
+    const close = document.createElement("button");
+    close.className = "tab-close";
+    close.type = "button";
+    close.title = `Close ${tabLabel(tab)}`;
+    close.setAttribute("aria-label", `Close ${tabLabel(tab)}`);
+    close.textContent = "×";
+    close.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeTab(tab);
+    });
+    tabElement.append(close);
+    tabBar.append(tabElement);
+  }
+}
+
+function syncActiveTabState(): void {
+  if (!activeTab) {
+    currentPath = null;
+    baseDirectory = appInfo.workspaceRoot;
+    return;
+  }
+
+  model = activeTab.model;
+  currentPath = activeTab.path;
+  baseDirectory = activeTab.directory;
+}
+
+function activateTab(tab: SceneTab): void {
+  if (activeTab === tab) {
+    return;
+  }
+
+  activeTab = tab;
+  syncActiveTabState();
+  if (editor && editor.getModel() !== tab.model) {
+    editor.setModel(tab.model);
+  }
+  $("file-name").textContent = tabLabel(tab);
+  setDirty(tab.dirty);
+  setFileStatus(tab.path ? `Loaded ${tab.path}` : "New scene");
+  renderTabBar();
+}
+
+function createTab(
+  content: string,
+  path: string | null,
+  directory: string,
+): SceneTab {
+  const id = nextTabId++;
+  const tab: SceneTab = {
+    id,
+    path,
+    directory,
+    dirty: false,
+    model: monacoApi.editor.createModel(
+      content,
+      "json",
+      monacoApi.Uri.parse(`${SCENE_URI_PREFIX}${id}.json`),
+    ),
+  };
+  tabs.push(tab);
+  configureSchema();
+  if (!activeTab) {
+    activeTab = tab;
+    syncActiveTabState();
+    if (editor && editor.getModel() !== tab.model) {
+      editor.setModel(tab.model);
+    }
+    $("file-name").textContent = tabLabel(tab);
+    $("dirty-indicator").classList.remove("visible");
+    updateTitle();
+  }
+  renderTabBar();
+  return tab;
+}
+
+function closeTab(tab: SceneTab): void {
+  if (tab.dirty && !window.confirm(`Discard unsaved changes in ${tabLabel(tab)}?`)) {
+    return;
+  }
+
+  const index = tabs.indexOf(tab);
+  if (index < 0) {
+    return;
+  }
+  const wasActive = tab === activeTab;
+  tabs.splice(index, 1);
+  tab.model.dispose();
+  configureSchema();
+
+  if (!tabs.length) {
+    activeTab = null;
+    createTab(starterText(), null, appInfo.workspaceRoot);
+  } else if (wasActive) {
+    activateTab(tabs[Math.min(index, tabs.length - 1)]);
+  }
+
+  renderTabBar();
+  if (wasActive) {
+    requestRender();
+  }
 }
 
 function setMode(mode: RenderMode): void {
@@ -156,32 +318,27 @@ function setRenderControls(): void {
   $("cancel-render").toggleAttribute("disabled", !renderInProgress);
 }
 
-function setContent(content: string, path: string | null, directory: string): void {
-  applyingContent = true;
-  model.setValue(content);
-  applyingContent = false;
-  currentPath = path;
-  baseDirectory = directory;
-  $("file-name").textContent = fileName(path);
-  setDirty(false);
-  setFileStatus(path ? `Loaded ${path}` : "New scene");
-}
-
-function configureSchema(schema: unknown): void {
+function configureSchema(): void {
+  if (sceneSchema === undefined) {
+    return;
+  }
   monacoApi.languages.json.jsonDefaults.setDiagnosticsOptions({
     validate: true,
     allowComments: false,
     schemas: [
       {
         uri: SCHEMA_URI,
-        fileMatch: [SCENE_URI],
-        schema,
+        fileMatch: tabs.map((tab) => tab.model.uri.toString()),
+        schema: sceneSchema,
       },
     ],
   });
 }
 
 function updateMarkerStatus(): void {
+  if (!model) {
+    return;
+  }
   const markers = monacoApi.editor.getModelMarkers({ resource: model.uri });
   const errors = markers.filter(
     (marker) => marker.severity === monacoApi.MarkerSeverity.Error,
@@ -278,14 +435,22 @@ function scheduleRender(): void {
 }
 
 async function saveScene(saveAs: boolean): Promise<void> {
+  if (!activeTab) {
+    return;
+  }
+
   try {
     const result: SaveSceneResult = await window.rtrace.saveScene({
-      filePath: saveAs ? null : currentPath,
+      filePath: saveAs ? null : activeTab.path,
       content: model.getValue(),
     });
+    activeTab.path = result.path;
+    activeTab.directory = result.directory;
+    activeTab.dirty = false;
+    syncActiveTabState();
     currentPath = result.path;
     baseDirectory = result.directory;
-    $("file-name").textContent = fileName(currentPath);
+    $("file-name").textContent = tabLabel(activeTab);
     setDirty(false);
     setFileStatus(`Saved ${currentPath}`);
   } catch (error) {
@@ -297,25 +462,71 @@ async function saveScene(saveAs: boolean): Promise<void> {
 }
 
 function newScene(): void {
-  if (
-    $("dirty-indicator").classList.contains("visible") &&
-    !window.confirm("Discard unsaved scene changes?")
-  ) {
-    return;
-  }
-  setContent(starterText(), null, appInfo.workspaceRoot);
+  const tab = createTab(starterText(), null, appInfo.workspaceRoot);
+  activateTab(tab);
   requestRender();
 }
 
 function openScene(payload: SceneOpenedPayload): void {
-  if (
-    $("dirty-indicator").classList.contains("visible") &&
-    !window.confirm("Discard unsaved scene changes?")
-  ) {
-    return;
+  const existing = tabs.find((tab) => tab.path === payload.path);
+  if (existing) {
+    activateTab(existing);
+  } else {
+    const tab = createTab(payload.content, payload.path, payload.directory);
+    activateTab(tab);
   }
-  setContent(payload.content, payload.path, payload.directory);
   requestRender();
+}
+
+function formatJsonValue(value: unknown, indent: string): string {
+  if (Array.isArray(value)) {
+    if (
+      value.length === 3 &&
+      value.every(
+        (item) => typeof item === "number" && Number.isFinite(item),
+      )
+    ) {
+      return `[${value.map((item) => JSON.stringify(item)).join(", ")}]`;
+    }
+    if (value.length === 0) {
+      return "[]";
+    }
+    const childIndent = `${indent}  `;
+    return `[\n${value
+      .map((item) => `${childIndent}${formatJsonValue(item, childIndent)}`)
+      .join(",\n")}\n${indent}]`;
+  }
+
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length === 0) {
+      return "{}";
+    }
+    const childIndent = `${indent}  `;
+    return `{\n${entries
+      .map(
+        ([key, item]) =>
+          `${childIndent}${JSON.stringify(key)}: ${formatJsonValue(item, childIndent)}`,
+      )
+      .join(",\n")}\n${indent}}`;
+  }
+
+  return JSON.stringify(value) ?? "null";
+}
+
+function formatJsonDocument(): void {
+  try {
+    const formatted = `${formatJsonValue(JSON.parse(model.getValue()), "")}\n`;
+    editor.executeEdits("rtrace.format-json", [
+      {
+        range: model.getFullModelRange(),
+        text: formatted,
+      },
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setFileStatus(`Cannot format invalid JSON: ${message}`);
+  }
 }
 
 function handleMenuCommand(command: MenuCommand): void {
@@ -330,6 +541,14 @@ function handleMenuCommand(command: MenuCommand): void {
       break;
     case "save-as":
       void saveScene(true);
+      break;
+    case "close":
+      if (activeTab) {
+        closeTab(activeTab);
+      }
+      break;
+    case "format":
+      formatJsonDocument();
       break;
     case "render":
       requestRender();
@@ -372,6 +591,13 @@ function registerUi(): void {
     if (event.key === "Escape" && renderInProgress) {
       event.preventDefault();
       void window.rtrace.cancelRender();
+    } else if (
+      event.key.toLowerCase() === "w" &&
+      (event.ctrlKey || event.metaKey) &&
+      activeTab
+    ) {
+      event.preventDefault();
+      closeTab(activeTab);
     }
   });
 
@@ -407,7 +633,8 @@ async function initialize(api: MonacoApi): Promise<void> {
   appInfo = await window.rtrace.getAppInfo();
 
   try {
-    configureSchema(await window.rtrace.getSchema());
+    sceneSchema = await window.rtrace.getSchema();
+    configureSchema();
     setFileStatus("Scene schema ready");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -426,11 +653,7 @@ async function initialize(api: MonacoApi): Promise<void> {
     },
   });
   monacoApi.editor.setTheme("rtrace-dark");
-  model = monacoApi.editor.createModel(
-    starterText(),
-    "json",
-    monacoApi.Uri.parse(SCENE_URI),
-  );
+  createTab(starterText(), null, appInfo.workspaceRoot);
   editor = monacoApi.editor.create($("editor"), {
     model,
     automaticLayout: true,
@@ -446,18 +669,17 @@ async function initialize(api: MonacoApi): Promise<void> {
     id: "rtrace.format-document",
     label: "Format Scene JSON",
     keybindings: [monacoApi.KeyMod.Shift | monacoApi.KeyMod.Alt | monacoApi.KeyCode.KeyF],
-    run: () => editor.getAction("editor.action.formatDocument")?.run(),
+    run: () => formatJsonDocument(),
   });
   editor.onDidChangeModelContent(() => {
-    if (!applyingContent) {
-      setDirty(true);
-      scheduleRender();
-    }
+    setDirty(true);
+    scheduleRender();
   });
   monacoApi.editor.onDidChangeMarkers(updateMarkerStatus);
   updateMarkerStatus();
   setMode("raytracer");
   setRenderControls();
+  renderTabBar();
   window.setTimeout(requestRender, 250);
 }
 

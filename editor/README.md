@@ -30,7 +30,8 @@ rtrace-editor
 
 ## Workflow
 
-- Edit JSON in the left Monaco pane. The editor validates the scene against
+- Edit JSON in the left Monaco pane. Open scenes appear as VS Code-style tabs;
+  use **New**, **Open**, or the tab close buttons to manage them. The editor validates the scene against
   the generated schema and provides completion and hover descriptions for
   cameras, objects, materials, textures, lights, and scene settings.
 - The right pane renders automatically after a short editing pause, or use
@@ -44,6 +45,9 @@ rtrace-editor
 - Press `Esc` or choose **Render > Cancel Render** to terminate the active
   renderer process. Relative STL paths are resolved relative to the active
   scene file.
+- Use **Edit > Format JSON** or `Shift+Alt+F` to format the active scene. The
+  formatter keeps numeric three-element vectors on one line, such as
+  `[0, 0, 1]`, while expanding other arrays and objects normally.
 
 ## File operations
 

@@ -130,6 +130,82 @@ button.danger:hover:not(:disabled) {
   border-right: 1px solid var(--border);
 }
 
+.tab-bar {
+  align-items: stretch;
+  background: #181818;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex: 0 0 35px;
+  gap: 1px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.editor-tab {
+  align-items: center;
+  background: #252526;
+  border: 0;
+  border-right: 1px solid #181818;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
+  max-width: 240px;
+  min-width: 130px;
+  padding: 0 7px 0 12px;
+}
+
+.editor-tab:hover {
+  background: #2d2d30;
+  color: var(--text);
+}
+
+.editor-tab.active {
+  background: var(--background);
+  border-top: 1px solid #3794d2;
+  color: var(--text);
+}
+
+.editor-tab:focus-visible {
+  outline: 1px solid #75beff;
+  outline-offset: -2px;
+}
+
+.tab-label {
+  flex: 1;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-dirty {
+  color: #e2c08d;
+  font-size: 10px;
+}
+
+.tab-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 16px;
+  height: 20px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 20px;
+}
+
+.tab-close:hover:not(:disabled) {
+  background: #454545;
+  color: var(--text);
+}
+
 .pane-heading {
   align-items: center;
   background: var(--panel);
@@ -180,9 +256,11 @@ button.danger:hover:not(:disabled) {
 
 #preview-image {
   display: none;
-  max-height: 100%;
-  max-width: 100%;
+  height: 100%;
   object-fit: contain;
+  position: relative;
+  width: 100%;
+  z-index: 1;
 }
 
 #preview-image.visible {
@@ -195,6 +273,14 @@ button.danger:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  z-index: 0;
+}
+
+#preview-placeholder[hidden] {
+  display: none;
 }
 
 #preview-placeholder strong {
