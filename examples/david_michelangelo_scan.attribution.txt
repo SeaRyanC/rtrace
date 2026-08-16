@@ -1,0 +1,15 @@
+David (Michelangelo) STL attribution
+
+Source:
+https://commons.wikimedia.org/wiki/File:David_(Michelangelo).stl
+
+Model:
+Scan the World / Jonathanbeck
+
+License:
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+https://creativecommons.org/licenses/by-sa/4.0/
+
+The original Michelangelo sculpture is in the public domain. This
+photogrammetric and structured-light scan is not public domain; this file is
+included under the CC BY-SA 4.0 license with the attribution above.

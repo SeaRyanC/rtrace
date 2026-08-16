@@ -14,7 +14,7 @@ pub mod renderer;
 /// - Basic geometric primitives (sphere, plane, cube)
 /// - Phong lighting model with ambient lighting
 /// - Atmospheric fog
-/// - Texture support (grid patterns)
+/// - Texture support (grid, checkerboard, marble, and wood patterns)
 /// - JSON scene description format
 /// - Auto camera bounds functionality
 pub mod scene;
@@ -26,5 +26,5 @@ pub use rasterizer::Rasterizer;
 pub use renderer::{AntiAliasingMode, Renderer};
 pub use scene::{
     AmbientIllumination, Camera, Fog, Light, Material, MeshTopBottomPerlin, Object, Scene,
-    SceneSettings, SurfacePerlinNoise, Texture,
+    SceneSettings, SurfacePerlinNoise, Texture, TextureTransform,
 };

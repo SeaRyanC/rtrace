@@ -1,8 +1,10 @@
+use crate::noise;
 use crate::ray::{apply_perlin_surface_effects, HitRecord, PrimitiveKind, Ray, World};
 use crate::scene::{
-    hex_to_color, Color, Fog, Light, Material, Point, SurfacePerlinNoise, Texture, Vec3,
+    hex_to_color, Color, Fog, Light, Material, Point, SurfacePerlinNoise, Texture,
+    TextureTransform, Vec3,
 };
-use nalgebra::Unit;
+use nalgebra::{Matrix3, Rotation3, Unit};
 use rand::{Rng, SeedableRng};
 
 // ---------------------------------------------------------------------------
@@ -20,6 +22,42 @@ pub enum PreparedTexture {
     },
     Checkerboard {
         material_b: Box<PreparedMaterial>,
+    },
+    Marble {
+        colors: Vec<Color>,
+        direction: Vec3,
+        bands_per_unit: f64,
+        noise_scale: f64,
+        warp_strength: f64,
+        vein_sharpness: f64,
+        branch_strength: f64,
+        octaves: u32,
+        persistence: f64,
+        lacunarity: f64,
+        seed: u64,
+        translate: Vec3,
+        rotation: Matrix3<f64>,
+        scale: Vec3,
+    },
+    Wood {
+        colors: Vec<Color>,
+        origin: Vec3,
+        axis: Vec3,
+        rings_per_unit: f64,
+        ring_width: f64,
+        noise_scale: f64,
+        ring_warp: f64,
+        grain_scale: f64,
+        grain_strength: f64,
+        axis_u: Vec3,
+        axis_v: Vec3,
+        octaves: u32,
+        persistence: f64,
+        lacunarity: f64,
+        seed: u64,
+        translate: Vec3,
+        rotation: Matrix3<f64>,
+        scale: Vec3,
     },
 }
 
@@ -80,8 +118,130 @@ impl PreparedTexture {
             Texture::Checkerboard { material_b } => Self::Checkerboard {
                 material_b: Box::new(PreparedMaterial::from_material(material_b)),
             },
+            Texture::Marble {
+                colors,
+                direction,
+                bands_per_unit,
+                noise_scale,
+                warp_strength,
+                vein_sharpness,
+                branch_strength,
+                octaves,
+                persistence,
+                lacunarity,
+                seed,
+                transform,
+            } => {
+                let (translate, rotation, scale) = prepare_texture_transform(transform);
+                Self::Marble {
+                    colors: prepare_palette(colors, Color::new(1.0, 1.0, 1.0)),
+                    direction: normalized_vector(*direction),
+                    bands_per_unit: *bands_per_unit,
+                    noise_scale: noise_scale.abs().max(1e-6),
+                    warp_strength: warp_strength.max(0.0),
+                    vein_sharpness: vein_sharpness.max(0.1),
+                    branch_strength: branch_strength.max(0.0),
+                    octaves: *octaves,
+                    persistence: *persistence,
+                    lacunarity: *lacunarity,
+                    seed: *seed,
+                    translate,
+                    rotation,
+                    scale,
+                }
+            }
+            Texture::Wood {
+                colors,
+                origin,
+                axis,
+                rings_per_unit,
+                ring_width,
+                noise_scale,
+                ring_warp,
+                grain_scale,
+                grain_strength,
+                octaves,
+                persistence,
+                lacunarity,
+                seed,
+                transform,
+            } => {
+                let (translate, rotation, scale) = prepare_texture_transform(transform);
+                let axis = normalized_vector(*axis);
+                let (axis_u, axis_v) = texture_basis(axis);
+                Self::Wood {
+                    colors: prepare_palette(colors, Color::new(0.55, 0.3, 0.12)),
+                    origin: nalgebra::Vector3::new(origin[0], origin[1], origin[2]),
+                    axis,
+                    rings_per_unit: *rings_per_unit,
+                    ring_width: ring_width.clamp(0.0, 1.0),
+                    noise_scale: noise_scale.abs().max(1e-6),
+                    ring_warp: ring_warp.max(0.0),
+                    grain_scale: grain_scale.abs().max(1e-6),
+                    grain_strength: grain_strength.max(0.0),
+                    axis_u,
+                    axis_v,
+                    octaves: *octaves,
+                    persistence: *persistence,
+                    lacunarity: *lacunarity,
+                    seed: *seed,
+                    translate,
+                    rotation,
+                    scale,
+                }
+            }
         }
     }
+}
+
+fn prepare_palette(colors: &[String], fallback: Color) -> Vec<Color> {
+    if colors.is_empty() {
+        return vec![fallback];
+    }
+
+    colors
+        .iter()
+        .map(|color| hex_to_color(color).unwrap_or(fallback))
+        .collect()
+}
+
+fn normalized_vector(values: [f64; 3]) -> Vec3 {
+    let vector = Vec3::new(values[0], values[1], values[2]);
+    if vector.magnitude_squared() < 1e-12 {
+        Vec3::new(0.0, 1.0, 0.0)
+    } else {
+        vector.normalize()
+    }
+}
+
+fn texture_basis(axis: Vec3) -> (Vec3, Vec3) {
+    let reference = if axis.x.abs() < 0.7 {
+        Vec3::x()
+    } else {
+        Vec3::y()
+    };
+    let axis_u = axis.cross(&reference).normalize();
+    let axis_v = axis.cross(&axis_u).normalize();
+    (axis_u, axis_v)
+}
+
+fn prepare_texture_transform(transform: &TextureTransform) -> (Vec3, Matrix3<f64>, Vec3) {
+    let rotation = Rotation3::from_euler_angles(
+        transform.rotate_degrees[0].to_radians(),
+        transform.rotate_degrees[1].to_radians(),
+        transform.rotate_degrees[2].to_radians(),
+    )
+    .into_inner();
+
+    (
+        Vec3::new(
+            transform.translate[0],
+            transform.translate[1],
+            transform.translate[2],
+        ),
+        rotation,
+        Vec3::new(transform.scale[0], transform.scale[1], transform.scale[2]),
+    )
 }
 
 /// Light with position and color already converted — no hex parsing in the hot path.
@@ -127,24 +287,23 @@ impl PreparedFog {
 /// - Grid: base material properties, color overridden by grid line color when on a line.
 /// - Checkerboard: alternates between base material and material_b (full material switch).
 #[inline]
-fn effective_material_and_color(
-    material: &PreparedMaterial,
+fn effective_material_and_color<'a>(
+    material: &'a PreparedMaterial,
     texture_coords: Option<(f64, f64)>,
-) -> (&PreparedMaterial, Color) {
+    point: &Point,
+) -> (&'a PreparedMaterial, Color) {
     if let Some(texture) = &material.texture {
-        if let Some((u, v)) = texture_coords {
-            return apply_prepared_texture(texture, u, v, material);
-        }
+        return apply_prepared_texture(texture, texture_coords, point, material);
     }
     (material, material.color)
 }
 
-/// Returns `(&PreparedMaterial, effective_color)` for the given texture + UV.
+/// Returns `(&PreparedMaterial, effective_color)` for the given texture.
 #[inline]
 fn apply_prepared_texture<'a>(
     texture: &'a PreparedTexture,
-    u: f64,
-    v: f64,
+    texture_coords: Option<(f64, f64)>,
+    point: &Point,
     base: &'a PreparedMaterial,
 ) -> (&'a PreparedMaterial, Color) {
     match texture {
@@ -153,6 +312,10 @@ fn apply_prepared_texture<'a>(
             line_width,
             cell_size,
         } => {
+            let Some((u, v)) = texture_coords else {
+                return (base, base.color);
+            };
+            let cell_size = cell_size.abs().max(1e-6);
             let half_width = line_width / 2.0;
             let u_mod = (u / cell_size).fract().abs();
             let v_mod = (v / cell_size).fract().abs();
@@ -167,6 +330,9 @@ fn apply_prepared_texture<'a>(
             (base, color)
         }
         PreparedTexture::Checkerboard { material_b } => {
+            let Some((u, v)) = texture_coords else {
+                return (base, base.color);
+            };
             let checker_u = u.floor() as i32;
             let checker_v = v.floor() as i32;
             if (checker_u + checker_v) % 2 == 0 {
@@ -174,6 +340,312 @@ fn apply_prepared_texture<'a>(
             } else {
                 (material_b, material_b.color)
             }
+        }
+        PreparedTexture::Marble {
+            colors,
+            direction,
+            bands_per_unit,
+            noise_scale,
+            warp_strength,
+            vein_sharpness,
+            branch_strength,
+            octaves,
+            persistence,
+            lacunarity,
+            seed,
+            translate,
+            rotation,
+            scale,
+        } => {
+            let point = map_texture_point(point, translate, rotation, scale);
+            let warp_frequency = *noise_scale * 0.42;
+            let warp = Vec3::new(
+                noise::fbm3(
+                    point.x * warp_frequency + 17.13,
+                    point.y * warp_frequency - 4.71,
+                    point.z * warp_frequency + 9.27,
+                    (*seed).wrapping_add(0xA24BAED4963EE407),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                ),
+                noise::fbm3(
+                    point.x * warp_frequency - 11.41,
+                    point.y * warp_frequency + 23.07,
+                    point.z * warp_frequency + 2.83,
+                    (*seed).wrapping_add(0x9FB21C651E98DF25),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                ),
+                noise::fbm3(
+                    point.x * warp_frequency + 5.39,
+                    point.y * warp_frequency + 14.63,
+                    point.z * warp_frequency - 19.17,
+                    (*seed).wrapping_add(0xC13FA9A902A6328F),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                ),
+            );
+            let warped_point = point + warp * (*warp_strength * 0.28);
+            let variation_strength = if *warp_strength <= 0.0 {
+                0.0
+            } else {
+                *branch_strength
+            };
+            let secondary_frequency = *noise_scale * 1.05;
+            let secondary_warp = Vec3::new(
+                noise::fbm3(
+                    warped_point.x * secondary_frequency + 31.17,
+                    warped_point.y * secondary_frequency - 8.43,
+                    warped_point.z * secondary_frequency + 4.29,
+                    (*seed).wrapping_add(0x51ED270B8A3D4F19),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                ),
+                noise::fbm3(
+                    warped_point.x * secondary_frequency - 6.71,
+                    warped_point.y * secondary_frequency + 18.39,
+                    warped_point.z * secondary_frequency + 12.53,
+                    (*seed).wrapping_add(0x7C3A2D1F5B9E6A43),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                ),
+                noise::fbm3(
+                    warped_point.x * secondary_frequency + 14.07,
+                    warped_point.y * secondary_frequency + 2.61,
+                    warped_point.z * secondary_frequency - 21.33,
+                    (*seed).wrapping_add(0xE4D9B7C35A1F806D),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                ),
+            );
+            let flow_point = warped_point + secondary_warp * (variation_strength * 0.16);
+            let axial = flow_point.dot(direction);
+            let network_point = flow_point - direction * (axial * 0.28);
+            let network_frequency = *noise_scale * (0.35 + 0.6 * bands_per_unit.abs());
+            let structure = noise::fbm3(
+                flow_point.x * *noise_scale * 0.52,
+                flow_point.y * *noise_scale * 0.52,
+                flow_point.z * *noise_scale * 0.52,
+                (*seed).wrapping_add(0x2F6E2B1D4C8A9537),
+                *octaves,
+                *persistence,
+                *lacunarity,
+            );
+            let local_bands =
+                *bands_per_unit * (1.0 + variation_strength * 0.24 * structure).max(0.2);
+            let detail = noise::fbm3(
+                flow_point.x * *noise_scale * 1.7,
+                flow_point.y * *noise_scale * 1.7,
+                flow_point.z * *noise_scale * 1.7,
+                (*seed).wrapping_add(0xD1B54A32D192ED03),
+                *octaves,
+                *persistence,
+                *lacunarity,
+            );
+            let phase = std::f64::consts::TAU * local_bands * flow_point.dot(direction)
+                + detail * *warp_strength * 1.4;
+            let wave = 0.5 + 0.5 * phase.sin();
+            let density = 0.5
+                + 0.5
+                    * noise::fbm3(
+                        flow_point.x * *noise_scale * 0.36,
+                        flow_point.y * *noise_scale * 0.36,
+                        flow_point.z * *noise_scale * 0.36,
+                        (*seed).wrapping_add(0x94D049BB133111EB),
+                        *octaves,
+                        *persistence,
+                        *lacunarity,
+                    );
+            let primary_factor = if variation_strength <= 0.0 {
+                1.0
+            } else {
+                0.25 + 1.05 * density
+            };
+            let ridged_field = 1.0
+                - noise::fbm3(
+                    network_point.x * network_frequency,
+                    network_point.y * network_frequency,
+                    network_point.z * network_frequency,
+                    (*seed).wrapping_add(0xB5C0FBCFEC4D3B2F),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                )
+                .abs();
+            let branch_mask = smoothstep(0.86, 0.98, ridged_field);
+            let branch_noise = 0.5
+                + 0.5
+                    * noise::fbm3(
+                        network_point.x * network_frequency * 1.9,
+                        network_point.y * network_frequency * 1.9,
+                        network_point.z * network_frequency * 1.9,
+                        (*seed).wrapping_add(0x8D58AC26AFE12E47),
+                        *octaves,
+                        *persistence,
+                        *lacunarity,
+                    );
+            let branch_gate = smoothstep(0.58, 0.82, branch_noise);
+            let fine_ridged_field = 1.0
+                - noise::fbm3(
+                    network_point.x * network_frequency * 2.6 + 12.41,
+                    network_point.y * network_frequency * 2.6 - 5.73,
+                    network_point.z * network_frequency * 2.6 + 18.29,
+                    (*seed).wrapping_add(0x6A09E667F3BCC909),
+                    *octaves,
+                    *persistence,
+                    *lacunarity,
+                )
+                .abs();
+            let macro_vein = smoothstep(0.88, 0.985, ridged_field);
+            let fine_vein = smoothstep(0.92, 0.995, fine_ridged_field);
+            let directional_vein = wave.powf(*vein_sharpness);
+            let network_vein =
+                (macro_vein * (0.72 + 0.28 * branch_gate) + fine_vein * 0.18).clamp(0.0, 1.0);
+            let primary_vein = if variation_strength <= 0.0 {
+                directional_vein
+            } else {
+                (network_vein * 0.95 + directional_vein * 0.04) * primary_factor
+            };
+            let secondary_vein =
+                branch_mask * (0.06 + 0.24 * branch_gate) * variation_strength * 0.45;
+            let vein = (primary_vein + secondary_vein).clamp(0.0, 1.0);
+            (base, palette_color(colors, vein))
+        }
+        PreparedTexture::Wood {
+            colors,
+            origin,
+            axis,
+            rings_per_unit,
+            ring_width,
+            noise_scale,
+            ring_warp,
+            grain_scale,
+            grain_strength,
+            axis_u,
+            axis_v,
+            octaves,
+            persistence,
+            lacunarity,
+            seed,
+            translate,
+            rotation,
+            scale,
+        } => {
+            let point = map_texture_point(point, translate, rotation, scale);
+            let offset = point - origin;
+            let axial = offset.dot(axis);
+            let radial = offset - axial * axis;
+            let radial_u = radial.dot(axis_u);
+            let radial_v = radial.dot(axis_v);
+            let ring_frequency = *noise_scale * 0.42;
+            let ring_warp_u = noise::fbm3(
+                point.x * ring_frequency + 8.17,
+                point.y * ring_frequency - 3.41,
+                point.z * ring_frequency + 12.73,
+                (*seed).wrapping_add(0xE35A7BD93E1B4C29),
+                *octaves,
+                *persistence,
+                *lacunarity,
+            );
+            let ring_warp_v = noise::fbm3(
+                point.x * ring_frequency - 14.27,
+                point.y * ring_frequency + 5.19,
+                point.z * ring_frequency + 1.63,
+                (*seed).wrapping_add(0xB7E151628AED2A6B),
+                *octaves,
+                *persistence,
+                *lacunarity,
+            );
+            let ring_displacement = *ring_warp * 0.35 / rings_per_unit.max(0.1);
+            let warped_u = radial_u + ring_displacement * ring_warp_u;
+            let warped_v = radial_v + ring_displacement * ring_warp_v;
+            let radius = warped_u.hypot(warped_v);
+            let ring_phase_noise = noise::fbm3(
+                point.x * *noise_scale,
+                point.y * *noise_scale,
+                point.z * *noise_scale,
+                (*seed).wrapping_add(0x6A09E667F3BCC909),
+                *octaves,
+                *persistence,
+                *lacunarity,
+            );
+            let phase = std::f64::consts::TAU * *rings_per_unit * radius
+                + *ring_warp * ring_phase_noise * 1.8;
+            let ring = 0.5 + 0.5 * phase.sin();
+            let latewood = if *ring_width <= 0.0 {
+                if ring >= 1.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            } else {
+                smoothstep(1.0 - *ring_width, 1.0, ring)
+            };
+            let grain_noise = noise::fbm3(
+                radial_u * *grain_scale,
+                radial_v * *grain_scale,
+                axial * *grain_scale * 0.16,
+                (*seed).wrapping_add(0x3C6EF372FE94F82B),
+                *octaves,
+                *persistence,
+                *lacunarity,
+            );
+            let fine_grain = noise::fbm3(
+                radial_u * *grain_scale * 2.7,
+                radial_v * *grain_scale * 2.7,
+                axial * *grain_scale * 0.42,
+                (*seed).wrapping_add(0xBB67AE8584CAA73B),
+                *octaves,
+                *persistence,
+                *lacunarity,
+            );
+            let grain = 0.5 + 0.5 * grain_noise;
+            let natural_value = latewood * (0.72 + 0.28 * grain)
+                + (1.0 - latewood) * (0.12 + 0.26 * grain)
+                + *grain_strength * 0.08 * fine_grain;
+            let value = latewood + *grain_strength * (natural_value - latewood);
+            (base, palette_color(colors, value))
+        }
+    }
+}
+
+#[inline]
+fn map_texture_point(
+    point: &Point,
+    translate: &Vec3,
+    rotation: &Matrix3<f64>,
+    scale: &Vec3,
+) -> Vec3 {
+    let rotated = rotation * (point.coords - translate);
+    rotated.component_mul(scale)
+}
+
+#[inline]
+fn smoothstep(edge0: f64, edge1: f64, value: f64) -> f64 {
+    if (edge1 - edge0).abs() < 1e-12 {
+        return if value >= edge1 { 1.0 } else { 0.0 };
+    }
+    let t = ((value - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+#[inline]
+fn palette_color(colors: &[Color], value: f64) -> Color {
+    match colors {
+        [] => Color::new(1.0, 1.0, 1.0),
+        [color] => *color,
+        _ => {
+            let position = value.clamp(0.0, 1.0) * (colors.len() - 1) as f64;
+            let index = position.floor() as usize;
+            let next_index = (index + 1).min(colors.len() - 1);
+            let fraction = position - index as f64;
+            colors[index] + (colors[next_index] - colors[index]) * fraction
         }
     }
 }
@@ -361,7 +833,7 @@ pub fn phong_lighting(
 
     // Resolve texture — returns borrowed material + surface color; zero allocation.
     let (effective_mat, material_color) =
-        effective_material_and_color(material, shaded_hit.texture_coords);
+        effective_material_and_color(material, shaded_hit.texture_coords, &shaded_hit.point);
     let material_color = material_color.component_mul(&shaded_hit.color_modulation);
 
     // Start with ambient lighting
@@ -758,7 +1230,8 @@ mod tests {
         let prepared = PreparedMaterial::from_material(&mat_a);
 
         // At (0.0, 0.0): floor(0) + floor(0) = 0, 0 % 2 = 0 -> base_material (red)
-        let (mat, color) = effective_material_and_color(&prepared, Some((0.0, 0.0)));
+        let (mat, color) =
+            effective_material_and_color(&prepared, Some((0.0, 0.0)), &Point::origin());
         assert!((color.x - 1.0).abs() < 1e-3); // red
         assert!(color.y.abs() < 1e-3);
         assert!((mat.shininess - 32.0).abs() < 1e-6);
@@ -766,7 +1239,8 @@ mod tests {
         assert!((mat.diffuse - 0.8).abs() < 1e-6);
 
         // At (1.0, 0.0): floor(1) + floor(0) = 1, 1 % 2 = 1 -> material_b (blue)
-        let (mat, color) = effective_material_and_color(&prepared, Some((1.0, 0.0)));
+        let (mat, color) =
+            effective_material_and_color(&prepared, Some((1.0, 0.0)), &Point::origin());
         assert!(color.x.abs() < 1e-3); // blue
         assert!((color.z - 1.0).abs() < 1e-3);
         assert!((mat.shininess - 16.0).abs() < 1e-6);
@@ -774,21 +1248,25 @@ mod tests {
         assert!((mat.diffuse - 0.6).abs() < 1e-6);
 
         // At (0.0, 1.0): floor(0) + floor(1) = 1 -> material_b (blue)
-        let (mat, color) = effective_material_and_color(&prepared, Some((0.0, 1.0)));
+        let (mat, color) =
+            effective_material_and_color(&prepared, Some((0.0, 1.0)), &Point::origin());
         assert!(color.x.abs() < 1e-3);
         assert!((mat.shininess - 16.0).abs() < 1e-6);
 
         // At (1.0, 1.0): floor(1) + floor(1) = 2, 2 % 2 = 0 -> base_material (red)
-        let (mat, color) = effective_material_and_color(&prepared, Some((1.0, 1.0)));
+        let (mat, color) =
+            effective_material_and_color(&prepared, Some((1.0, 1.0)), &Point::origin());
         assert!((color.x - 1.0).abs() < 1e-3);
         assert!((mat.shininess - 32.0).abs() < 1e-6);
 
         // At (0.7, 0.3): floor(0.7) + floor(0.3) = 0 -> base_material
-        let (_mat, color) = effective_material_and_color(&prepared, Some((0.7, 0.3)));
+        let (_mat, color) =
+            effective_material_and_color(&prepared, Some((0.7, 0.3)), &Point::origin());
         assert!((color.x - 1.0).abs() < 1e-3);
 
         // At (1.2, 0.8): floor(1.2) + floor(0.8) = 1 -> material_b
-        let (_mat, color) = effective_material_and_color(&prepared, Some((1.2, 0.8)));
+        let (_mat, color) =
+            effective_material_and_color(&prepared, Some((1.2, 0.8)), &Point::origin());
         assert!(color.x.abs() < 1e-3);
     }
 
@@ -812,14 +1290,141 @@ mod tests {
         let prepared = PreparedMaterial::from_material(&mat);
 
         // At (0.0, 0.0) we should be on a grid line -> red
-        let (_m, color) = effective_material_and_color(&prepared, Some((0.0, 0.0)));
+        let (_m, color) =
+            effective_material_and_color(&prepared, Some((0.0, 0.0)), &Point::origin());
         assert!((color.x - 1.0).abs() < 1e-3); // red
         assert!(color.y.abs() < 1e-3);
 
         // At (0.5, 0.5) we should NOT be on a grid line -> white
-        let (_m, color) = effective_material_and_color(&prepared, Some((0.5, 0.5)));
+        let (_m, color) =
+            effective_material_and_color(&prepared, Some((0.5, 0.5)), &Point::origin());
         assert!((color.x - 1.0).abs() < 1e-3); // white
         assert!((color.y - 1.0).abs() < 1e-3);
         assert!((color.z - 1.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_marble_texture_without_warp_has_analytic_samples() {
+        let material = Material {
+            texture: Some(Texture::Marble {
+                colors: vec!["#000000".to_string(), "#FFFFFF".to_string()],
+                direction: [1.0, 0.0, 0.0],
+                bands_per_unit: 0.5,
+                noise_scale: 1.0,
+                warp_strength: 0.0,
+                vein_sharpness: 1.0,
+                branch_strength: 0.0,
+                octaves: 1,
+                persistence: 0.5,
+                lacunarity: 2.0,
+                seed: 0,
+                transform: TextureTransform::default(),
+            }),
+            ..Material::default()
+        };
+        let prepared = PreparedMaterial::from_material(&material);
+
+        let sample = |x| effective_material_and_color(&prepared, None, &Point::new(x, 0.0, 0.0)).1;
+
+        assert!(sample(-0.5).magnitude() < 1e-12);
+        assert!((sample(0.0).x - 0.5).abs() < 1e-12);
+        assert!((sample(0.5).x - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_marble_domain_warp_changes_transverse_profile() {
+        let material = Material {
+            texture: Some(Texture::Marble {
+                colors: vec!["#000000".to_string(), "#FFFFFF".to_string()],
+                direction: [1.0, 0.0, 0.0],
+                bands_per_unit: 0.5,
+                noise_scale: 0.8,
+                warp_strength: 3.0,
+                vein_sharpness: 2.4,
+                branch_strength: 0.8,
+                octaves: 4,
+                persistence: 0.5,
+                lacunarity: 2.0,
+                seed: 19,
+                transform: TextureTransform::default(),
+            }),
+            ..Material::default()
+        };
+        let prepared = PreparedMaterial::from_material(&material);
+        let sample = |y| {
+            effective_material_and_color(&prepared, None, &Point::new(0.25, y, 0.0))
+                .1
+                .x
+        };
+        let center = sample(-2.0);
+        assert!([-1.5, -1.0, 0.0, 1.0, 1.5, 2.0]
+            .into_iter()
+            .any(|y| (sample(y) - center).abs() > 1e-4));
+    }
+
+    #[test]
+    fn test_wood_texture_uses_cylindrical_rings() {
+        let material = Material {
+            texture: Some(Texture::Wood {
+                colors: vec!["#000000".to_string(), "#FFFFFF".to_string()],
+                origin: [0.0, 0.0, 0.0],
+                axis: [0.0, 1.0, 0.0],
+                rings_per_unit: 0.5,
+                ring_width: 0.25,
+                noise_scale: 1.0,
+                ring_warp: 0.0,
+                grain_scale: 1.0,
+                grain_strength: 0.0,
+                octaves: 1,
+                persistence: 0.5,
+                lacunarity: 2.0,
+                seed: 0,
+                transform: TextureTransform::default(),
+            }),
+            ..Material::default()
+        };
+        let prepared = PreparedMaterial::from_material(&material);
+
+        let sample = |point| effective_material_and_color(&prepared, None, &point).1.x;
+
+        assert!(sample(Point::new(0.0, 0.0, 0.0)).abs() < 1e-12);
+        assert!((sample(Point::new(0.5, 0.0, 0.0)) - 1.0).abs() < 1e-12);
+        assert!(sample(Point::new(1.0, 0.0, 0.0)).abs() < 1e-12);
+        assert!(
+            (sample(Point::new(0.5, 4.0, 0.0)) - sample(Point::new(0.5, -3.0, 0.0))).abs() < 1e-12
+        );
+    }
+
+    #[test]
+    fn test_wood_texture_adds_long_grain_variation() {
+        let material = Material {
+            texture: Some(Texture::Wood {
+                colors: vec!["#000000".to_string(), "#FFFFFF".to_string()],
+                origin: [0.0, 0.0, 0.0],
+                axis: [1.0, 0.0, 0.0],
+                rings_per_unit: 1.5,
+                ring_width: 0.2,
+                noise_scale: 1.0,
+                ring_warp: 0.5,
+                grain_scale: 2.0,
+                grain_strength: 1.0,
+                octaves: 4,
+                persistence: 0.5,
+                lacunarity: 2.0,
+                seed: 23,
+                transform: TextureTransform::default(),
+            }),
+            ..Material::default()
+        };
+        let prepared = PreparedMaterial::from_material(&material);
+        let sample = |x| {
+            effective_material_and_color(&prepared, None, &Point::new(x, 0.0, 0.35))
+                .1
+                .x
+        };
+        let center = sample(-2.0);
+        assert!([-1.0, 0.0, 1.0, 2.0]
+            .into_iter()
+            .any(|x| (sample(x) - center).abs() > 1e-4));
     }
 }

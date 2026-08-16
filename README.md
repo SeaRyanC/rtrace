@@ -13,7 +13,8 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
   - Anti-aliasing with multiple sampling modes (quincunx, stochastic, no-jitter)
   - Atmospheric fog with distance-based linear-to-exponential density calculation
   - Surface reflections
-  - Grid texture patterns for planes
+  - Grid, checkerboard, marble, and wood textures
+  - Solid procedural marble and wood mappings for planes and 3D meshes
   - **Deterministic rendering** for reproducible results
 - **CLI Tool**: Command-line ray tracer for rendering scenes from JSON
 - **Node.js Bindings**: Native Node.js modules using napi-rs
@@ -372,7 +373,8 @@ The ray tracer supports:
 - Multiple point light sources with individual colors and intensities
 - Atmospheric fog with linear falloff
 - Surface reflections for mirror-like materials
-- Grid texture patterns for planes
+- Grid and checkerboard texture patterns
+- Solid procedural marble and wood textures evaluated from world-space coordinates
 - Future-proofed design for triangle mesh support
 
 ## License

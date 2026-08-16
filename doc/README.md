@@ -510,7 +510,27 @@ Add mirror-like reflections to create realistic shiny surfaces:
 
 ### Textures
 
-Add patterns to surfaces. rtrace supports grid patterns and checkerboard patterns for planes:
+Add patterns to surfaces. Grid and checkerboard textures use the existing surface
+coordinates; marble and wood are solid procedural textures that evaluate the
+world-space hit point directly. That makes them continuous across planes,
+spheres, cubes, and STL meshes without requiring mesh UVs.
+
+#### Procedural texture mapping
+
+Procedural textures first map the hit point with the optional `transform`:
+
+```text
+q = scale * rotate(point - translate)
+```
+
+`translate`, `rotate_degrees`, and `scale` are all expressed in the texture
+coordinate system. The `direction`/`axis` vectors are normalized internally.
+Use the texture transform to keep a pattern fixed, rotate its grain, or change
+its frequency without changing object transforms.
+
+The implementation uses deterministic improved 3D Perlin noise with the
+quintic fade curve and normalized fBm fields. Set `seed` to reproduce the same
+pattern across renders and thread counts.
 
 ### Planar Perlin Noise
 
@@ -536,6 +556,121 @@ Use deterministic Perlin noise on planes to break up perfectly smooth surfaces (
   }
 }
 ```
+
+#### Marble Texture
+
+Marble uses a recursively warped 3D flow field and extracts ridged fBm
+level-sets at macro and fine scales. The level-sets form a branching vein
+network instead of repeating parallel bands; `direction` only provides a
+preferred stretch to the flow, while local noise changes the vein orientation.
+`vein_sharpness` concentrates the darkest palette colors into thin veins, and
+`branch_strength` increases secondary wisps and spatial breakup. More palette
+colors make the transition less binary and are useful for natural stone.
+
+```jsonc
+{
+  "material": {
+    "color": "#F5F3EC",
+    "ambient": 0.2,
+    "diffuse": 0.75,
+    "specular": 0.25,
+    "shininess": 40,
+    "texture": {
+      "type": "marble",
+      "colors": ["#F8F6EE", "#D8D1C5", "#8E8577", "#382F2B"],
+      "direction": [0.86, 0.51, 0],
+      "bands_per_unit": 0.42,
+      "noise_scale": 0.78,
+      "warp_strength": 4.8,
+      "vein_sharpness": 3.0,
+      "branch_strength": 1.35,
+      "octaves": 5,
+      "persistence": 0.5,
+      "lacunarity": 2.0,
+      "seed": 42,
+      "transform": {
+        "translate": [0, 0, 0],
+        "rotate_degrees": [0, 0, 8],
+        "scale": [1, 1, 1]
+      }
+    }
+  }
+}
+```
+
+`bands_per_unit` controls the macro network scale, `noise_scale` controls the
+frequency of the 3D fields, `warp_strength` controls recursive flow distortion,
+`vein_sharpness` controls how narrow the dark veins become, and
+`branch_strength` controls secondary wisps and spatial breakup. Keep the
+network scale below the pixel sampling rate to avoid aliasing.
+
+#### Wood Texture
+
+Wood uses cylindrical growth rings around `axis`, with radial domain warping
+for irregular annual rings. An anisotropic fBm field varies quickly across the
+cross-section and slowly along `axis`, producing elongated fibers on side grain
+while retaining concentric end grain. `ring_width` narrows the latewood color
+into dark annual-ring bands. This is a solid 3D mapping, so the same
+configuration works on a plane or a mesh.
+
+```jsonc
+{
+  "material": {
+    "color": "#B46E3C",
+    "ambient": 0.18,
+    "diffuse": 0.78,
+    "specular": 0.28,
+    "shininess": 28,
+    "texture": {
+      "type": "wood",
+      "colors": ["#D8A264", "#925027", "#32160B"],
+      "origin": [0, 0, 0],
+      "axis": [1, 0, 0],
+      "rings_per_unit": 1.9,
+      "ring_width": 0.18,
+      "noise_scale": 1.1,
+      "ring_warp": 0.85,
+      "grain_scale": 2.4,
+      "grain_strength": 0.95,
+      "octaves": 5,
+      "persistence": 0.5,
+      "lacunarity": 2.0,
+      "seed": 7
+    }
+  }
+}
+```
+
+`rings_per_unit` controls growth-ring spacing, `ring_warp` controls radial
+irregularity, `grain_scale` controls fiber frequency, and `grain_strength`
+controls long-grain contrast. Set `axis` perpendicular to a surface to show
+end grain; choose an axis in the surface for a long-grain view.
+
+#### Deterministic sample outputs
+
+These small analytic cases disable turbulence (`warp_strength`/`ring_warp` =
+`0`), use `vein_sharpness=1` and `grain_strength=0`, and use black/white
+palettes. The values are the linear RGB color returned before lighting:
+
+| Texture | Configuration | Point `[x, y, z]` | Output |
+|---|---|---:|---|
+| Marble | `direction=[1,0,0]`, `bands_per_unit=0.5` | `[-0.5,0,0]` | `(0, 0, 0)` |
+| Marble | same | `[0,0,0]` | `(0.5, 0.5, 0.5)` |
+| Marble | same | `[0.5,0,0]` | `(1, 1, 1)` |
+| Wood | `axis=[0,1,0]`, `rings_per_unit=0.5`, `ring_width=0.25` | `[0,0,0]` | `(0, 0, 0)` |
+| Wood | same | `[0.5,0,0]` | `(1, 1, 1)` |
+| Wood | same | `[1,0,0]` | `(0, 0, 0)` |
+
+Example scenes are available as
+[`examples/procedural_marble_plane.json`](../examples/procedural_marble_plane.json)
+and [`examples/procedural_wood_mesh.json`](../examples/procedural_wood_mesh.json).
+
+#### Algorithm references
+
+- Ken Perlin, [Improved Noise reference implementation](https://mrl.cs.nyu.edu/~perlin/noise/).
+- Simon Green, NVIDIA, [Implementing Improved Perlin Noise](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-26-implementing-improved-perlin-noise).
+- Peter Shirley et al., [Ray Tracing: The Next Week, Perlin noise and turbulence](https://raytracing.github.io/books/RayTracingTheNextWeek.html).
+- Matt Pharr et al., [pbrt procedural texture coordinate generation](https://pbr-book.org/4ed/Textures_and_Materials/Texture_Coordinate_Generation).
 
 #### Grid Texture
 
@@ -595,7 +730,7 @@ Creates alternating squares with independent material properties. Each square is
 **Key Features:**
 - Each checkerboard square uses completely independent material properties (color, shininess, reflectivity, etc.)
 - Pattern uses 1x1 world units - use object transforms to scale the pattern
-- Works on planes, cubes, and STL meshes that have texture coordinates
+- Grid and checkerboard use surface coordinates; procedural marble and wood use solid world coordinates and do not require UVs
 
 **Example:** Different material configurations
 
@@ -608,6 +743,14 @@ Creates alternating squares with independent material properties. Each square is
 **Example:** Grid texture patterns
 
 ![Grid Textures](images/texture-grid-variations.png)
+
+**Example:** Procedural marble on a plane
+
+![Procedural Marble](images/procedural-marble-plane.png)
+
+**Example:** Procedural wood on an STL mesh
+
+![Procedural Wood](images/procedural-wood-mesh.png)
 
 **Example:** Checkerboard texture with different materials
 

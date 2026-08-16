@@ -1,0 +1,80 @@
+{
+  "camera": {
+    "kind": "perspective",
+    "position": [470, -760, 310],
+    "target": [82, 56, 198],
+    "up": [0, 0, 1],
+    "width": 4,
+    "height": 5.6,
+    "fov": 32
+  },
+  "objects": [
+    {
+      "kind": "mesh",
+      "filename": "david_michelangelo_scan.stl",
+      "material": {
+        "color": "#F8F6EE",
+        "ambient": 0.15,
+        "diffuse": 0.78,
+        "specular": 0.06,
+        "shininess": 32,
+        "texture": {
+          "type": "marble",
+          "colors": ["#FCFAF4", "#E7E3DA", "#CAC4BA", "#9D968D"],
+          "direction": [0.86, 0.51, 0],
+          "bands_per_unit": 0.75,
+          "noise_scale": 0.95,
+          "warp_strength": 4.8,
+          "vein_sharpness": 4.2,
+          "branch_strength": 0.9,
+          "octaves": 5,
+          "persistence": 0.5,
+          "lacunarity": 2.0,
+          "seed": 42,
+          "transform": {
+            "translate": [82, 56, 198],
+            "rotate_degrees": [0, 0, 8],
+            "scale": [0.05, 0.05, 0.05]
+          }
+        }
+      }
+    },
+    {
+      "kind": "plane",
+      "point": [0, 0, -0.5],
+      "normal": [0, 0, 1],
+      "material": {
+        "color": "#353940",
+        "ambient": 0.18,
+        "diffuse": 0.68,
+        "specular": 0.05,
+        "shininess": 24
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [260, -420, 650],
+      "color": "#FFF4E0",
+      "intensity": 0.95,
+      "diameter": 180
+    },
+    {
+      "position": [-260, -80, 380],
+      "color": "#DDE8FF",
+      "intensity": 0.35
+    },
+    {
+      "position": [180, 360, 240],
+      "color": "#FFFFFF",
+      "intensity": 0.2
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.12
+    },
+    "background_color": "#11151B"
+  }
+}

@@ -21,6 +21,28 @@ This directory contains example scene files demonstrating the ray tracer capabil
 - Demonstrates cube rendering and lighting
 - **Output**: `simple_cube_800x600.png`
 
+#### 4. Procedural Marble (`procedural_marble_plane.json`)
+- Solid marble texture on an infinite plane
+- Demonstrates branching domain-warped veins, palettes, and texture transforms
+- **Output**: `procedural_marble_plane_800x600.png`
+
+#### 5. Procedural Wood (`procedural_wood_mesh.json`)
+- Solid wood growth-ring and long-grain texture on `wood_block.stl`
+- Demonstrates irregular end grain, elongated fibers, and mesh rendering without UV coordinates
+- **Output**: `procedural_wood_mesh_800x600.png`
+
+#### 6. Procedural Marble David (`procedural_marble_david.json`)
+- Solid marble texture on a scanned mesh of Michelangelo's David
+- Demonstrates world-space marble mapping, diffuse area lighting, and floor shadows
+- **Mesh license**: CC BY-SA 4.0; see `david_michelangelo_scan.attribution.txt`
+- **Output**: `procedural_marble_david_portrait.png` (1046x1465 high-resolution portrait)
+
+#### 7. Procedural Wood Benchy (`procedural_wood_benchy.json`)
+- Wood growth rings and grain mapped directly onto the 3DBenchy mesh
+- Demonstrates procedural wood on a detailed mesh with diffuse lighting and floor shadows
+- **Mesh source**: shared `doc/scenes/benchy.stl` asset
+- **Output**: `procedural_wood_benchy_800x600.png`
+
 ### Complex Scene Examples
 
 #### 4. Multiple Objects (`multiple_objects.json`)
@@ -161,7 +183,7 @@ All scenes follow the JSON schema defined in `../schema.json`. Key features:
 - **Objects**: Sphere, plane, cube, mesh (STL) with materials and optional transforms
 - **Transforms**: Rotate, translate, scale operations for object positioning  
 - **Materials**: Phong lighting model with ambient, diffuse, specular components
-- **Textures**: Grid pattern support for planes
+- **Textures**: Grid, checkerboard, marble, and wood patterns
 - **Lighting**: Point and area light sources with color and intensity
 - **Effects**: Ambient lighting and atmospheric fog
 
@@ -201,4 +223,6 @@ Transforms are applied in order: first scale 1.5x, then rotate 45° around Y-axi
 ## Textures
 
 Currently supported textures:
-- **Grid**: Creates a grid pattern with specified line color, width, and cell size
+- **Grid** and **checkerboard**: Surface-coordinate patterns
+- **Marble**: Directional turbulence-warped bands sampled from world-space x/y/z
+- **Wood**: Turbulence-warped cylindrical growth rings sampled from world-space x/y/z

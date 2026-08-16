@@ -157,6 +157,77 @@ fn default_layer_jitter() -> f64 {
     0.05
 }
 
+fn default_texture_axis() -> [f64; 3] {
+    [0.0, 1.0, 0.0]
+}
+fn default_texture_scale_xyz() -> [f64; 3] {
+    [1.0, 1.0, 1.0]
+}
+fn default_marble_bands_per_unit() -> f64 {
+    1.0
+}
+fn default_marble_noise_scale() -> f64 {
+    1.0
+}
+fn default_marble_warp_strength() -> f64 {
+    1.5
+}
+fn default_marble_vein_sharpness() -> f64 {
+    2.4
+}
+fn default_marble_branch_strength() -> f64 {
+    0.7
+}
+fn default_marble_octaves() -> u32 {
+    5
+}
+fn default_wood_rings_per_unit() -> f64 {
+    3.0
+}
+fn default_wood_ring_width() -> f64 {
+    0.22
+}
+fn default_wood_noise_scale() -> f64 {
+    1.4
+}
+fn default_wood_ring_warp() -> f64 {
+    0.18
+}
+fn default_wood_grain_scale() -> f64 {
+    3.0
+}
+fn default_wood_grain_strength() -> f64 {
+    0.65
+}
+fn default_wood_octaves() -> u32 {
+    4
+}
+
+/// Coordinate transform applied before evaluating a procedural texture.
+///
+/// Texture coordinates are world-space hit points by default. This transform
+/// makes it possible to position, rotate, and stretch a pattern without
+/// changing the object geometry.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TextureTransform {
+    #[serde(default)]
+    pub translate: [f64; 3],
+    #[serde(default)]
+    pub rotate_degrees: [f64; 3],
+    #[serde(default = "default_texture_scale_xyz")]
+    pub scale: [f64; 3],
+}
+
+impl Default for TextureTransform {
+    fn default() -> Self {
+        Self {
+            translate: [0.0, 0.0, 0.0],
+            rotate_degrees: [0.0, 0.0, 0.0],
+            scale: default_texture_scale_xyz(),
+        }
+    }
+}
+
 /// Texture configuration
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type")]
@@ -170,6 +241,64 @@ pub enum Texture {
     #[serde(rename = "checkerboard")]
     Checkerboard {
         material_b: Box<Material>, // secondary material for alternate squares
+    },
+    #[serde(rename = "marble")]
+    Marble {
+        /// Palette from low to high pattern values.
+        colors: Vec<String>,
+        #[serde(default = "default_texture_axis")]
+        direction: [f64; 3],
+        #[serde(default = "default_marble_bands_per_unit")]
+        bands_per_unit: f64,
+        #[serde(default = "default_marble_noise_scale")]
+        noise_scale: f64,
+        #[serde(default = "default_marble_warp_strength")]
+        warp_strength: f64,
+        #[serde(default = "default_marble_vein_sharpness")]
+        vein_sharpness: f64,
+        #[serde(default = "default_marble_branch_strength")]
+        branch_strength: f64,
+        #[serde(default = "default_marble_octaves")]
+        octaves: u32,
+        #[serde(default = "default_perlin_persistence")]
+        persistence: f64,
+        #[serde(default = "default_perlin_lacunarity")]
+        lacunarity: f64,
+        #[serde(default)]
+        seed: u64,
+        #[serde(default)]
+        transform: TextureTransform,
+    },
+    #[serde(rename = "wood")]
+    Wood {
+        /// Palette from earlywood to latewood.
+        colors: Vec<String>,
+        #[serde(default)]
+        origin: [f64; 3],
+        #[serde(default = "default_texture_axis")]
+        axis: [f64; 3],
+        #[serde(default = "default_wood_rings_per_unit")]
+        rings_per_unit: f64,
+        #[serde(default = "default_wood_ring_width")]
+        ring_width: f64,
+        #[serde(default = "default_wood_noise_scale")]
+        noise_scale: f64,
+        #[serde(default = "default_wood_ring_warp")]
+        ring_warp: f64,
+        #[serde(default = "default_wood_grain_scale")]
+        grain_scale: f64,
+        #[serde(default = "default_wood_grain_strength")]
+        grain_strength: f64,
+        #[serde(default = "default_wood_octaves")]
+        octaves: u32,
+        #[serde(default = "default_perlin_persistence")]
+        persistence: f64,
+        #[serde(default = "default_perlin_lacunarity")]
+        lacunarity: f64,
+        #[serde(default)]
+        seed: u64,
+        #[serde(default)]
+        transform: TextureTransform,
     },
 }
 
@@ -426,6 +555,74 @@ mod tests {
             }
             _ => panic!("Expected mesh object"),
         }
+    }
+
+    #[test]
+    fn test_procedural_texture_defaults_from_json() {
+        let json = r##"
+        {
+          "camera": {
+            "kind": "ortho",
+            "position": [0.0, -5.0, 2.0],
+            "target": [0.0, 0.0, 0.0],
+            "up": [0.0, 0.0, 1.0],
+            "width": 10.0,
+            "height": 10.0
+          },
+          "objects": [
+            {
+              "kind": "plane",
+              "point": [0.0, 0.0, 0.0],
+              "normal": [0.0, 0.0, 1.0],
+              "material": {
+                "color": "#FFFFFF",
+                "ambient": 0.1,
+                "diffuse": 0.7,
+                "specular": 0.3,
+                "shininess": 32.0,
+                "texture": {
+                  "type": "marble",
+                  "colors": ["#FFFFFF", "#777777", "#222222"],
+                  "direction": [1.0, 0.0, 0.0],
+                  "transform": {
+                    "translate": [1.0, 2.0, 3.0],
+                    "rotate_degrees": [0.0, 0.0, 45.0],
+                    "scale": [2.0, 1.0, 1.0]
+                  }
+                }
+              }
+            }
+          ],
+          "lights": [],
+          "scene_settings": {
+            "ambient_illumination": {
+              "color": "#FFFFFF",
+              "intensity": 0.1
+            }
+          }
+        }
+        "##;
+
+        let scene: Scene = serde_json::from_str(json).unwrap();
+        let Object::Plane { material, .. } = &scene.objects[0] else {
+            panic!("Expected plane object");
+        };
+        let Some(Texture::Marble {
+            colors,
+            bands_per_unit,
+            octaves,
+            transform,
+            ..
+        }) = &material.texture
+        else {
+            panic!("Expected marble texture");
+        };
+
+        assert_eq!(colors.len(), 3);
+        assert!((*bands_per_unit - 1.0).abs() < 1e-12);
+        assert_eq!(*octaves, 5);
+        assert_eq!(transform.translate, [1.0, 2.0, 3.0]);
+        assert_eq!(transform.scale, [2.0, 1.0, 1.0]);
     }
 }
 

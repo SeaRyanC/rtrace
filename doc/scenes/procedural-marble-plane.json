@@ -1,0 +1,62 @@
+{
+  "camera": {
+    "kind": "ortho",
+    "position": [0, -7, 6],
+    "target": [0, 0, 0],
+    "up": [0, 0, 1],
+    "width": 10,
+    "height": 7
+  },
+  "objects": [
+    {
+      "kind": "plane",
+      "point": [0, 0, 0],
+      "normal": [0, 0, 1],
+      "material": {
+        "color": "#F5F3EC",
+        "ambient": 0.2,
+        "diffuse": 0.75,
+        "specular": 0.25,
+        "shininess": 40,
+        "texture": {
+          "type": "marble",
+          "colors": ["#F8F6EE", "#D8D1C5", "#8E8577", "#382F2B"],
+          "direction": [0.86, 0.51, 0],
+          "bands_per_unit": 0.42,
+          "noise_scale": 0.78,
+          "warp_strength": 4.8,
+          "vein_sharpness": 3.0,
+          "branch_strength": 1.35,
+          "octaves": 5,
+          "persistence": 0.5,
+          "lacunarity": 2.0,
+          "seed": 42,
+          "transform": {
+            "translate": [0, 0, 0],
+            "rotate_degrees": [0, 0, 8],
+            "scale": [1, 1, 1]
+          }
+        }
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [-3, -4, 6],
+      "color": "#FFFFFF",
+      "intensity": 1.1
+    },
+    {
+      "position": [4, 2, 3],
+      "color": "#DDE8FF",
+      "intensity": 0.35
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.2
+    },
+    "background_color": "#18202A"
+  }
+}

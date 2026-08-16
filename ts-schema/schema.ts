@@ -24,6 +24,11 @@ const SurfacePerlinNoiseSchema = z.object({
   color_strength: z.number().default(0).describe("Color modulation strength"),
   bump_strength: z.number().default(0).describe("Bump/normal modulation strength")
 });
+const TextureTransformSchema = z.object({
+  translate: Vector3Schema.optional().describe("Texture-space translation applied before sampling"),
+  rotate_degrees: Vector3Schema.optional().describe("Texture-space Euler rotation in degrees"),
+  scale: Vector3Schema.optional().describe("Texture-space non-uniform scale")
+}).describe("World-coordinate transform for a procedural texture");
 
 // Base material schema (without texture to avoid recursion)
 const BaseMaterialSchema = z.object({
@@ -60,6 +65,44 @@ const MaterialSchema: z.ZodSchema<{
   } | {
     type: "checkerboard";
     material_b: any; // Use any to break recursion
+  } | {
+    type: "marble";
+    colors: string[];
+    direction?: [number, number, number];
+    bands_per_unit?: number;
+    noise_scale?: number;
+    warp_strength?: number;
+    vein_sharpness?: number;
+    branch_strength?: number;
+    octaves?: number;
+    persistence?: number;
+    lacunarity?: number;
+    seed?: number;
+    transform?: {
+      translate?: [number, number, number];
+      rotate_degrees?: [number, number, number];
+      scale?: [number, number, number];
+    };
+  } | {
+    type: "wood";
+    colors: string[];
+    origin?: [number, number, number];
+    axis?: [number, number, number];
+    rings_per_unit?: number;
+    ring_width?: number;
+    noise_scale?: number;
+    ring_warp?: number;
+    grain_scale?: number;
+    grain_strength?: number;
+    octaves?: number;
+    persistence?: number;
+    lacunarity?: number;
+    seed?: number;
+    transform?: {
+      translate?: [number, number, number];
+      rotate_degrees?: [number, number, number];
+      scale?: [number, number, number];
+    };
   };
 }> = BaseMaterialSchema.extend({
   planar_perlin: SurfacePerlinNoiseSchema.optional().describe("Optional procedural perlin for planar surfaces"),
@@ -73,6 +116,38 @@ const MaterialSchema: z.ZodSchema<{
     z.object({
       type: z.literal("checkerboard"),
       material_b: z.lazy(() => MaterialSchema).describe("Alternate material for checkerboard pattern")
+    }),
+    z.object({
+      type: z.literal("marble"),
+      colors: z.array(HexColorSchema).min(2).max(8).describe("Palette from low to high marble values"),
+      direction: Vector3Schema.optional().describe("Direction of the marble bands"),
+      bands_per_unit: z.number().positive().optional().describe("Number of base vein bands per world unit"),
+      noise_scale: z.number().positive().optional().describe("3D turbulence frequency"),
+      warp_strength: z.number().min(0).optional().describe("3D domain-warp distance and vein irregularity"),
+      vein_sharpness: z.number().positive().optional().describe("Concentration of dark material into narrow veins"),
+      branch_strength: z.number().min(0).optional().describe("Strength of secondary branching veins and aperiodic variation"),
+      octaves: z.number().int().min(1).max(8).optional().describe("Number of turbulence octaves"),
+      persistence: z.number().positive().optional().describe("Amplitude falloff between octaves"),
+      lacunarity: z.number().positive().optional().describe("Frequency multiplier between octaves"),
+      seed: z.number().int().min(0).optional().describe("Deterministic noise seed"),
+      transform: TextureTransformSchema.optional()
+    }),
+    z.object({
+      type: z.literal("wood"),
+      colors: z.array(HexColorSchema).min(2).max(8).describe("Palette from earlywood to latewood"),
+      origin: Vector3Schema.optional().describe("Center of the cylindrical growth rings"),
+      axis: Vector3Schema.optional().describe("Wood grain/growth-ring axis"),
+      rings_per_unit: z.number().positive().optional().describe("Number of growth rings per world unit"),
+      ring_width: z.number().min(0).max(1).optional().describe("Width of the latewood band"),
+      noise_scale: z.number().positive().optional().describe("3D turbulence frequency"),
+      ring_warp: z.number().min(0).optional().describe("Radial growth-ring irregularity"),
+      grain_scale: z.number().positive().optional().describe("Frequency of elongated wood fibers"),
+      grain_strength: z.number().min(0).optional().describe("Contrast of long-grain fiber variation"),
+      octaves: z.number().int().min(1).max(8).optional().describe("Number of turbulence octaves"),
+      persistence: z.number().positive().optional().describe("Amplitude falloff between octaves"),
+      lacunarity: z.number().positive().optional().describe("Frequency multiplier between octaves"),
+      seed: z.number().int().min(0).optional().describe("Deterministic noise seed"),
+      transform: TextureTransformSchema.optional()
     })
   ]).optional().describe("Optional texture configuration")
 });

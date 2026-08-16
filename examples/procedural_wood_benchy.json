@@ -1,0 +1,82 @@
+{
+  "camera": {
+    "kind": "perspective",
+    "position": [90, -120, 65],
+    "target": [0, 0, 18],
+    "up": [0, 0, 1],
+    "width": 4.5,
+    "height": 4,
+    "fov": 35
+  },
+  "objects": [
+    {
+      "kind": "mesh",
+      "filename": "../doc/scenes/benchy.stl",
+      "material": {
+        "color": "#B46E3C",
+        "ambient": 0.16,
+        "diffuse": 0.78,
+        "specular": 0.12,
+        "shininess": 32,
+        "texture": {
+          "type": "wood",
+          "colors": ["#C98546", "#7A3D1D", "#2E1208"],
+          "origin": [0, 0, 0],
+          "axis": [1, 0, 0],
+          "rings_per_unit": 0.18,
+          "ring_width": 0.2,
+          "noise_scale": 0.7,
+          "ring_warp": 1.0,
+          "grain_scale": 0.65,
+          "grain_strength": 0.95,
+          "octaves": 5,
+          "persistence": 0.5,
+          "lacunarity": 2.0,
+          "seed": 23,
+          "transform": {
+            "translate": [0, 0, 0],
+            "rotate_degrees": [0, 0, 0],
+            "scale": [1, 1, 1]
+          }
+        }
+      }
+    },
+    {
+      "kind": "plane",
+      "point": [0, 0, -0.2],
+      "normal": [0, 0, 1],
+      "material": {
+        "color": "#34383D",
+        "ambient": 0.16,
+        "diffuse": 0.7,
+        "specular": 0.05,
+        "shininess": 20
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [90, -120, 120],
+      "color": "#FFF0D0",
+      "intensity": 1.05,
+      "diameter": 24
+    },
+    {
+      "position": [-60, -30, 70],
+      "color": "#DDE8FF",
+      "intensity": 0.35
+    },
+    {
+      "position": [40, 80, 90],
+      "color": "#FFFFFF",
+      "intensity": 0.2
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.14
+    },
+    "background_color": "#11151B"
+  }
+}

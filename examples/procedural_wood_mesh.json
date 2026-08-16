@@ -1,0 +1,64 @@
+{
+  "camera": {
+    "kind": "perspective",
+    "position": [4, -5, 3.2],
+    "target": [0, 0, 0],
+    "up": [0, 0, 1],
+    "width": 4.5,
+    "height": 4,
+    "fov": 50
+  },
+  "objects": [
+    {
+      "kind": "mesh",
+      "filename": "wood_block.stl",
+      "material": {
+        "color": "#B46E3C",
+        "ambient": 0.18,
+        "diffuse": 0.78,
+        "specular": 0.28,
+        "shininess": 28,
+        "texture": {
+          "type": "wood",
+          "colors": ["#D8A264", "#925027", "#32160B"],
+          "origin": [0, 0, 0],
+          "axis": [1, 0, 0],
+          "rings_per_unit": 1.9,
+          "ring_width": 0.18,
+          "noise_scale": 1.1,
+          "ring_warp": 0.85,
+          "grain_scale": 2.4,
+          "grain_strength": 0.95,
+          "octaves": 5,
+          "persistence": 0.5,
+          "lacunarity": 2.0,
+          "seed": 7,
+          "transform": {
+            "translate": [0, 0, 0],
+            "rotate_degrees": [0, 0, 12],
+            "scale": [1, 1, 1]
+          }
+        }
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [4, -4, 5],
+      "color": "#FFF4E0",
+      "intensity": 1.2
+    },
+    {
+      "position": [-3, 2, 3],
+      "color": "#DDE8FF",
+      "intensity": 0.45
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.22
+    },
+    "background_color": "#11151B"
+  }
+}
