@@ -73,6 +73,16 @@ The editor looks for `target/release/rtrace-cli` (or `.exe` on Windows). Set
 `RTRACE_CLI` to override the renderer path. See [`editor/README.md`](editor/README.md)
 for the editor controls and workflow.
 
+After installing the package, the same application is available as the
+`rtrace-editor` command:
+
+```bash
+npx --package @searyanc/rtrace rtrace-editor
+# or, after a global install:
+npm install --global @searyanc/rtrace
+rtrace-editor
+```
+
 ### Ray Tracer CLI
 
 ```bash

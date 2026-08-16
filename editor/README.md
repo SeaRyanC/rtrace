@@ -14,9 +14,19 @@ npm run editor:start
 ```
 
 `editor:build` regenerates the scene JSON schema, compiles the Electron
-processes, and copies the Monaco browser assets. The app looks for the
-renderer at `target/release/rtrace-cli` or `target/release/rtrace-cli.exe`.
-Set `RTRACE_CLI` to use a different renderer binary.
+processes, and copies the Monaco browser assets into the package distribution.
+The app looks for the renderer at `target/release/rtrace-cli` or
+`target/release/rtrace-cli.exe`. Set `RTRACE_CLI` to use a different renderer
+binary.
+
+The package also exposes the deployed `rtrace-editor` bin entry point:
+
+```bash
+npx --package @searyanc/rtrace rtrace-editor
+# or:
+npm install --global @searyanc/rtrace
+rtrace-editor
+```
 
 ## Workflow
 
