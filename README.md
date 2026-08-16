@@ -18,6 +18,7 @@ A high-performance ray tracer library written in Rust with Node.js bindings.
   - **Deterministic rendering** for reproducible results
 - **CLI Tool**: Command-line ray tracer for rendering scenes from JSON
 - **Node.js Bindings**: Native Node.js modules using napi-rs
+- **Electron Scene Editor**: Monaco JSON editing with schema-aware completion and progressive previews
 - **JSON Scene Format**: Flexible scene description with JSON schema validation
 - **PNG Output**: High-quality image generation
 
@@ -55,6 +56,22 @@ rtrace/
 ```
 
 ## Installation & Usage
+
+### Electron Scene Editor
+
+The desktop editor provides a dark Monaco JSON editor, schema tooltips and
+completion, rasterizer/raytracer preview modes, progressive rendering, and
+cancelable renders.
+
+```bash
+npm install
+cargo build --release -p rtrace-cli
+npm run editor:start
+```
+
+The editor looks for `target/release/rtrace-cli` (or `.exe` on Windows). Set
+`RTRACE_CLI` to override the renderer path. See [`editor/README.md`](editor/README.md)
+for the editor controls and workflow.
 
 ### Ray Tracer CLI
 

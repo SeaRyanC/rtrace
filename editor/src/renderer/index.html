@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data: file:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; worker-src blob: data:"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>rtrace Scene Editor</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script>
+      window.MonacoEnvironment = {
+        getWorkerUrl: function () {
+          const baseUrl = new URL("./", document.baseURI).toString();
+          const workerUrl = new URL(
+            "./vs/base/worker/workerMain.js",
+            document.baseURI,
+          ).toString();
+          const source =
+            "self.MonacoEnvironment={baseUrl:" +
+            JSON.stringify(baseUrl) +
+            "};importScripts(" +
+            JSON.stringify(workerUrl) +
+            ");";
+          return (
+            "data:text/javascript;charset=utf-8," +
+            encodeURIComponent(source)
+          );
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="brand">rtrace <span>Scene Editor</span></div>
+      <div class="toolbar-group file-actions">
+        <button id="new-scene" title="New Scene (Ctrl+N)">New</button>
+        <button id="open-scene" title="Open Scene (Ctrl+O)">Open</button>
+        <button id="save-scene" title="Save Scene (Ctrl+S)">Save</button>
+        <button id="save-as-scene" title="Save Scene As (Ctrl+Shift+S)">
+          Save As
+        </button>
+      </div>
+      <div class="toolbar-spacer"></div>
+      <div class="toolbar-group mode-toggle" role="group" aria-label="Render mode">
+        <button id="rasterize-mode" data-mode="rasterize">Rasterizer</button>
+        <button id="raytracer-mode" data-mode="raytracer">Raytracer</button>
+      </div>
+      <div class="toolbar-group render-actions">
+        <button id="render-scene" class="primary" title="Render Scene (F5)">
+          Render
+        </button>
+        <button id="cancel-render" class="danger" title="Cancel Render (Esc)">
+          Cancel
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="editor-pane" aria-label="JSON scene editor">
+        <div class="pane-heading">
+          <span id="file-name">Untitled scene</span>
+          <span id="dirty-indicator" aria-label="Unsaved changes"></span>
+        </div>
+        <div id="editor"></div>
+      </section>
+
+      <section class="preview-pane" aria-label="Render preview">
+        <div class="pane-heading">
+          <span>Render Preview</span>
+          <span id="render-size"></span>
+        </div>
+        <div id="preview-stage">
+          <div id="preview-placeholder">
+            <strong>Ready to render</strong>
+            <span>Press F5 or edit the scene to preview it.</span>
+          </div>
+          <img id="preview-image" alt="Rendered scene preview" />
+          <div id="progress-overlay" hidden>
+            <div class="progress-track"><div id="progress-bar"></div></div>
+            <span id="progress-label"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span id="file-status">Scene schema loading...</span>
+      <span id="render-status">Raytracer ready</span>
+    </footer>
+
+    <script src="./renderer.js"></script>
+    <script src="./vs/loader.js"></script>
+    <script>
+      require.config({ paths: { vs: "./vs" } });
+      require(["vs/editor/editor.main"], function () {
+        window.startRtraceEditor();
+      });
+    </script>
+  </body>
+</html>

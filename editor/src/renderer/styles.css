@@ -1,0 +1,263 @@
+:root {
+  color-scheme: dark;
+  --background: #1e1e1e;
+  --panel: #252526;
+  --panel-raised: #2d2d30;
+  --border: #3f3f46;
+  --text: #d4d4d4;
+  --muted: #9da0a6;
+  --accent: #0e639c;
+  --accent-hover: #1177bb;
+  --danger: #8f2f2f;
+  --danger-hover: #b23c3c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--text);
+  font-family:
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  font-size: 13px;
+}
+
+button {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+  padding: 5px 10px;
+  font: inherit;
+}
+
+button:hover:not(:disabled) {
+  background: #3a3a3d;
+}
+
+button:focus-visible {
+  outline: 1px solid #75beff;
+  outline-offset: 1px;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.toolbar {
+  align-items: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  height: 46px;
+  padding: 0 12px;
+}
+
+.brand {
+  color: #f1f1f1;
+  font-size: 14px;
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.brand span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.toolbar-group {
+  display: flex;
+  gap: 4px;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.mode-toggle button.active {
+  background: var(--accent);
+  border-color: #3794d2;
+  color: white;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: #3794d2;
+  color: white;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button.danger {
+  background: var(--danger);
+  border-color: #b24a4a;
+  color: white;
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(380px, 46%) minmax(0, 1fr);
+  height: calc(100% - 72px);
+  min-height: 0;
+}
+
+.editor-pane,
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor-pane {
+  border-right: 1px solid var(--border);
+}
+
+.pane-heading {
+  align-items: center;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  display: flex;
+  height: 32px;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+
+#file-name {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#dirty-indicator {
+  background: #e2c08d;
+  border-radius: 50%;
+  display: none;
+  height: 7px;
+  margin-left: 8px;
+  width: 7px;
+}
+
+#dirty-indicator.visible {
+  display: inline-block;
+}
+
+#editor {
+  flex: 1;
+  min-height: 0;
+}
+
+#preview-stage {
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% 30%, #202a35 0, #141a21 58%, #101318 100%);
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+#preview-image {
+  display: none;
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+#preview-image.visible {
+  display: block;
+}
+
+#preview-placeholder {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#preview-placeholder strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+#progress-overlay {
+  background: rgb(0 0 0 / 55%);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  left: 18px;
+  padding: 9px 11px;
+  position: absolute;
+  right: 18px;
+}
+
+#progress-overlay[hidden] {
+  display: none;
+}
+
+.progress-track {
+  background: #111;
+  border-radius: 3px;
+  height: 5px;
+  overflow: hidden;
+}
+
+#progress-bar {
+  background: #3794d2;
+  height: 100%;
+  transition: width 120ms ease;
+  width: 0;
+}
+
+#progress-label {
+  color: #e7e7e7;
+  font-size: 12px;
+}
+
+.statusbar {
+  align-items: center;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  height: 26px;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+#file-status,
+#render-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#render-status {
+  margin-left: 16px;
+  opacity: 0.9;
+}

@@ -30,7 +30,10 @@
     "schema:compile": "npx hereby schema:compile",
     "schema:generate": "npx hereby schema:generate",
     "schema:validate": "npx hereby schema:validate",
-    "schema:all": "npx hereby schema:all"
+    "schema:all": "npx hereby schema:all",
+    "editor:prepare": "npm run schema:generate && node scripts/prepare-editor.mjs",
+    "editor:build": "npm run editor:prepare && npx tsc -p editor/tsconfig.json && node scripts/copy-editor-assets.mjs",
+    "editor:start": "npm run editor:build && electron editor/dist/main.js"
   },
   "repository": {
     "type": "git",
@@ -56,11 +59,13 @@
   "devDependencies": {
     "@napi-rs/cli": "^2.18.4",
     "@types/node": "^24.3.3",
+    "electron": "^38.1.0",
     "hereby": "^1.11.0",
     "typescript": "^5.9.2",
     "zod": "^4.1.8"
   },
   "dependencies": {
+    "monaco-editor": "^0.52.2",
     "pngjs": "^7.0.0"
   }
 }
