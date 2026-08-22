@@ -25,6 +25,10 @@ copyFileSync(
   "dist/editor/renderer/index.html",
 );
 copyFileSync(
+  "editor/dist/renderer/renderer.js",
+  "dist/editor/renderer/renderer.js",
+);
+copyFileSync(
   "editor/src/renderer/styles.css",
   "dist/editor/renderer/styles.css",
 );

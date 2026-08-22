@@ -535,6 +535,7 @@ function handleMenuCommand(command: MenuCommand): void {
       newScene();
       break;
     case "open":
+      void window.rtrace.openScene();
       break;
     case "save":
       void saveScene(false);

@@ -1,0 +1,86 @@
+{
+  "camera": {
+    "kind": "perspective",
+    "position": [1000, -7000, 2800],
+    "target": [450, 670, 1400],
+    "up": [0, 0, 1],
+    "width": 4.5,
+    "height": 5.6,
+    "fov": 26
+  },
+  "objects": [
+    {
+      "kind": "mesh",
+      "filename": "winged-victory-of-samothrace-at-the-louvre-paris-1.stl",
+      "transform": [
+        "rotate(0, 0, -20)"
+      ],
+      "material": {
+        "color": "#EAE6DD",
+        "ambient": 0.016,
+        "diffuse": 0.78,
+        "specular": 0.48,
+        "shininess": 14,
+        "texture": {
+          "type": "marble",
+          "colors": ["#F4F1E9", "#E1DCD1", "#C9C2B7", "#A9A198"],
+          "direction": [0.78, 0.35, 0.5],
+          "bands_per_unit": 6.32,
+          "noise_scale": 0.95,
+          "warp_strength": 15.4,
+          "vein_sharpness": 13.4,
+          "branch_strength": 1.25,
+          "octaves": 5,
+          "persistence": 0.5,
+          "lacunarity": 2.0,
+          "seed": 2073,
+          "transform": {
+            "translate": [0, 0, 0],
+            "rotate_degrees": [0, 0, 11],
+            "scale": [0.006, 0.006, 0.006]
+          }
+        }
+      }
+    },
+    {
+      "kind": "plane",
+      "point": [0, 0, -4],
+      "normal": [0, 0, 1],
+      "material": {
+        "color": "#888888",
+        "ambient": 0.16,
+        "diffuse": 0.7,
+        "specular": 0.05,
+        "shininess": 20,
+        "reflectivity": 0.4
+      }
+    }
+  ],
+  "lights": [
+    {
+      "position": [3500, -4500, 6000],
+      "color": "#FFF1D6",
+      "intensity": 1.0,
+      "diameter": 100
+    },
+    {
+      "position": [-2500, -800, 3500],
+      "color": "#DDE8FF",
+      "intensity": 0.64,
+      "diameter": 700
+    },
+    {
+      "position": [1500, 4000, 4200],
+      "color": "#FFFFFF",
+      "intensity": 0.42,
+      "diameter": 600
+    }
+  ],
+  "scene_settings": {
+    "ambient_illumination": {
+      "color": "#FFFFFF",
+      "intensity": 0.12
+    },
+    "background_color": "#11151B"
+  }
+}

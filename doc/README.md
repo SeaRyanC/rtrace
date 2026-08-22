@@ -665,6 +665,21 @@ Example scenes are available as
 [`examples/procedural_marble_plane.json`](../examples/procedural_marble_plane.json)
 and [`examples/procedural_wood_mesh.json`](../examples/procedural_wood_mesh.json).
 
+#### Featured mesh sample: Winged Victory of Samothrace
+
+[`examples/procedural_marble_winged_victory.json`](../examples/procedural_marble_winged_victory.json)
+applies the solid marble mapping to the 500,000-triangle Winged Victory scan,
+with a three-quarter-left close-up camera, diffuse area lights, and a floor for
+soft shadows. The camera follows the perspective of the
+[Wikimedia Commons reference photograph](https://commons.wikimedia.org/wiki/File:Victoire_de_Samothrace_-_vue_de_trois-quart_gauche,_gros_plan_de_la_statue_(2).JPG),
+showing the chest and the near wing in profile.
+The mesh is by **Scan The World** and comes from the
+[MyMiniFactory object page](https://www.myminifactory.com/object/3d-print-winged-victory-of-samothrace-2073).
+It is licensed **CC BY-NC-SA 4.0**; retain the accompanying
+[`attribution file`](../examples/winged-victory-of-samothrace-at-the-louvre-paris-1.attribution.txt)
+and follow its attribution, noncommercial, and ShareAlike terms. The mesh is
+separately licensed from the MIT-licensed rtrace source code.
+
 #### Algorithm references
 
 - Ken Perlin, [Improved Noise reference implementation](https://mrl.cs.nyu.edu/~perlin/noise/).

@@ -1,0 +1,22 @@
+Winged Victory of Samothrace at The Louvre, Paris attribution
+
+Creator:
+Scan The World
+
+Source:
+https://www.myminifactory.com/object/3d-print-winged-victory-of-samothrace-2073
+
+MyMiniFactory object ID: 2073
+MyMiniFactory file ID: 3802
+Original filename:
+winged-victory-of-samothrace-at-the-louvre-paris-1.stl
+
+License:
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+(CC BY-NC-SA 4.0)
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+This STL is redistributed as a separately licensed example asset. The rtrace
+source code remains under the repository MIT license; this mesh and any mesh
+adaptations remain subject to CC BY-NC-SA 4.0. The STL is included unchanged.
+Attribution, noncommercial use, and ShareAlike requirements apply to the mesh.

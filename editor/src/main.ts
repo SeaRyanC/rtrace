@@ -204,6 +204,9 @@ async function runProgressiveRender(render: ActiveRender): Promise<void> {
       mode: request.mode,
       cancelled: false,
     };
+    if (activeRender === render) {
+      activeRender = null;
+    }
     sendToRenderer(sender, "render:finished", finished);
   } catch (error) {
     if (error instanceof RenderCancelled || render.cancelled) {
@@ -211,9 +214,15 @@ async function runProgressiveRender(render: ActiveRender): Promise<void> {
         mode: request.mode,
         cancelled: true,
       };
+      if (activeRender === render) {
+        activeRender = null;
+      }
       sendToRenderer(sender, "render:finished", finished);
     } else {
       const message = error instanceof Error ? error.message : String(error);
+      if (activeRender === render) {
+        activeRender = null;
+      }
       sendToRenderer(sender, "render:error", message);
     }
   } finally {

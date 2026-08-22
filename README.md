@@ -48,6 +48,7 @@ rtrace/
 ├── examples/                # Example scene files and outputs
 │   ├── *.json               # Scene definition files
 │   ├── *.png                # Rendered example images
+│   ├── *.stl                # Example mesh assets (see adjacent attribution files)
 │   └── README.md            # Example documentation
 ├── schema.json              # JSON schema for scene files
 ├── Cargo.toml               # Workspace configuration

@@ -43,6 +43,14 @@ This directory contains example scene files demonstrating the ray tracer capabil
 - **Mesh source**: shared `doc/scenes/benchy.stl` asset
 - **Output**: `procedural_wood_benchy_800x600.png`
 
+#### 8. Procedural Marble Winged Victory (`procedural_marble_winged_victory.json`)
+- Subtle, branching marble veins mapped directly onto the Winged Victory of Samothrace scan
+- Demonstrates a large STL mesh, a three-quarter-left close-up crop, diffuse area lighting, and floor shadows
+- **Perspective reference**: [Wikimedia Commons photograph](https://commons.wikimedia.org/wiki/File:Victoire_de_Samothrace_-_vue_de_trois-quart_gauche,_gros_plan_de_la_statue_(2).JPG)
+- **Mesh source**: Scan The World via [MyMiniFactory object 2073](https://www.myminifactory.com/object/3d-print-winged-victory-of-samothrace-2073)
+- **Mesh license**: CC BY-NC-SA 4.0; see `winged-victory-of-samothrace-at-the-louvre-paris-1.attribution.txt`
+- **Output**: `procedural_marble_winged_victory_portrait.png`
+
 ### Complex Scene Examples
 
 #### 4. Multiple Objects (`multiple_objects.json`)

@@ -1,61 +1,68 @@
 {
   "camera": {
     "kind": "perspective",
-    "position": [150, -180, 140],
-    "target": [0.0, 0.0, 15],
-    "up": [0.0, 0.0, 1.0],
-    "width": 8.0,
-    "height": 6.0,
-    "fov": 16.0
+    "position": [150, -180, 70],
+    "target": [0, 0, 20],
+    "up": [0, 0, 1],
+    "width": 8,
+    "height": 6,
+    "fov": 16
   },
   "objects": [
     {
       "kind": "plane",
-      "point": [0.0, 0.0, 0.0],
-      "normal": [0.0, 0.0, 1.0],
+      "point": [0, 0, 0],
+      "normal": [0, 0, 1],
       "material": {
-        "color": "#333388",
+        "color": "#DDDDDD",
         "ambient": 0.25,
         "diffuse": 0.65,
         "specular": 0.12,
-        "shininess": 18.0,
+        "shininess": 18,
         "reflectivity": 0.4,
         "planar_perlin": {
           "frequency": 0.15,
           "octaves": 5,
           "persistence": 1.5,
           "lacunarity": 2.8,
-          "color_strength": 0.27,
-          "bump_strength": 0.1
+          "color_strength": 0.027,
+          "bump_strength": 0.05,
+          "seed": 19
         }
       }
     },
     {
       "kind": "mesh",
       "filename": "benchy.stl",
-      "print_direction": [0.0, 0.0, 1.0],
+      "print_direction": [0, 0, 1],
       "layer_line_thickness": 0.3,
       "layer_jitter": 0.4,
       "material": {
-        "color": "#EEEEEE",
+        "color": "#335FE0",
         "ambient": 0.14,
-        "diffuse": 0.74,
-        "specular": 0.26,
-        "shininess": 28.0
+        "diffuse": 1,
+        "specular": 0.86,
+        "shininess": 8
       }
     }
   ],
   "lights": [
     {
-      "position": [60.0, -50.0, 80.0],
+      "position": [60, -50, 80],
       "color": "#FFFFFF",
-      "intensity": 1.0,
-      "diameter": 1.5
+      "intensity": 1,
+      "diameter": 10
     },
     {
-      "position": [-50.0, -30.0, 50.0],
+      "position": [-50, -30, 50],
       "color": "#E0F0FF",
       "intensity": 0.5
+    },
+    {
+      "position": [150, -180, 5],
+      "color": "#E0F0FF",
+      "intensity": 0.2,
+      "diameter": 4
     }
   ],
   "scene_settings": {
