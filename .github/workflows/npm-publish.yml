@@ -66,4 +66,7 @@ jobs:
       - run: npm ci
       - run: npm run build:schema
       - run: npm run build:wrapper
+      - name: Restore CLI executable permissions
+        shell: bash
+        run: chmod +x dist/rtrace.js dist/rtrace-*
       - run: npm publish --access public
