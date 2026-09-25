@@ -73,6 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         0,
         [0.0, 0.0, 1.0],
         0.3,
+        0.0,
         0.05,
         None,
     );
@@ -82,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         0,
         [0.0, 0.0, 1.0],
         0.3,
+        0.0,
         0.05,
         None,
     );

@@ -491,6 +491,7 @@ impl Renderer {
                     transform,
                     print_direction,
                     layer_line_thickness,
+                    layer_line_radius,
                     layer_jitter,
                     top_bottom_perlin,
                     ..
@@ -532,6 +533,7 @@ impl Renderer {
                                 index,
                                 *print_direction,
                                 *layer_line_thickness,
+                                *layer_line_radius,
                                 *layer_jitter,
                                 top_bottom_perlin.clone(),
                             ))
@@ -542,6 +544,7 @@ impl Renderer {
                                 index,
                                 *print_direction,
                                 *layer_line_thickness,
+                                *layer_line_radius,
                                 *layer_jitter,
                                 top_bottom_perlin.clone(),
                             ))
@@ -1497,6 +1500,7 @@ endsolid test";
             0,
             [0.0, 0.0, 1.0],
             0.3,
+            0.0,
             0.05,
             None,
         );

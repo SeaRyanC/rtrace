@@ -186,8 +186,9 @@ const MeshObjectSchema = z.object({
   material: MaterialSchema,
   transform: TransformSchema,
   print_direction: Vector3Schema.optional().describe("3D print direction vector (default [0,0,1])"),
-  layer_line_thickness: z.number().positive().optional().describe("Layer line spacing/thickness (default 0.3)"),
-  layer_jitter: z.number().min(0).optional().describe("Layer line normal jitter amount (default 0.05)"),
+  layer_line_thickness: z.number().positive().optional().describe("Distance between rounded layer bead centers (default 0.3)"),
+  layer_line_radius: z.number().min(0).optional().describe("Outward radius of each rounded bead; 0 derives half the layer spacing"),
+  layer_jitter: z.number().min(0).optional().describe("Fractional coherent bead variation; 0.3 gives roughly 30% radius variation (default 0.05)"),
   top_bottom_perlin: SurfacePerlinNoiseSchema.extend({
     depth: z.number().positive().default(0.4).describe("Depth from top/bottom to apply build-plate artifacting")
   }).optional().describe("Optional perlin artifacting for mesh top/bottom print surfaces")

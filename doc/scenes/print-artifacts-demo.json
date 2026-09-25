@@ -35,14 +35,15 @@
       "kind": "mesh",
       "filename": "benchy.stl",
       "print_direction": [0, 0, 1],
-      "layer_line_thickness": 0.3,
-      "layer_jitter": 0.4,
+      "layer_line_thickness": 0.4,
+      "layer_line_radius": 0.05,
+      "layer_jitter": 0.5,
       "material": {
-        "color": "#335FE0",
+        "color": "#5577F2",
         "ambient": 0.14,
         "diffuse": 1,
-        "specular": 0.86,
-        "shininess": 8
+        "specular": 0.15,
+        "shininess": 100
       }
     }
   ],

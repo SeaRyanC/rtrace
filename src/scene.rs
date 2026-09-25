@@ -153,6 +153,9 @@ fn default_print_direction() -> [f64; 3] {
 fn default_layer_line_thickness() -> f64 {
     0.3
 }
+fn default_layer_line_radius() -> f64 {
+    0.0
+}
 fn default_layer_jitter() -> f64 {
     0.05
 }
@@ -544,12 +547,14 @@ mod tests {
             Object::Mesh {
                 print_direction,
                 layer_line_thickness,
+                layer_line_radius,
                 layer_jitter,
                 top_bottom_perlin,
                 ..
             } => {
                 assert_eq!(*print_direction, [0.0, 0.0, 1.0]);
                 assert!((*layer_line_thickness - 0.3).abs() < 1e-12);
+                assert!(layer_line_radius.abs() < 1e-12);
                 assert!((*layer_jitter - 0.05).abs() < 1e-12);
                 assert!(top_bottom_perlin.is_none());
             }
@@ -660,6 +665,8 @@ pub enum Object {
         print_direction: [f64; 3],
         #[serde(default = "default_layer_line_thickness")]
         layer_line_thickness: f64,
+        #[serde(default = "default_layer_line_radius")]
+        layer_line_radius: f64,
         #[serde(default = "default_layer_jitter")]
         layer_jitter: f64,
         #[serde(default)]

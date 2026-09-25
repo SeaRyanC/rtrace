@@ -303,8 +303,9 @@ Complex 3D models from STL files (ASCII or binary format), perfect for importing
   "filename": "models/example.stl",
   "material": { /* material properties */ },
   "print_direction": [0, 0, 1],      // Optional, defaults to Z-up
-  "layer_line_thickness": 0.3,       // Optional, defaults to 0.3
-  "layer_jitter": 0.05,              // Optional, defaults to 0.05
+  "layer_line_thickness": 0.3,       // Distance between rounded bead centers
+  "layer_line_radius": 0.0,          // Outward bead radius; 0 derives half the spacing
+  "layer_jitter": 0.05,              // Fractional coherent bead variation; 0.3 ≈ 30%
   "top_bottom_perlin": {             // Optional build-plate artifacting
     "frequency": 14.0,
     "octaves": 4,
@@ -318,13 +319,25 @@ Complex 3D models from STL files (ASCII or binary format), perfect for importing
 }
 ```
 
-`layer_jitter` applies deterministic, layer-aware normal deflection to simulate printed layer lines.  
+Layer lines are modeled as a stack of rounded extrusion beads. The renderer derives the
+normal from the analytic slope of each bead's softened circular cross-section, so side walls show
+individual lines instead of unrelated noise. `layer_line_radius` controls the outward bead
+radius; leaving it at `0` derives a bead that meets the adjacent layer. `layer_jitter` is a direct fractional variation amount: `0.3` produces roughly 30% bead-radius
+variation, with a smaller corresponding shift in layer centers. It has no arbitrary upper limit,
+so larger values can be used for exaggerated results, although extreme values may leave the
+physical print model. The variation is deterministic and coherent rather than random noise.
+Top-facing surfaces are intentionally left unchanged because their visible print
+texture comes from the top-skin toolpath rather than the stacked side beads.
 `top_bottom_perlin` applies deterministic Perlin artifacting only near the top and bottom surfaces
 relative to `print_direction`.
 
 **Example:** Printed finish artifacting + textured tabletop
 
 ![Print Artifacts Demo](images/print-artifacts-demo.png)
+
+**Example:** Rounded layer-line profile test
+
+![Layer Lines Profile](images/layer-lines-profile.png)
 
 **Example:** STL mesh model
 

@@ -480,6 +480,74 @@ mod tests {
         let b = layer_random_signed(101, 0x13C7_4D89);
         assert!((a - b).abs() > 1e-6);
     }
+
+    #[test]
+    fn layer_line_normal_follows_print_direction_on_side_wall() {
+        let wall_normal = Unit::new_normalize(Vec3::new(1.0, 0.0, 0.0));
+        let print_direction = Unit::new_normalize(Vec3::new(0.0, 0.0, 1.0));
+
+        let normal =
+            rounded_layer_line_normal(wall_normal, &print_direction, 0.3, 0.0, 0.0, 0.12, 0.0, 0.0);
+
+        assert!(normal.z.abs() > 0.1);
+        assert!(normal.y.abs() < 1e-12);
+    }
+
+    #[test]
+    fn layer_line_profile_is_symmetric_around_bead_center() {
+        let wall_normal = Unit::new_normalize(Vec3::new(0.0, -1.0, 0.0));
+        let print_direction = Unit::new_normalize(Vec3::new(0.0, 0.0, 1.0));
+
+        let lower =
+            rounded_layer_line_normal(wall_normal, &print_direction, 0.3, 0.0, 0.0, 0.12, 0.0, 0.0);
+        let upper =
+            rounded_layer_line_normal(wall_normal, &print_direction, 0.3, 0.0, 0.0, 0.18, 0.0, 0.0);
+
+        assert!(lower.x.abs() < 1e-12);
+        assert!(upper.x.abs() < 1e-12);
+        assert!((lower.y - upper.y).abs() < 1e-10);
+        assert!((lower.z + upper.z).abs() < 1e-10);
+    }
+
+    #[test]
+    fn layer_jitter_changes_bead_normal() {
+        let wall_normal = Unit::new_normalize(Vec3::new(0.0, -1.0, 0.0));
+        let print_direction = Unit::new_normalize(Vec3::new(0.0, 0.0, 1.0));
+
+        let regular = rounded_layer_line_normal(
+            wall_normal,
+            &print_direction,
+            0.3,
+            0.05,
+            0.0,
+            0.12,
+            1.3,
+            -0.8,
+        );
+        let rough = rounded_layer_line_normal(
+            wall_normal,
+            &print_direction,
+            0.3,
+            0.05,
+            0.3,
+            0.12,
+            1.3,
+            -0.8,
+        );
+
+        assert!((regular.as_ref() - rough.as_ref()).magnitude() > 0.01);
+    }
+
+    #[test]
+    fn layer_lines_do_not_distort_top_surface_normals() {
+        let top_normal = Unit::new_normalize(Vec3::new(0.0, 0.0, 1.0));
+        let print_direction = Unit::new_normalize(Vec3::new(0.0, 0.0, 1.0));
+
+        let normal =
+            rounded_layer_line_normal(top_normal, &print_direction, 0.3, 0.0, 1.0, 0.12, 0.0, 0.0);
+
+        assert!((normal.as_ref() - top_normal.as_ref()).magnitude() < 1e-12);
+    }
 }
 
 impl Intersectable for Cube {
@@ -591,6 +659,7 @@ pub struct MeshObject {
 pub struct MeshPrintEffects {
     pub print_direction: Unit<Vec3>,
     pub layer_line_thickness: f64,
+    pub layer_line_radius: f64,
     pub layer_jitter: f64,
     pub top_bottom_perlin: Option<MeshTopBottomPerlin>,
     pub print_u_axis: Unit<Vec3>,
@@ -606,6 +675,7 @@ impl MeshObject {
         material_index: usize,
         print_direction: [f64; 3],
         layer_line_thickness: f64,
+        layer_line_radius: f64,
         layer_jitter: f64,
         top_bottom_perlin: Option<MeshTopBottomPerlin>,
     ) -> Self {
@@ -613,6 +683,7 @@ impl MeshObject {
             &mesh,
             print_direction,
             layer_line_thickness,
+            layer_line_radius,
             layer_jitter,
             top_bottom_perlin,
         );
@@ -632,6 +703,7 @@ impl MeshObject {
         material_index: usize,
         print_direction: [f64; 3],
         layer_line_thickness: f64,
+        layer_line_radius: f64,
         layer_jitter: f64,
         top_bottom_perlin: Option<MeshTopBottomPerlin>,
     ) -> Self {
@@ -639,6 +711,7 @@ impl MeshObject {
             &mesh,
             print_direction,
             layer_line_thickness,
+            layer_line_radius,
             layer_jitter,
             top_bottom_perlin,
         );
@@ -664,6 +737,7 @@ impl MeshObject {
             hit.normal,
             &effects.print_direction,
             effects.layer_line_thickness,
+            effects.layer_line_radius,
             effects.layer_jitter,
             axis_coord,
             u,
@@ -724,6 +798,7 @@ impl MeshPrintEffects {
         mesh: &Mesh,
         print_direction: [f64; 3],
         layer_line_thickness: f64,
+        layer_line_radius: f64,
         layer_jitter: f64,
         top_bottom_perlin: Option<MeshTopBottomPerlin>,
     ) -> Self {
@@ -753,6 +828,7 @@ impl MeshPrintEffects {
         Self {
             print_direction,
             layer_line_thickness: layer_line_thickness.max(1e-4),
+            layer_line_radius: layer_line_radius.max(0.0),
             layer_jitter: layer_jitter.max(0.0),
             top_bottom_perlin,
             print_u_axis,
@@ -795,52 +871,103 @@ fn apply_layer_line_deflection(
     geometric_normal: Unit<Vec3>,
     print_direction: &Unit<Vec3>,
     layer_line_thickness: f64,
+    layer_line_radius: f64,
     layer_jitter: f64,
     axis_coord: f64,
     u: f64,
     v: f64,
 ) {
-    if layer_jitter <= 0.0 {
-        return;
-    }
+    *shading_normal = rounded_layer_line_normal(
+        geometric_normal,
+        print_direction,
+        layer_line_thickness,
+        layer_line_radius,
+        layer_jitter,
+        axis_coord,
+        u,
+        v,
+    );
+}
 
-    let layer_coord = axis_coord / layer_line_thickness;
+/// Approximate the exposed side of a printed part as a stack of rounded
+/// extrusion beads. The normal is the analytic slope of a smooth bead
+/// cross-section, rather than a random perturbation.
+fn rounded_layer_line_normal(
+    geometric_normal: Unit<Vec3>,
+    print_direction: &Unit<Vec3>,
+    layer_line_thickness: f64,
+    layer_line_radius: f64,
+    layer_jitter: f64,
+    axis_coord: f64,
+    u: f64,
+    v: f64,
+) -> Unit<Vec3> {
+    let pitch = layer_line_thickness.max(1e-6);
+    let surface_normal = geometric_normal.as_ref();
+
+    // The print direction projected onto the surface is the cross-section
+    // direction of a layer bead. A cross product would point along the bead
+    // instead and cannot describe its rounded vertical profile.
+    let tangent =
+        *print_direction.as_ref() - surface_normal * surface_normal.dot(print_direction.as_ref());
+    let tangent_length = tangent.magnitude();
+    if tangent_length < 1e-8 {
+        return geometric_normal;
+    }
+    let tangent = tangent / tangent_length;
+
+    let layer_coord = axis_coord / pitch;
     let layer_index = layer_coord.floor() as i64;
     let layer_pos = layer_coord.rem_euclid(1.0);
+    let roughness = layer_jitter.max(0.0);
 
-    // Per-layer deterministic jitter: each layer gets an independent random offset.
-    let ridge_offset = layer_random_signed(layer_index, 0xA4C9_11D2_7F31_DA4B) * 0.22;
-    let shifted = (layer_pos + ridge_offset).rem_euclid(1.0);
-    let dist_to_boundary = shifted.min(1.0 - shifted);
-    let ridge_strength = (1.0 - (dist_to_boundary * 2.0)).clamp(0.0, 1.0);
-
-    let mut tangent = print_direction.cross(geometric_normal.as_ref());
-    if tangent.magnitude_squared() < 1e-12 {
-        let (u_axis, _) = tangent_basis_from_direction(print_direction);
-        tangent = *u_axis.as_ref();
+    // Keep the line spacing regular while allowing coherent variation in bead
+    // height and center position. The scale is deliberately large enough to
+    // survive normal-only shading at a realistic bead radius.
+    let layer_variation = layer_random_signed(layer_index, 0x8B7D_4F1A_61E2_4C93);
+    let layer_seed = mix64((layer_index as u64) ^ 0xC2B2_AE35_87F4_A9D1);
+    let surface_variation = if roughness > 0.0 {
+        noise::fbm2(
+            u * 0.7 + layer_variation * 1.3,
+            v * 0.7 - layer_variation * 0.9,
+            layer_seed,
+            2,
+            0.5,
+            2.0,
+        )
     } else {
-        tangent = tangent.normalize();
+        0.0
+    };
+    let center_offset = roughness * (layer_variation * 0.25 + surface_variation * 0.08) * pitch;
+    let offset = (layer_pos - 0.5) * pitch - center_offset;
+
+    // A radius of half the pitch makes adjacent beads meet. A smaller
+    // configured radius intentionally leaves a less pronounced bead.
+    let base_radius = if layer_line_radius > 0.0 {
+        layer_line_radius
+    } else {
+        pitch * 0.5
+    };
+    let radius_scale =
+        (1.0 + roughness * (layer_variation * 0.8 + surface_variation * 0.2)).max(0.05);
+    let radius = (base_radius * radius_scale).max(1e-6);
+    let half_pitch = pitch * 0.5;
+    let normalized_offset = offset / half_pitch;
+    if normalized_offset.abs() >= 1.0 {
+        return geometric_normal;
     }
 
-    let layer_bias = layer_random_signed(layer_index, 0x8B7D_4F1A_61E2_4C93);
-    let layer_seed = mix64((layer_index as u64) ^ 0xC2B2_AE35_87F4_A9D1);
-    let micro_noise = noise::fbm2(
-        u * 2.5 + layer_bias * 1.3,
-        v * 2.5 - layer_bias * 0.9,
-        layer_seed,
-        2,
-        0.5,
-        2.0,
-    ) * 0.2;
-    let layer_noise = (layer_bias * 0.85 + micro_noise * 0.15).clamp(-1.0, 1.0);
-
-    let deflection = layer_jitter * ridge_strength * layer_noise * 0.35;
-    let candidate = Unit::new_normalize(*geometric_normal.as_ref() + tangent * deflection);
-    *shading_normal = if candidate.dot(geometric_normal.as_ref()) >= 0.0 {
-        candidate
-    } else {
-        Unit::new_normalize(-candidate.as_ref())
-    };
+    // Use a softened circular bead: h(s) = r * (1 - t²)^(3/2).
+    // It has a rounded crest and a tangent-continuous valley, avoiding the
+    // infinite slope of an ideal circle where adjacent beads meet. Since this
+    // is a normal-only approximation (the hit point is not displaced), retain
+    // one quarter of the geometric slope to keep lighting stable.
+    let profile_edge = (1.0 - normalized_offset * normalized_offset)
+        .max(0.0)
+        .sqrt();
+    let profile_slope = -6.0 * radius * normalized_offset * profile_edge / pitch;
+    let slope = (profile_slope * 0.25).clamp(-0.75, 0.75);
+    Unit::new_normalize(surface_normal - tangent * slope)
 }
 
 pub fn apply_perlin_surface_effects(
